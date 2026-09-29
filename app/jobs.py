@@ -99,7 +99,7 @@ class Jobs:
             # 503 is returned only before an upload starts; safe to retry.
             if exc.response.status_code == 503:
                 delay = min(300, 15 * 2 ** min(row['attempts'], 4))
-                self.db.execute("UPDATE clips SET delivery='retry',retry_at=?,error='WhatsApp desconectado. Nova tentativa automática.' WHERE id=?", (time.time() + delay, row['id']))
+                self.db.execute("UPDATE clips SET delivery='retry',retry_at=?,error='WhatsApp indisponível. Nova tentativa automática.' WHERE id=?", (time.time() + delay, row['id']))
             else:
                 self.db.execute("UPDATE clips SET delivery='failed',error='Falha de envio. Verifique o WhatsApp e tente novamente.' WHERE id=?", (row['id'],))
 

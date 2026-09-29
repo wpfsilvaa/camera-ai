@@ -6,7 +6,7 @@ const time = (seconds) => date(seconds, {hour:'2-digit',minute:'2-digit'});
 const day = (seconds) => date(seconds, {day:'2-digit',month:'short'});
 const duration = (seconds) => seconds < 60 ? `${Math.max(0, Math.round(seconds))} s` : `${Math.floor(seconds / 60)} min ${Math.round(seconds % 60)} s`;
 const identity = {father:['Meu pai','green'], unknown:['A identificar','amber'], other:['Outra pessoa','neutral']};
-const delivery = {pending:'Na fila', sending:'Enviando…', sent:'Enviado', retry:'Nova tentativa', failed:'Falha no envio', uncertain:'Conferir envio'};
+const delivery = {skipped:'Não enviar · registro antigo',pending:'Na fila', sending:'Enviando…', sent:'Enviado', retry:'Nova tentativa', failed:'Falha no envio', uncertain:'Conferir envio'};
 let settings, status, activePage = 'overview', historyFilter = 'all', offset = 0, total = 0;
 let recentEvents = [], historyEvents = [], selectedEvent, streamActive = false, toastTimer, polling = false;
 let profiles = [];

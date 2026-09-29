@@ -392,7 +392,7 @@ class Recognition:
                 previous_body=self.live.get(key,{})
                 same_body=(previous_body.get('source')=='body' and
                     previous_body.get('person_id')==body_detail['candidate'] and
-                    body_detail['reason']!='ambiguous_match' and
+                    (body_detail['gap'] is None or body_detail['gap']>=settings.body_margin) and
                     0<=now-previous_body['seen']<=3)
                 # A still-visible, recently verified body track need not repeat
                 # admission after one noisy observation. New tracks still need 3.
@@ -458,7 +458,8 @@ class Recognition:
     def labels(self, ids, boxes, now, hold_seconds):
         with self.lock:
             self.body_anchors.retain(ids,boxes)
-            self.body_memory.retain({str(key) for key in ids if key is not None})
+            body_boxes={str(key):box for key,box in zip(ids,boxes) if key is not None}
+            self.body_memory.retain({key for key in body_boxes if not self.body_anchors.overlaps(key,body_boxes)})
             visible={str(key) for key in ids if key is not None}
             # Drop identity immediately on a lost track; an ID returning must be verified again.
             for key in (set(self.live) | set(self.votes) | set(self.body_memory.votes))-visible:

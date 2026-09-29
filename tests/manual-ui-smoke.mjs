@@ -21,6 +21,12 @@ try {
   await page.goto(base);
   await page.waitForFunction(()=>document.querySelector('#live-image').naturalWidth===1280);
   assert.equal(await page.locator('#toggle-analysis').textContent(),'Retomar análise');
+  await page.locator('a[data-page="settings"]').click();
+  await page.locator('input[name="body_threshold"]').fill('0.75');
+  await page.locator('#save-settings').click();
+  await page.waitForFunction(async()=> (await fetch('/api/settings').then(r=>r.json())).body_threshold===.75);
+  await page.locator('a[data-page="overview"]').click();
+  await page.waitForFunction(()=>document.querySelector('#live-image').naturalWidth===1280);
   const hash=()=>page.evaluate(()=>{const image=document.querySelector('#live-image'),c=document.createElement('canvas');c.width=10;c.height=10;c.getContext('2d').drawImage(image,0,0,10,10);return image.naturalWidth;});
   assert.equal(await hash(),1280);
   await page.locator('#fullscreen-camera').click();
@@ -40,6 +46,7 @@ try {
   await page.waitForFunction(()=>document.querySelector('#event-content .manual-analysis strong')?.textContent==='Vídeo analisado',null,{timeout:45000});
   assert.ok((await page.locator('.event-video').getAttribute('src')).endsWith('.analyzed.mp4'));
   assert.ok(await page.locator('.person-track').count()>0);
+  assert.ok((await page.locator('.recognition-diagnostic').first().textContent()).includes('Última avaliação do corpo/roupa'));
   assert.ok((await page.locator('.person-track').first().textContent()).includes('Referência de teste'));
   const event=await (await fetch(base+'/api/events/1')).json();
   assert.equal(event.kind,'manual');assert.equal(event.analysis_state,'complete');

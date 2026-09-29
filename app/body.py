@@ -90,7 +90,7 @@ class BodyMemory:
         group = [r for r in refs if r.get('source', 'face') == source]
         if group and now-max(r.get('collected', r['seen']) for r in group) < .3:
             return
-        similar = next((r for r in group if float(vector@r['feature']) > .97), None)
+        similar = next((r for r in group if float(vector@r['feature']) > .995), None)
         if similar is not None:
             similar.update(feature=vector, seen=anchor, collected=now)
             return

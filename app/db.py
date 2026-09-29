@@ -161,7 +161,7 @@ class Database:
         return {
             'days': days, 'today': days[-1],
             'last_presence': self.rows(f"SELECT MAX(last_seen) AS t FROM events WHERE kind='presence'{scope}", params)[0]['t'],
-            'pending': self.rows(f"SELECT COUNT(*) AS n FROM clips WHERE state='ready' AND delivery!='sent'{clip_scope}", params)[0]['n'],
+            'pending': self.rows(f"SELECT COUNT(*) AS n FROM clips WHERE state='ready' AND delivery NOT IN ('sent','skipped'){clip_scope}", params)[0]['n'],
             'sent_today': self.rows(f"SELECT COUNT(*) AS n FROM clips WHERE sent_at>=?{clip_scope}", (today.timestamp(), *params))[0]['n'],
             'recorded_seconds_today': self.rows(f'SELECT COALESCE(SUM(duration),0) AS n FROM clips WHERE started>=?{clip_scope}', (today.timestamp(), *params))[0]['n'],
         }

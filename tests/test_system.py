@@ -117,6 +117,26 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(self.db.rows("SELECT delivery FROM clips WHERE id=?",('a'*32,))[0]['delivery'],'sent')
         self.assertEqual(self.db.rows("SELECT delivery FROM clips WHERE id=?",('b'*32,))[0]['delivery'],'pending')
 
+    def test_old_skipped_videos_stay_in_history_without_blocking_new_delivery(self):
+        config=Config(self.directory/'settings.json')
+        config.save(Settings(whatsapp_enabled=True,recipient='5511999999999',father_only=False))
+        event=self.db.start_event(100,1)
+        self.db.execute("INSERT INTO clips(id,event_id,started,state,delivery) VALUES(?,?,100,'ready','skipped')",('a'*32,event))
+        self.db.execute("INSERT INTO clips(id,event_id,started,state) VALUES(?,?,200,'ready')",('b'*32,event))
+        self.assertEqual(self.db.stats()['pending'],1)
+        sent=[]
+        def handler(request):
+            if request.url.path=='/status':return httpx.Response(200,json={'state':'connected'})
+            import json
+            sent.append(json.loads(request.content)['clip_id'])
+            return httpx.Response(200,json={'message_id':'test'})
+        with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+            jobs=Jobs(self.db,config)
+            jobs.deliver_one(client);jobs.deliver_one(client)
+        self.assertEqual(sent,['b'*32])
+        self.assertEqual(self.db.stats()['pending'],0)
+        self.assertEqual(len(self.db.history()['events'][0]['clips']),2)
+
     def test_timeout_is_not_retried_automatically(self):
         config = Config(self.directory / 'settings.json')
         config.save(Settings(whatsapp_enabled=True, recipient='5511999999999', father_only=False))

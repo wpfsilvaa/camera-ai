@@ -119,7 +119,9 @@ Histórico marca a sugestão como **“Provável Nome (corpo/roupa)”**.
   A caixa mostra “corpo/roupa · tracking” quando mantém uma sugestão anterior.
 - A revisão do histórico mostra também o diagnóstico corporal: memória ausente,
   semelhança insuficiente, candidatos ambíguos, coleta de ângulo ou reconhecimento.
-- Exige semelhança corporal mínima de 0,85, margem de 0,08 entre identidades e três
+- O limite corporal padrão é 0,85, ajustável no painel entre 0,70 e 0,99.
+  Reduzir o limite aceita mais variações de ângulo e iluminação, mas pode confundir
+  pessoas com aparência parecida. Exige margem de 0,08 entre identidades e três
   observações concordantes. Um rosto visível tem prioridade. Roupas parecidas,
   mudanças de roupa, ângulo e luz podem causar desconhecidos ou erros; isso é uma
   estimativa de aparência, não confirmação de identidade.
@@ -417,3 +419,22 @@ rosto reconhecido, saída de cena e identificação corporal na volta; também c
 pessoas das imagens oficiais de exemplo como controles negativos. Gravações antigas
 já contêm caixas e texto, por isso esse teste não substitui uma avaliação com vídeo
 original nem mede a taxa geral de acerto.
+
+### Diagnóstico de envio pelo WhatsApp
+
+O gateway consulta o número com `onWhatsApp` antes de enviar e usa o JID retornado
+pelo WhatsApp. Isso evita o envio ao endereço errado quando a conta brasileira é
+registrada sem o nono dígito, mesmo que o número informado contenha esse dígito.
+Não remova dígitos manualmente: a resolução é feita pelo serviço.
+
+O identificador retornado por `sendMessage` indica submissão, não comprova entrega
+no celular. O gateway registra separadamente as confirmações `server`, `delivered`
+e `read` em `data/whatsapp-delivery.json`. A rota local autenticada `POST /delivery`
+recebe `clip_id` e permite consultar essa confirmação. Mensagens de mídia ficam
+armazenadas nesse arquivo privado para responder a pedidos de retransmissão do
+Baileys (`getMessage`). Não compartilhe esse arquivo nem a pasta de autenticação.
+
+Na revisão de 29/09/2026, os registros antigos foram retirados da fila por solicitação
+do usuário, com estado `skipped`. Continuam no histórico, com indicação “Não enviar ·
+registro antigo”, e não entram no contador de pendências. Apenas vídeos novos seguem
+as configurações de envio. O início automático do serviço permanece desabilitado.

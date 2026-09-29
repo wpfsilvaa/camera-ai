@@ -286,10 +286,21 @@ class RecognitionTests(unittest.TestCase):
         self.assertTrue(self.recognition.labels([2],boxes,211.8,15)['2']['held'])
         self.assertEqual(self.recognition.labels([2],boxes,214,15),{})
         self.recognition.body_memory.features.clear()
-        self.recognition.observe_faces(None,boxes,[2],{},212,cfg,{'2':normalized([0,1,0])})
-        self.assertEqual(self.recognition.labels([2],boxes,212,15),{})
-        self.recognition.labels([],[],213,15)
+        self.recognition.observe_faces(None,boxes,[2],{},215,cfg,{'2':normalized([0,1,0])})
+        self.assertEqual(self.recognition.labels([2],boxes,215,15),{})
+        self.recognition.labels([],[],216,15)
         self.assertNotIn('2',self.recognition.body_memory.features)
+
+    def test_ambiguous_weak_body_match_does_not_hold_previous_name(self):
+        cfg,boxes=self.seed_body()
+        self.recognition.labels([],[],202,15)
+        for now in (210,210.4,210.8):
+            self.recognition.observe_faces(None,boxes,[2],{},now,cfg,{'2':normalized([1,0,0])})
+        self.recognition.body_memory.learn('other',normalized([1,.01,0]),211)
+        self.recognition.body_memory.features.clear()
+        vector=normalized([.82,np.sqrt(1-.82**2),0])
+        self.recognition.observe_faces(None,boxes,[2],{},211.2,cfg,{'2':vector})
+        self.assertEqual(self.recognition.labels([2],boxes,211.2,15),{})
 
     def test_body_diagnostic_records_why_return_did_not_match(self):
         cfg,boxes=self.seed_body()

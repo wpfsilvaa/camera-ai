@@ -4,10 +4,11 @@ import { mkdir, readFile, writeFile, rename, stat, realpath } from 'node:fs/prom
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import makeWASocket, { DisconnectReason, useMultiFileAuthState, makeCacheableSignalKeyStore } from '@whiskeysockets/baileys';
+import makeWASocket, { DisconnectReason, useMultiFileAuthState, makeCacheableSignalKeyStore, generateMessageIDV2 } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import pino from 'pino';
-import { validateSend, validateClip } from './validation.mjs';
+import { validateSend, validateClip, validateRecipient } from './validation.mjs';
+import { resolveRecipient, updateReceipt, savedMessage, encodeMessage } from './delivery.mjs';
 
 process.umask(0o077);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -49,8 +50,15 @@ async function connect() {
       logger, markOnlineOnConnect: false, syncFullHistory: false,
       shouldSyncHistoryMessage: () => false,
       generateHighQualityLinkPreview: false,
+      getMessage: async key => savedMessage(ledger, key),
     });
     socket.ev.on('creds.update', () => saveCreds().catch(() => { statusError = 'Falha ao salvar a sessão do WhatsApp.'; }));
+    socket.ev.on('messages.update', updates => {
+      if (currentGeneration !== generation) return;
+      if (updates.map(({key, update}) => updateReceipt(ledger, key, update.status)).some(Boolean)) {
+        persist().catch(() => { statusError = 'Falha ao salvar a confirmação de entrega.'; });
+      }
+    });
     socket.ev.on('connection.update', async update => {
       if (currentGeneration !== generation || shuttingDown) return;
       if (update.qr) {
@@ -103,6 +111,17 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && req.url === '/connect') {
       await connect(); return json(res, 200, { state, qr, error: statusError });
     }
+    if (req.method === 'POST' && req.url === '/recipient') {
+      const phone = validateRecipient((await readBody(req)).recipient);
+      if (state !== 'connected' || !socket) return json(res, 503, { error: 'WhatsApp desconectado.' });
+      const jid = await resolveRecipient(socket, phone);
+      return json(res, 200, { exists: true, jid });
+    }
+    if (req.method === 'POST' && req.url === '/delivery') {
+      const id = validateClip(await readBody(req));
+      const entry = ledger[id];
+      return json(res, 200, entry ? { state: entry.state, receipt: entry.receipt || 'unconfirmed', error: entry.receipt_error || null } : { state: 'unknown' });
+    }
     if (req.method === 'POST' && req.url === '/retry') {
       const id = validateClip(await readBody(req));
       if (ledger[id]?.state === 'sending') return json(res, 409, { error: 'Envio em andamento.' });
@@ -123,14 +142,26 @@ const server = http.createServer(async (req, res) => {
       if (ledger[body.clip_id]?.state === 'sent') return json(res, 200, { message_id: ledger[body.clip_id].message_id });
       if (ledger[body.clip_id]) return json(res, 409, { error: 'Envio sem confirmação ou em andamento.' });
       if (state !== 'connected' || !socket) return json(res, 503, { error: 'WhatsApp desconectado.' });
-      ledger[body.clip_id] = { state: 'sending', recipient: body.recipient, at: Date.now() };
+      let jid;
+      try { jid = await resolveRecipient(socket, body.recipient); }
+      catch (error) {
+        return error.code === 'RECIPIENT_NOT_FOUND'
+          ? json(res, 422, { error: 'Número não encontrado no WhatsApp. Confira DDI e DDD.' })
+          : json(res, 503, { error: 'Consulta ao WhatsApp indisponível. Tente novamente.' });
+      }
+      // Recipient lookup also yielded: reserve only once across concurrent requests.
+      if (ledger[body.clip_id]?.state === 'sent') return json(res, 200, { message_id: ledger[body.clip_id].message_id });
+      if (ledger[body.clip_id]) return json(res, 409, { error: 'Envio já registrado ou em andamento.' });
+      const messageId = generateMessageIDV2(socket.user?.id);
+      ledger[body.clip_id] = { state: 'sending', recipient: body.recipient, resolved_jid: jid, message_id: messageId, at: Date.now() };
+
       await persist();
       try {
-        const message = await socket.sendMessage(`${body.recipient}@s.whatsapp.net`, {
+        const message = await socket.sendMessage(jid, {
           video: { url: file }, caption: body.caption, mimetype: 'video/mp4',
-        });
+        }, { messageId });
         if (!message?.key?.id) throw new Error('Sem confirmação');
-        ledger[body.clip_id] = { ...ledger[body.clip_id], state: 'sent', message_id: message.key.id };
+        ledger[body.clip_id] = { ...ledger[body.clip_id], state: 'sent', message_id: message.key.id, message: encodeMessage(message.message) };
         await persist();
         return json(res, 200, { message_id: message.key.id });
       } catch {

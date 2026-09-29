@@ -15,6 +15,7 @@ parser=argparse.ArgumentParser()
 parser.add_argument('--event',type=int,required=True)
 parser.add_argument('--data',type=Path,default=Path('data'))
 parser.add_argument('--return-after',type=float,default=9)
+parser.add_argument('--body-threshold',type=float)
 args=parser.parse_args()
 source=args.data.resolve()
 temporary=tempfile.TemporaryDirectory()
@@ -33,12 +34,15 @@ with sqlite3.connect(f'file:{source}/history.sqlite3?mode=ro',uri=True) as src, 
     src.backup(dest)
 db=Database(Path(temporary.name)/'history.sqlite3')
 settings=Settings.model_validate_json((source/'settings.json').read_text())
+if args.body_threshold is not None:
+    settings=Settings.model_validate({**settings.model_dump(),'body_threshold':args.body_threshold})
 recognition=Recognition(db,Path(temporary.name)/'people')
 recognition.encoder=FaceEncoder()
 encoder=BodyEncoder()
 model=YOLO('yolo26n.pt')
 tracker=PersonTracker(settings.confidence)
-records=[];absence=False;face_seen=False
+records=[];absence=False;face_seen=False;known_faces=set()
+event_start=db.rows('SELECT started FROM events WHERE id=?',(args.event,))[0]['started']
 for clip in db.rows('SELECT * FROM clips WHERE event_id=? ORDER BY started',(args.event,)):
     cap=cv2.VideoCapture(str(source/'clips'/f"{clip['id']}.mp4"))
     fps=cap.get(cv2.CAP_PROP_FPS)
@@ -51,12 +55,16 @@ for clip in db.rows('SELECT * FROM clips WHERE event_id=? ORDER BY started',(arg
         diagnostic={}
         faces=recognition.encoder.for_people(frame,boxes,ids,diagnostic)
         bodies=encoder.for_people(frame,boxes,ids)
-        recognition.observe_faces(None,boxes,ids,faces,now,settings,bodies,diagnostic)
+        recognition.observe_faces(args.event,boxes,ids,faces,now,settings,bodies,diagnostic)
         labels=recognition.labels(ids,boxes,now,settings.face_hold_seconds)
         if not ids and face_seen:absence=True
         for key,label in labels.items():
-            if label['source']=='face' and not label['held']:face_seen=True
-        records.append({'seconds':round(i/fps,3),'ids':ids,'faces':len(faces),
+            if label['source']=='face' and not label['held']:
+                face_seen=True
+                known_faces.add(label['person_id'])
+        records.append({'seconds':round(now-event_start,3),'ids':ids,'faces':len(faces),
+            'identity_consistent':all(label['person_id'] in known_faces for label in labels.values()),
+            'body_diagnostics':[json.loads(r['diagnostic']).get('body') for key in ids for r in db.rows('SELECT diagnostic FROM person_tracks WHERE event_id=? AND track_key=?',(args.event,str(key)))],
             'labels':[{k:v for k,v in label.items() if k in ('source','score','held')} for label in labels.values()],
             'references':sum(len(v) for v in recognition.body_memory.references.values())})
     cap.release()
@@ -79,8 +87,9 @@ for filename in ('zidane.jpg','bus.jpg'):
 assert negatives and not any(r['matched'] for r in negatives),negatives
 report={'event':args.event,'face_seen':face_seen,'absence_seen':absence,'return_observations':len(returned),
         'return_recognized':len(recognized),'first_return_match':recognized[0]['seconds'] if recognized else None,
-        'body_threshold':settings.body_threshold,'negatives':negatives,'records':records}
+        'body_threshold':settings.body_threshold,'detection_size':settings.detection_size,'confidence':settings.confidence,'negatives':negatives,'records':records}
 out=Path('test-results/body-audit');out.mkdir(parents=True,exist_ok=True)
 (out/f'replay-{args.event}.json').write_text(json.dumps(report,indent=2))
 print(json.dumps({k:v for k,v in report.items() if k!='records'},indent=2))
+assert len(known_faces)==1 and all(r['identity_consistent'] for r in returned), 'Replay expects the same single face-verified person to return.'
 assert face_seen and absence and recognized, 'Return was not recognized after facial evidence and disappearance.'
