@@ -1,0 +1,17 @@
+.venv/
+node_modules/
+__pycache__/
+*.pyc
+.env
+data/
+runs/
+*.pt
+*.onnx
+.pytest_cache/
+test-results/
+data/
+test-results/
+scripts/__pycache__/
+app/__pycache__/
+
+

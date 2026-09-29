@@ -1,0 +1,8 @@
+ultralytics==8.4.163
+fastapi==0.141.1
+starlette==1.7.0
+uvicorn==0.54.0
+python-dotenv==1.2.3
+httpx==0.28.1
+onnxruntime==1.30.0
+lap==0.5.13

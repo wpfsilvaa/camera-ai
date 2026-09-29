@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#163d32">
+  <title>Casa Presente · Cuidado à distância</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="#overview"><span class="brand-mark">⌂</span><span>casa<span class="brand-light">presente</span><small>CUIDADO À DISTÂNCIA</small></span></a>
+    <div class="workspace"><span class="home-icon">⌂</span><div>Casa do meu pai<small>Seu espaço de acompanhamento</small></div></div>
+    <div class="nav-label">ACOMPANHAMENTO</div>
+    <nav aria-label="Menu principal">
+      <a href="#overview" class="nav-link active" data-page="overview"><span>▦</span>Visão geral</a>
+      <a href="#history" class="nav-link" data-page="history"><span>◷</span>Histórico <span class="nav-count" id="nav-count">0</span></a>
+      <a href="#people" class="nav-link" data-page="people"><span>♧</span>Pessoas</a>
+      <a href="#settings" class="nav-link" data-page="settings"><span>⚙</span>Configurações</a>
+    </nav>
+    <div class="sidebar-note"><span class="leaf">❋</span><strong>Mais perto, mesmo de longe.</strong><p>Um registro dos pequenos momentos da rotina.</p></div>
+    <div class="local-badge"><span class="dot"></span> Vídeos guardados neste computador</div>
+  </aside>
+
+  <main>
+    <header class="topbar"><div><span class="breadcrumb">Minha casa</span><span class="slash">/</span><span id="page-name">Visão geral</span></div><div class="topbar-right"><span id="today-date"></span><span class="avatar">CP</span></div></header>
+    <div class="content">
+      <div id="connection-alert" class="alert hidden" role="alert">Sem conexão com o servidor. Os dados abaixo podem estar desatualizados.</div>
+      <div class="camera-toolbar"><label>Câmera selecionada<select id="camera-select" aria-label="Câmera selecionada"><option value="main">Cozinha</option></select></label><button class="button secondary compact" id="add-camera">Adicionar câmera +</button><button class="text-button" id="remove-camera" disabled>Remover câmera</button><button class="button secondary compact" id="pause-all-analysis">Pausar todas as análises</button><button class="text-button" id="resume-all-analysis">Retomar todas</button></div>
+      <section id="page-overview" class="page">
+        <div class="page-heading"><div><div class="eyebrow">CADA MOMENTO, MAIS PERTO</div><h1>Um olhar sobre a rotina<span class="green-period">.</span></h1><p>Acompanhe a presença do seu pai e reveja os registros da casa.</p></div><button class="button secondary" data-go="history">Ver histórico <span>↗</span></button></div>
+        <div class="stats-grid">
+          <article class="stat-card"><div class="stat-top">Registros do pai <span class="stat-icon">♡</span></div><div class="stat-value" id="father-count">0</div><div class="stat-caption">confirmados por você hoje</div></article>
+          <article class="stat-card"><div class="stat-top">A identificar <span class="stat-icon amber">◎</span></div><div class="stat-value" id="unknown-count">0</div><div class="stat-caption">registros de presença hoje</div></article>
+          <article class="stat-card"><div class="stat-top">Tempo gravado <span class="stat-icon">◷</span></div><div class="stat-value" id="recorded-time">0 <small>min</small></div><div class="stat-caption">em todos os registros de hoje</div></article>
+          <article class="stat-card"><div class="stat-top">Vídeos enviados <span class="stat-icon">↗</span></div><div class="stat-value" id="sent-count">0</div><div class="stat-caption" id="pending-count">nenhum vídeo na fila</div></article>
+        </div>
+
+        <div id="camera-grid" class="camera-grid" aria-label="Prévias das câmeras"></div>
+        <p class="footnote">Prévias atualizadas a cada 3 segundos. Selecione uma câmera para ver o vídeo contínuo e seus controles. Os totais e o gráfico somam todas as câmeras.</p>
+        <div class="monitor-grid">
+          <article class="panel live-panel">
+            <div class="panel-heading"><div><span class="section-dot"></span><h2 id="camera-title">Cozinha</h2><span class="muted small">Selecionada</span></div><span class="pill neutral" id="camera-state">Pausada</span></div>
+            <div class="camera-view">
+              <img id="live-image" class="hidden" alt="Imagem ao vivo da câmera da cozinha">
+              <div class="camera-placeholder" id="camera-placeholder"><span class="camera-outline">◉</span><strong id="camera-placeholder-title">Pronto para acompanhar</strong><p id="camera-placeholder-description">Inicie a câmera para ver a imagem ao vivo.</p></div>
+              <div class="camera-overlays"><span class="camera-tag" id="live-tag">CÂMERA 01</span><span id="camera-clock">--:--:--</span></div>
+              <div class="camera-bottom"><span id="people-count">Aguardando câmera</span><span id="recording-badge" class="hidden"><span class="record-dot"></span> GRAVANDO</span></div>
+            </div>
+            <div class="live-footer"><div><span class="dot gray" id="camera-health-dot"></span><span id="camera-footer">Monitoramento pausado</span></div><button class="button primary compact" id="toggle-monitor">Iniciar câmera <span>▶</span></button></div>
+            <div class="monitor-controls"><button class="button secondary compact" id="toggle-analysis">Pausar análise</button><button class="button secondary compact" id="toggle-recording">Gravar manualmente</button><button class="button secondary compact" id="fullscreen-camera">Tela cheia</button></div>
+            <p id="analysis-note" class="monitor-note">A análise identifica as pessoas. Você pode pausá-la e continuar assistindo.</p>
+            <div id="offline-note" class="monitor-note hidden"><span id="offline-text"></span> <button class="text-button" id="cancel-offline">Cancelar análise do vídeo</button></div>
+          </article>
+          <div class="side-panels">
+            <article class="panel whatsapp-panel"><div class="panel-heading"><div><span class="wa-symbol">◉</span><h2>Seu WhatsApp</h2></div><span class="dot gray" id="wa-dot"></span></div><div class="panel-body"><h3 id="wa-title">Os registros vão até você</h3><p id="wa-description">Conecte sua conta para receber os vídeos da câmera no WhatsApp.</p><div class="connection-line"><span>Status da conexão</span><span class="pill neutral" id="wa-status">Desconectado</span></div><button class="button secondary full" id="connect-whatsapp">Conectar WhatsApp <span>↗</span></button></div></article>
+            <article class="identity-note"><span class="note-icon">◎</span><div><strong>Esse é o seu pai?</strong><p>A câmera detecta pessoas. Confirme quem apareceu no histórico para contar e enviar somente os registros do seu pai.</p><button class="text-button" data-go="history">Identificar registros <span>→</span></button></div></article>
+          </div>
+        </div>
+
+        <p id="video-details" class="footnote">Transmissão contínua · nomes incluídos nas gravações</p>
+        <div class="bottom-grid">
+          <article class="panel activity-panel"><div class="panel-heading"><h2>Presença na semana</h2><span class="muted small">Últimos 7 dias</span></div><div class="chart-summary"><strong id="week-count">0</strong><span>registros de presença<br><small>Uma entrada e saída = um registro</small></span></div><div id="weekly-chart" class="chart" aria-label="Registros de presença nos últimos sete dias"></div><div class="chart-legend"><span><i class="legend-total"></i> Todas as presenças</span><span><i class="legend-father"></i> Pai confirmado</span></div></article>
+          <article class="panel recent-panel"><div class="panel-heading"><h2>Últimos registros</h2><button class="text-button" data-go="history">Ver todos ↗</button></div><div id="recent-list"></div></article>
+        </div>
+        <footer class="page-footer"><span><span class="dot gray"></span> <span id="storage-info">Armazenamento local</span></span><span>Presença na câmera não confirma que está tudo bem.</span></footer>
+      </section>
+
+      <section id="page-history" class="page hidden">
+        <div class="page-heading"><div><div class="eyebrow">MOMENTOS DA CASA</div><h1>Histórico de presença<span class="green-period">.</span></h1><p>Reveja os vídeos e confirme em quais registros seu pai aparece.</p></div></div>
+        <div class="history-toolbar"><label>Câmera<select id="history-camera"><option value="">Todas as câmeras</option></select></label><div class="filter-group" role="group" aria-label="Filtrar identidade"><button class="filter active" data-filter="all">Todos</button><button class="filter" data-filter="father">Meu pai</button><button class="filter" data-filter="unknown">A identificar</button><button class="filter" data-filter="other">Outras pessoas</button></div><span class="muted small" id="history-total"></span></div>
+        <div class="panel history-panel"><div class="table-scroll"><table><thead><tr><th>REGISTRO</th><th>IDENTIFICAÇÃO</th><th>DURAÇÃO</th><th>VÍDEOS / ENVIO</th><th></th></tr></thead><tbody id="history-table"></tbody></table></div><div id="history-empty" class="empty-state hidden"><span>◷</span><h3>A rotina começa por aqui</h3><p>Quando alguém aparecer na câmera, os registros serão exibidos aqui.</p></div><div class="pagination"><button class="button secondary compact" id="previous-page">← Anteriores</button><span id="page-indicator" class="muted small"></span><button class="button secondary compact" id="next-page">Próximos →</button></div></div>
+        <p class="footnote">Um registro pode incluir várias pessoas. Os nomes confirmados são separados das sugestões por reconhecimento facial. Identifique cada pessoa nas imagens para ensinar o sistema.</p>
+      </section>
+
+      <section id="page-people" class="page hidden">
+        <div class="page-heading"><div><div class="eyebrow">APRENDE COM VOCÊ</div><h1>As pessoas da casa<span class="green-period">.</span></h1><p>Cadastre os nomes e fotos dos rostos que você quer reconhecer.</p></div></div>
+        <div class="learning-guide"><div><span class="step-number">1</span><strong>Cadastre a pessoa</strong><p>Seu pai já tem um perfil. Adicione outras pessoas que aparecem na casa.</p></div><div><span class="step-number">2</span><strong>Cadastre rostos</strong><p>Use “Cadastrar foto do rosto” ou confirme um rosto capturado no histórico.</p></div><div><span class="step-number">3</span><strong>Receba sugestões</strong><p>Cadastre uma foto nítida do rosto. O nome aparece após a comparação concordar em vários quadros.</p></div></div>
+        <div id="recognition-status" class="inline-note">Preparando reconhecimento facial…</div>
+        <form id="person-form" class="person-create"><label for="person-name">Cadastrar pessoa</label><input id="person-name" name="name" maxlength="60" placeholder="Ex.: Maria" required><button class="button primary" type="submit">Adicionar pessoa +</button></form>
+        <div id="people-profiles" class="profiles-grid"></div>
+        <p class="footnote">Só imagens confirmadas por você entram no aprendizado. Rostos pequenos, de perfil ou com pouca luz podem permanecer desconhecidos. Os exemplos confirmados ficam salvos até você esquecê-los ou excluir o perfil; imagens não confirmadas seguem o prazo das gravações.</p>
+      </section>
+
+      <section id="page-settings" class="page hidden">
+        <div class="page-heading"><div><div class="eyebrow">DO SEU JEITO</div><h1>Configurações<span class="green-period">.</span></h1><p>Ajuste a câmera, as gravações e o recebimento dos vídeos.</p></div></div>
+        <form id="settings-form">
+          <div class="settings-grid">
+            <section class="panel settings-panel"><div class="panel-heading"><h2>01 · Câmera selecionada</h2></div><div class="panel-body form-fields"><label>Nome do ambiente<input name="camera_name" required maxlength="60"></label><label>Endereço da câmera<input name="camera_source" required placeholder="rtsp://192.168.1.103:8554/cam"><small>Endereço RTSP, número da webcam (0) ou caminho de um vídeo local.</small></label><label>Processamento<select name="device"><option value="auto">Auto · usar a GPU disponível</option><option value="cuda">GPU NVIDIA · CUDA</option><option value="cpu">CPU</option></select></label><div class="form-row"><label>Quadros analisados por segundo<input type="number" name="detection_fps" min="1" max="30" required><small>Em CPU, comece com 5. O vídeo usa a taxa da seção Gravações.</small></label><label>Resolução da detecção<select name="detection_size"><option value="320">320 · menor custo</option><option value="416">416 · econômica</option><option value="640">640 · padrão</option><option value="960">960 · mais detalhes</option><option value="1280">1280 · maior custo</option></select></label></div><label>Confiança mínima da detecção<select name="confidence"><option value="0.35">35% · Mais sensível</option><option value="0.5">50% · Equilibrado</option><option value="0.65">65% · Mais restritivo</option><option value="0.8">80% · Alta confiança</option></select></label><label>Confirmar presença após (segundos)<input type="number" name="min_presence_seconds" min="0.25" max="10" step="0.25" required><small>Evita abrir registros com detecções muito breves.</small></label></div></section>
+            <section class="panel settings-panel"><div class="panel-heading"><h2>02 · WhatsApp</h2></div><div class="panel-body form-fields"><label>Número que receberá os vídeos<input name="recipient" inputmode="tel" placeholder="55 11 99999-9999"><small>Inclua o código do país e o DDD.</small></label><label class="switch-row"><span><strong>Enviar vídeos pelo WhatsApp</strong><small>Os vídeos ficam na fila enquanto a conta está desconectada.</small></span><input type="checkbox" name="whatsapp_enabled" role="switch"></label><label class="switch-row"><span><strong>Somente meu pai</strong><small>Envia após você confirmar “Meu pai” em um registro encerrado.</small></span><input type="checkbox" name="father_only" role="switch"></label><div class="inline-note">Conecte sua conta pelo botão “Conectar WhatsApp” na visão geral. O envio usa a sessão pareada neste computador.</div></div></section>
+            <section class="panel settings-panel"><div class="panel-heading"><h2>03 · Gravações desta câmera</h2></div><div class="panel-body form-fields"><div class="form-row"><label>Encerrar sem presença (s)<input type="number" name="absence_seconds" min="2" max="120" required></label><label>Duração de cada parte (s)<input type="number" name="segment_seconds" min="10" max="180" required></label></div><div class="form-row"><label>Quadros por segundo<input type="number" name="fps" min="5" max="30" required></label><label>Guardar vídeos de todas as câmeras (dias)<input type="number" name="retention_days" min="1" max="90" required></label></div><p class="muted small">Presenças longas geram várias partes do mesmo registro. Vídeos antigos, inclusive os não enviados, são apagados após o prazo. O histórico permanece.</p></div></section>
+            <section class="panel settings-panel"><div class="panel-heading"><h2>04 · Pessoas · todas as câmeras</h2></div><div class="panel-body form-fields"><label class="switch-row"><span><strong>Reconhecimento facial</strong><small>Compara os rostos cadastrados e mantém o nome enquanto acompanha a pessoa.</small></span><input type="checkbox" name="recognition_enabled" role="switch"></label><label class="switch-row"><span><strong>Lembrar pelo corpo e pela roupa</strong><small>Após reconhecer o rosto, guarda a aparência temporariamente para reconhecer a pessoa quando voltar.</small></span><input type="checkbox" name="body_reid_enabled" role="switch"></label><label>Manter nome sem rosto visível (segundos)<input type="number" name="face_hold_seconds" min="0" max="60" required><small>Enquanto o mesmo rastreamento continua visível. Padrão: 15 s. Perder o rastro ou encontrar um rosto conflitante limpa o nome.</small></label><label>Memória da roupa (minutos)<input type="number" name="body_memory_minutes" min="1" max="240" required><small>Padrão: 30 minutos desde o rosto reconhecido. Reiniciar a câmera limpa essa memória.</small></label><label>Semelhança mínima para sugerir um nome<input type="number" name="face_threshold" min="0.35" max="0.95" step="0.01" required><small>Padrão 0,50. É um índice de semelhança, não uma probabilidade de acerto.</small></label><label class="switch-row"><span><strong>Enviar também prováveis registros do pai</strong><small>Permite envio por estimativa, sem confirmação manual. Pode enviar a pessoa errada. A legenda informa “provável”.</small></span><input type="checkbox" name="send_probable_father" role="switch"></label><div class="inline-note">As referências permanentes de rosto vêm das suas confirmações. O rosto reconhecido associa automaticamente a roupa por tempo limitado. O sistema não avalia saúde nem detecta emergências.</div></div></section>
+          </div>
+          <div class="settings-actions"><span class="muted small">Alterações na câmera reiniciam a captura.</span><button type="submit" class="button primary" id="save-settings">Salvar configurações <span>✓</span></button></div>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <dialog id="camera-dialog"><div class="dialog-heading"><h2>Adicionar câmera</h2><button type="button" class="icon-button close-dialog" aria-label="Fechar">×</button></div><form id="camera-form" class="form-fields"><label>Nome do ambiente<input name="camera_name" maxlength="60" required placeholder="Ex.: Sala"></label><label>Endereço da câmera<input name="camera_source" required placeholder="rtsp://192.168.1.104:8554/cam"></label><p>Ela será cadastrada pausada. Ajuste as configurações e clique em Iniciar câmera quando quiser.</p><button type="submit" class="button primary">Cadastrar câmera</button></form></dialog>
+  <dialog id="whatsapp-dialog"><div class="dialog-heading"><h2>Conectar WhatsApp</h2><button class="icon-button close-dialog" aria-label="Fechar">×</button></div><p>No WhatsApp do celular, abra <strong>Dispositivos conectados → Conectar dispositivo</strong> e escaneie o código.</p><div class="qr-container"><img id="qr-image" class="hidden" alt="QR code para parear o WhatsApp"><p id="qr-message">Preparando conexão…</p></div><p class="muted small">Depois, informe o número de destino e habilite os envios nas configurações.</p></dialog>
+  <dialog id="event-dialog" class="event-dialog"><div class="dialog-heading"><div><div class="eyebrow" id="event-number"></div><h2 id="event-title">Registro de presença</h2></div><button class="icon-button close-dialog" aria-label="Fechar">×</button></div><div id="event-content"></div></dialog>
+  <dialog id="face-dialog" class="face-dialog" aria-labelledby="face-title">
+    <div class="dialog-heading"><h2 id="face-title">Cadastrar rosto</h2><button id="face-close" class="icon-button" aria-label="Fechar cadastro">×</button></div>
+    <p id="face-person"></p>
+    <p>Escolha uma foto e arraste sobre a imagem para selecionar apenas uma pessoa. Inclua o rosto inteiro, com uma pequena margem.</p>
+    <button type="button" class="button secondary" id="face-choose">Escolher foto</button>
+    <input id="face-file" type="file" accept="image/jpeg,image/png" hidden>
+    <p id="face-message" role="status" aria-live="polite">Nenhuma foto selecionada.</p>
+    <div id="face-editor" class="hidden">
+      <canvas id="face-canvas" tabindex="0" aria-label="Área de recorte da foto" aria-describedby="face-help"></canvas>
+      <p id="face-help" class="small">Arraste com o mouse ou o dedo para refazer o recorte. Pelo teclado: setas movem a seleção; + e − ajustam o tamanho.</p>
+      <button type="button" id="face-reset" class="text-button">Usar foto inteira</button>
+    </div>
+    <p id="face-error" class="alert hidden" role="alert"></p>
+    <div class="face-actions"><button type="button" id="face-cancel" class="button secondary">Cancelar</button><button type="button" id="face-save" class="button primary" disabled>Salvar rosto</button></div>
+  </dialog>
+  <dialog id="examples-dialog" class="examples-dialog" aria-labelledby="examples-title">
+    <div class="dialog-heading"><h2 id="examples-title">Revisar exemplos</h2><button id="examples-close" class="icon-button" aria-label="Fechar exemplos">×</button></div>
+    <p>Revise as fotos usadas no reconhecimento. Remover um exemplo do histórico mantém o vídeo, a foto no registro e a identidade confirmada.</p>
+    <p id="examples-count" role="status"></p>
+    <div class="examples-toolbar">
+      <label>Mostrar<select id="examples-source"><option value="all">Todos</option><option value="history">Ensinados pelo histórico</option><option value="upload">Fotos cadastradas</option></select></label>
+      <label>Ordenar<select id="examples-sort"><option value="recent">Mais recentes</option><option value="quality">Menor nitidez primeiro</option></select></label>
+    </div>
+    <p class="small muted">A nitidez é um índice técnico para ajudar na revisão; confira visualmente cada rosto.</p>
+    <p id="examples-error" class="alert hidden" role="alert"></p>
+    <div id="examples-grid" class="examples-grid"></div>
+  </dialog>
+  <dialog id="example-photo-dialog" aria-labelledby="example-photo-title">
+    <div class="dialog-heading"><h2 id="example-photo-title">Foto do exemplo</h2><button id="example-photo-close" class="icon-button" aria-label="Fechar foto">×</button></div>
+    <img id="example-photo" alt="Rosto usado como exemplo" class="example-photo">
+    <p id="example-photo-details"></p>
+  </dialog>
+  <script src="/static/face-crop.js" defer></script>
+  <script src="/static/examples.js" defer></script>
+  <div id="toast" class="toast hidden" role="status"></div>
+</body>
+</html>

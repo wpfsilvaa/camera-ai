@@ -1,0 +1,17 @@
+{
+  "name": "casa-presente",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node whatsapp/server.mjs",
+    "test": "node --test whatsapp/*.test.mjs"
+  },
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "dotenv": "^16.6.1",
+    "pino": "^9.9.0",
+    "qrcode": "^1.5.4"
+  }
+}
