@@ -32,3 +32,27 @@ test('persist media messages for Baileys decryption retry requests', () => {
   assert.deepEqual(Buffer.from(restored.videoMessage.mediaKey),Buffer.from([1,2,3]));
   assert.equal(savedMessage(ledger,{id:'unknown'}),undefined);
 });
+
+test('one receipt per clip and canonical account, including old ledger migration', async () => {
+  const { deliveryKey } = await import('./delivery.mjs');
+  const clip='a'.repeat(32), primary='5511999999999', sister='5511888888888';
+  const canonical='551199999999@s.whatsapp.net', other='551188888888@s.whatsapp.net';
+  const resolve=async phone=>phone===primary?canonical:other;
+  const ledger={[clip]:{recipient:primary,state:'sent',message_id:'original'}};
+  const sisterKey=await deliveryKey(ledger,clip,sister,other,resolve);
+  assert.equal(ledger[sisterKey],undefined,'legacy success must not suppress sister delivery');
+  const primaryKey=await deliveryKey(ledger,clip,primary,canonical,resolve);
+  assert.equal(ledger[primaryKey].message_id,'original');
+  assert.equal(ledger[clip],undefined);
+  assert.equal(await deliveryKey(ledger,clip,'551199999999',canonical,resolve),primaryKey);
+  ledger[sisterKey]={recipient:sister,state:'uncertain',message_id:'sister'};
+  updateReceipt(ledger,{id:'original'},3);
+  assert.equal(ledger[primaryKey].receipt,'delivered');
+  assert.equal(ledger[sisterKey].receipt,undefined);
+});
+
+test('retry selection is restricted to the requested recipient', async () => {
+  const { receiptEntries }=await import('./delivery.mjs');
+  const ledger={'clip:a':{recipient:'111',state:'sent'},'clip:b':{recipient:'222',state:'uncertain'},'other:a':{recipient:'222',state:'uncertain'}};
+  assert.deepEqual(receiptEntries(ledger,'clip','222').map(([key])=>key),['clip:b']);
+});

@@ -1,37 +1,36 @@
 import asyncio
-import base64
-import hmac
-import os
 import re
 import shutil
 import time
-import io
 from contextlib import asynccontextmanager
 from typing import Literal
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
-from PIL import Image
-import cv2
-import numpy as np
 from pydantic import BaseModel, Field
 
+from .alerts import Alerts
+from .auth import COOKIE, Auth
 from .cameras import CameraManager
-from .config import CLIPS, DATA, PEOPLE, ROOT, WA_URL, CameraSettings, ExtraCamera, Settings, config, gateway_token
+from .config import CLIPS, DATA, ROOT, WA_URL, CameraSettings, ExtraCamera, Settings, config
 from .db import Database
 from .jobs import Jobs
 from .offline import OfflineAnalysis
 from .recognition import Recognition
+from .routes import alerts as alert_routes, auth as auth_routes, people as people_routes
+from .services import call_service
 
 db = Database()
 recognition = Recognition(db)
 cameras = CameraManager(db, config, recognition)
 camera = cameras.get()  # Compatibility for the original single-camera API.
-jobs = Jobs(db, config, recognition)
 offline = OfflineAnalysis(db)
+auth = Auth(db)
+alerts = Alerts(db, config, cameras)
+jobs = Jobs(db, config, recognition, alerts, auth)
 
 
 @asynccontextmanager
@@ -49,18 +48,24 @@ async def lifespan(app):
 app = FastAPI(title='Casa Presente', lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
+PUBLIC = {'/login', '/api/health', '/api/auth/me', '/api/auth/login', '/static/login.css', '/static/login.js', '/static/favicon.svg'}
+# Family accounts are read-only; these are the only changes they may make.
+FAMILY_WRITES = {'/api/auth/logout', '/api/auth/password'}
+
+
 @app.middleware('http')
 async def protect(request: Request, call_next):
-    password = os.environ.get('DASHBOARD_PASSWORD', '')
-    if password:
-        try:
-            scheme, encoded = request.headers.get('authorization', '').split(' ', 1)
-            user, supplied = base64.b64decode(encoded, validate=True).decode().split(':', 1)
-            valid = scheme.lower() == 'basic' and hmac.compare_digest(user, 'admin') and hmac.compare_digest(supplied.encode(), password.encode())
-        except (ValueError, UnicodeError):
-            valid = False
-        if not valid:
-            return Response(status_code=401, headers={'WWW-Authenticate': 'Basic realm="Casa Presente"'})
+    login_required, request.state.user = await run_in_threadpool(auth.current, request.cookies.get(COOKIE))
+    if login_required:
+        path = request.url.path
+        if request.state.user is None and path not in PUBLIC:
+            if request.method == 'GET' and path == '/':
+                return RedirectResponse('/login', status_code=303)
+            return JSONResponse({'detail': 'Entre novamente para continuar.'}, status_code=401)
+        user = request.state.user
+        if user and user['role'] != 'admin':
+            if request.method not in ('GET', 'HEAD', 'OPTIONS') and path not in FAMILY_WRITES or path.startswith('/api/users'):
+                return JSONResponse({'detail': 'Seu acesso é somente para visualização. Peça a um administrador.'}, status_code=403)
     # Prevent other sites from changing local settings through the browser.
     if request.method not in ('GET', 'HEAD', 'OPTIONS'):
         if request.headers.get('x-casa-request') != '1':
@@ -83,19 +88,24 @@ def index():
 
 
 @app.get('/api/settings')
-def get_settings(camera_id: str = 'main'):
-    return recognition_action(config.for_camera, camera_id)
+def get_settings(request: Request, camera_id: str = 'main'):
+    settings = call_service(config.for_camera, camera_id)
+    user = request.state.user
+    if user and user['role'] != 'admin':
+        # Camera addresses may carry passwords; phone numbers stay with administrators.
+        return settings.model_dump() | {'camera_source': '', 'recipient': '', 'additional_recipients': [], 'cameras': []}
+    return settings
 
 
 @app.put('/api/settings')
 def save_settings(settings: Settings, camera_id: str = 'main'):
-    if settings.whatsapp_enabled and not settings.recipient:
+    if settings.whatsapp_enabled and not settings.delivery_targets():
         raise HTTPException(422, 'Informe o número que receberá os vídeos.')
-    old = recognition_action(config.for_camera, camera_id)
+    old = call_service(config.for_camera, camera_id)
     if any(getattr(old,k) != getattr(settings,k) for k in ('recognition_enabled','face_threshold','face_margin','body_reid_enabled','body_memory_minutes','body_threshold','body_margin')):
         with recognition.lock, db.connect() as connection:
             recognition.invalidate(connection)
-    recognition_action(config.save_for_camera, settings, camera_id)
+    call_service(config.save_for_camera, settings, camera_id)
     return config.for_camera(camera_id)
 
 
@@ -119,24 +129,24 @@ def add_camera(body: CameraSettings):
 
 @app.delete('/api/cameras/{camera_id}')
 def delete_camera(camera_id: str):
-    recognition_action(cameras.remove, camera_id)
+    call_service(cameras.remove, camera_id)
     return {'ok': True}
 
 
 @app.post('/api/monitor/{action}')
 def monitor(action: Literal['start', 'stop'], camera_id: str = 'main'):
-    recognition_action(lambda: config.update_camera(camera_id, enabled=action == 'start'))
+    call_service(lambda: config.update_camera(camera_id, enabled=action == 'start'))
     return {'enabled': action == 'start'}
 
 
 @app.post('/api/analysis/{action}')
 def analysis_control(action: Literal['pause', 'resume'], camera_id: str = 'main'):
-    recognition_action(config.for_camera, camera_id)
+    call_service(config.for_camera, camera_id)
     if action == 'pause':
         job = offline.status()['event_id']
         if job is None or db.rows('SELECT id FROM events WHERE id=? AND camera_id=?', (job, camera_id)):
             offline.cancel()
-    recognition_action(lambda: config.update_camera(camera_id, analysis_enabled=action == 'resume'))
+    call_service(lambda: config.update_camera(camera_id, analysis_enabled=action == 'resume'))
     return {'analysis_enabled': action == 'resume'}
 
 
@@ -155,13 +165,13 @@ def all_analysis_control(action: Literal['pause', 'resume']):
 
 @app.post('/api/recording/{action}')
 def recording_control(action: Literal['start', 'stop'], camera_id: str = 'main'):
-    worker = recognition_action(cameras.get, camera_id)
-    return recognition_action(worker.request_recording,action=='start')
+    worker = call_service(cameras.get, camera_id)
+    return call_service(worker.request_recording,action=='start')
 
 
 @app.post('/api/events/{event_id}/analyze')
 def analyze_event(event_id: int):
-    return recognition_action(offline.start,event_id)
+    return call_service(offline.start,event_id)
 
 
 @app.post('/api/offline/cancel')
@@ -182,12 +192,28 @@ async def gateway(method, path, payload=None):
 
 
 @app.get('/api/status')
-async def status(camera_id: str = 'main'):
-    worker = recognition_action(cameras.get, camera_id)
+async def status(request: Request, camera_id: str = 'main'):
+    worker = call_service(cameras.get, camera_id)
     storage = shutil.disk_usage(DATA)
-    return {'camera': worker.snapshot(), 'cameras': cameras.snapshots(), 'whatsapp': await gateway('GET', '/status'),
+    whatsapp = await gateway('GET', '/status')
+    if request.state.user and request.state.user['role'] != 'admin':
+        whatsapp = {**whatsapp, 'qr': None}  # Scanning the QR code would link another phone.
+    return {'camera': worker.snapshot(), 'cameras': cameras.snapshots(), 'whatsapp': whatsapp,
             'recognition': worker.recognition.status(), 'offline': offline.status(),
-            'stats': db.stats(), 'camera_stats': db.stats(camera_id), 'storage_free_gb': round(storage.free / 1024**3, 1), 'now': time.time()}
+            'stats': db.stats(), 'camera_stats': db.stats(camera_id), 'alerts': alerts.recent(5), 'storage_free_gb': round(storage.free / 1024**3, 1), 'now': time.time()}
+
+
+@app.get('/api/health')
+async def health():
+    """Minimal component status for uptime monitors; carries no personal data."""
+    snapshots = cameras.snapshots()
+    whatsapp = (await gateway('GET', '/status'))['state']
+    free_gb = round(shutil.disk_usage(DATA).free / 1024**3, 1)
+    active = [c for c in snapshots if c['enabled']]
+    ok = all(c['state'] == 'online' for c in active) and free_gb >= config.get().min_free_gb
+    return JSONResponse({'ok': ok, 'whatsapp': whatsapp, 'disk_free_gb': free_gb,
+                         'cameras': [{'id': c['id'], 'state': c['state'] if c['enabled'] else 'paused'} for c in snapshots]},
+                        status_code=200 if ok else 503)
 
 
 @app.get('/api/events')
@@ -203,14 +229,10 @@ def event_cameras():
 
 @app.get('/api/events/{event_id}')
 def event_details(event_id: int):
-    rows = db.rows('SELECT * FROM events WHERE id=?', (event_id,))
-    if not rows:
+    event = db.event(event_id)
+    if event is None:
         raise HTTPException(404, 'Registro não encontrado.')
-    row = rows[0]
-    row['clips'] = db.rows('SELECT * FROM clips WHERE event_id=? ORDER BY started', (event_id,))
-    row['people'] = db.track_details(event_id) if row['kind']!='manual' or row['analysis_state']=='complete' else []
-    row['probable_father'] = any(t['suggested_is_father'] and not t['reviewed'] for t in row['people'])
-    return row
+    return event
 
 
 class Label(BaseModel):
@@ -233,125 +255,38 @@ def label_event(event_id: int, label: Label):
     return {'ok': True}
 
 
-class PersonName(BaseModel):
-    name: str = Field(min_length=1, max_length=60)
-
-
-class PersonConfirmation(BaseModel):
-    person_id: str | None = None
-    sample_id: str | None = None
-
-
-def recognition_action(fn, *args):
-    try:
-        return fn(*args)
-    except KeyError as exc:
-        raise HTTPException(404, str(exc))
-    except ValueError as exc:
-        raise HTTPException(409, str(exc))
-    except RuntimeError as exc:
-        raise HTTPException(503, str(exc))
-
-
-@app.get('/api/people')
-def people():
-    return recognition.status()
-
-
-@app.post('/api/people')
-def create_person(body: PersonName):
-    name = body.name.strip()
-    if not name:
-        raise HTTPException(422, 'Informe um nome.')
-    return {'id': recognition_action(recognition.create_person, name)}
-
-
-@app.patch('/api/people/{person_id}')
-def rename_person(person_id: str, body: PersonName):
-    if not body.name.strip():
-        raise HTTPException(422, 'Informe um nome.')
-    recognition_action(recognition.rename_person, person_id, body.name.strip())
-    return {'ok': True}
-
-
-@app.delete('/api/people/{person_id}')
-def delete_person(person_id: str):
-    recognition_action(recognition.forget, person_id, True)
-    return {'ok': True}
-
-
-@app.post('/api/people/{person_id}/forget')
-def forget_person(person_id: str):
-    recognition_action(recognition.forget, person_id)
-    return {'ok': True}
-
-
-@app.get('/api/people/{person_id}/examples')
-def person_examples(person_id: str):
-    return recognition_action(recognition.examples, person_id)
-
-
-@app.delete('/api/people/{person_id}/examples/{source}/{sample_id}')
-def remove_person_example(person_id: str, source: Literal['history', 'upload'], sample_id: str):
-    recognition_action(recognition.remove_example, person_id, source, sample_id)
-    return {'ok': True}
-
-
-@app.post('/api/people/{person_id}/faces')
-async def enroll_face(person_id: str, request: Request):
-    content = bytearray()
-    async for chunk in request.stream():
-        content.extend(chunk)
-        if len(content) > 8 * 1024 * 1024:
-            raise HTTPException(413, 'A foto deve ter até 8 MB.')
-    try:
-        with Image.open(io.BytesIO(content)) as photo:
-            if photo.width * photo.height > 16_000_000:
-                raise ValueError('Imagem muito grande.')
-            photo.verify()
-        image = cv2.imdecode(np.frombuffer(content,dtype=np.uint8),cv2.IMREAD_COLOR)
-        if image is None:
-            raise ValueError('Imagem inválida.')
-    except Exception:
-        raise HTTPException(422, 'Envie uma foto JPEG ou PNG válida, com até 16 megapixels.')
-    sample_id = await run_in_threadpool(recognition_action, recognition.enroll, person_id, image)
-    return {'id': sample_id}
-
-
-@app.delete('/api/people/{person_id}/faces/{sample_id}')
-def delete_face(person_id: str, sample_id: str):
-    recognition_action(recognition.remove_enrollment, person_id, sample_id)
-    return {'ok': True}
-
-
-@app.patch('/api/person-tracks/{track_id}')
-def confirm_person(track_id: int, body: PersonConfirmation):
-    recognition_action(recognition.confirm, track_id, body.person_id, body.sample_id)
-    return {'ok': True}
-
-
-@app.get('/people-media/{filename}')
-def person_media(filename: str):
-    if not re.fullmatch(r'[a-f0-9]{32}\.jpg', filename) or not (PEOPLE / filename).is_file():
-        raise HTTPException(404)
-    return FileResponse(PEOPLE / filename, media_type='image/jpeg')
-
-
 @app.post('/api/whatsapp/connect')
 async def connect_whatsapp():
     return await gateway('POST', '/connect')
 
 
+RETRYABLE = ('failed', 'uncertain', 'retry')
+
+
 @app.post('/api/clips/{clip_id}/retry')
-async def retry(clip_id: str):
+async def retry(clip_id: str, recipient: str | None = None):
     rows = db.rows('SELECT * FROM clips WHERE id=?', (clip_id,))
     if not rows:
         raise HTTPException(404, 'Vídeo não encontrado.')
-    row = rows[0]
-    if row['state'] != 'ready' or row['delivery'] not in ('failed', 'uncertain', 'retry'):
+    clip = rows[0]
+    if clip['state'] != 'ready':
         raise HTTPException(409, 'Este vídeo não está disponível para reenvio.')
-    await gateway('POST', '/retry', {'clip_id': clip_id})
-    db.execute("UPDATE clips SET delivery='pending',error=NULL,retry_at=0 WHERE id=?", (clip_id,))
+    deliveries = db.rows('SELECT * FROM clip_deliveries WHERE clip_id=?', (clip_id,))
+    if not deliveries:
+        # Clips queued before per-recipient deliveries existed.
+        if clip['delivery'] not in RETRYABLE:
+            raise HTTPException(409, 'Este vídeo não está disponível para reenvio.')
+        await gateway('POST', '/retry', {'clip_id': clip_id})
+        db.execute("UPDATE clips SET delivery='pending',error=NULL,retry_at=0 WHERE id=?", (clip_id,))
+        return {'ok': True}
+    retryable = [d for d in deliveries if d['delivery'] in RETRYABLE and recipient in (None, d['recipient'])]
+    if not retryable:
+        raise HTTPException(409, 'Nenhum envio com falha para este destinatário.')
+    for target in retryable:
+        await gateway('POST', '/retry', {'clip_id': clip_id, 'recipient': target['recipient']})
+        db.execute("""UPDATE clip_deliveries SET delivery='pending',error=NULL,retry_at=0
+            WHERE clip_id=? AND recipient=? AND delivery IN ('failed','uncertain','retry')""", (clip_id, target['recipient']))
+    db.aggregate_delivery(clip_id)
     return {'ok': True}
 
 
@@ -367,7 +302,7 @@ def media(filename: str):
 
 @app.get('/api/snapshot')
 def snapshot(camera_id: str = 'main'):
-    worker = recognition_action(cameras.get, camera_id)
+    worker = call_service(cameras.get, camera_id)
     with worker.lock:
         jpeg = worker.jpeg
     if jpeg is None or worker.snapshot()['state'] != 'online':
@@ -377,7 +312,7 @@ def snapshot(camera_id: str = 'main'):
 
 @app.get('/api/stream.mjpeg')
 async def stream(request: Request, camera_id: str = 'main'):
-    worker = recognition_action(cameras.get, camera_id)
+    worker = call_service(cameras.get, camera_id)
     async def frames():
         previous = -1
         while not await request.is_disconnected() and not worker.stop_event.is_set():
@@ -392,4 +327,7 @@ async def stream(request: Request, camera_id: str = 'main'):
                              headers={'X-Accel-Buffering': 'no'})
 
 
+app.include_router(auth_routes.build(auth))
+app.include_router(people_routes.build(recognition))
+app.include_router(alert_routes.build(alerts, config))
 app.mount('/static', StaticFiles(directory=ROOT / 'static'), name='static')

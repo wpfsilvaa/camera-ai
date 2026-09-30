@@ -33,3 +33,24 @@ export function savedMessage(ledger, key) {
 export function encodeMessage(message) {
   return Buffer.from(proto.Message.encode(message).finish()).toString('base64');
 }
+
+// A clip can be sent once to each actual WhatsApp account. Different written
+// phone formats resolving to the same JID must share a receipt.
+export async function deliveryKey(ledger, clip, phone, jid, resolve) {
+  const key = `${clip}:${jid}`;
+  const legacy = ledger[clip];
+  if (legacy) {
+    const same = legacy.recipient === phone || legacy.resolved_jid === jid ||
+      (!legacy.resolved_jid && legacy.recipient && await resolve(legacy.recipient) === jid);
+    if (same) {
+      ledger[key] ||= { ...legacy, resolved_jid: jid };
+      delete ledger[clip];
+    }
+  }
+  return key;
+}
+
+export function receiptEntries(ledger, clip, phone) {
+  return Object.entries(ledger).filter(([key, value]) =>
+    (key === clip || key.startsWith(`${clip}:`)) && (!phone || value.recipient === phone));
+}

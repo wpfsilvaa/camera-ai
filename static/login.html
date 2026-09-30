@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#163d32">
+  <title>Entrar · Casa Presente</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/login.css">
+  <script src="/static/login.js" defer></script>
+</head>
+<body>
+  <main class="login">
+    <section class="welcome" aria-hidden="true">
+      <div class="brand"><svg viewBox="0 0 64 64" class="mark"><rect width="64" height="64" rx="18"/><path d="M14 30 32 15 50 30v20H37V36H27v14H14Z"/></svg><span>casa<b>presente</b><small>CUIDADO À DISTÂNCIA</small></span></div>
+      <div class="welcome-text">
+        <h1>Mais perto,<br>mesmo de longe<span>.</span></h1>
+        <p>Acompanhe a rotina de quem você ama, com os vídeos guardados neste computador.</p>
+      </div>
+      <svg class="house" viewBox="0 0 320 220"><path d="M30 120 160 20l130 100v96H200v-68h-80v68H30Z"/><circle cx="252" cy="58" r="16"/><path d="M0 216h320"/></svg>
+    </section>
+
+    <section class="card">
+      <form id="login-form" novalidate>
+        <div class="eyebrow">BEM-VINDO DE VOLTA</div>
+        <h2>Entrar no painel</h2>
+        <p class="muted">Use o usuário criado por quem administra a casa.</p>
+        <label>Usuário<input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus></label>
+        <label>Senha
+          <span class="password"><input name="password" type="password" autocomplete="current-password" required><button type="button" id="toggle-password" aria-label="Mostrar senha" aria-pressed="false">Mostrar</button></span>
+        </label>
+        <label class="remember"><input type="checkbox" name="remember" checked> Manter conectado por 30 dias</label>
+        <p id="login-error" class="error" role="alert" hidden></p>
+        <button type="submit" id="login-submit">Entrar</button>
+        <p class="footnote">Esqueceu a senha? Peça a um administrador para redefinir em <strong>Usuários</strong>.</p>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

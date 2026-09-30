@@ -210,12 +210,27 @@ O [Baileys](https://github.com/WhiskeySockets/Baileys) é uma integração não 
 
 ## Acesso e arquivos
 
-Neste computador, o `.env` já está configurado para a rede local com senha. Em uma instalação nova, o painel escuta apenas em `127.0.0.1:8000`. Para acessar de outro dispositivo na sua rede, crie `.env` a partir de `.env.example`, defina `HOST=0.0.0.0` e uma `DASHBOARD_PASSWORD`. O usuário é `admin`. O inicializador exige senha quando o painel é exposto na rede. Para acesso pela internet, use VPN ou um proxy com HTTPS; a aplicação não configura isso automaticamente.
+Neste computador, o `.env` já está configurado para a rede local com senha. Em uma instalação nova, o painel escuta apenas em `127.0.0.1:8000`. Para acessar de outro dispositivo na sua rede, defina `HOST=0.0.0.0` no `.env` depois de criar um usuário. Para acesso pela internet, use VPN ou um proxy com HTTPS; a aplicação não configura isso automaticamente.
+
+### Usuários e login
+
+O painel usa uma tela de login com usuário e senha, e cada pessoa tem sua própria conta.
+
+- **Administrador** altera tudo: câmeras, WhatsApp, pessoas, registros e usuários.
+- **Família** vê o ao vivo, o histórico e os vídeos, sem alterar nada. Não vê o endereço da câmera, os números do WhatsApp nem o QR code de pareamento.
+- Sem nenhum usuário, o painel fica aberto no próprio computador. Abra **Usuários** e crie o primeiro administrador; a partir daí o login é obrigatório.
+- Se o `.env` tiver `DASHBOARD_PASSWORD` (configuração antiga), a primeira execução cria o usuário `admin` com essa senha. Troque a senha em **Minha conta** (botão com seu nome, no topo) e remova a variável do `.env`.
+- Senhas usam scrypt; a sessão é um cookie `HttpOnly` e `SameSite=Strict`, válido por 12 horas ou 30 dias com “Manter conectado”. Cinco senhas erradas bloqueiam novas tentativas daquele endereço por 15 minutos.
+- Redefinir a senha ou mudar o perfil de alguém desconecta os outros aparelhos dessa conta.
 
 O gateway Baileys só escuta em `127.0.0.1:3001`, com token interno. QR code, gravações e APIs ficam sob a mesma proteção do painel. Não exponha essa porta externamente.
 
 ```text
-app/                  API, detecção, gravação, histórico e fila
+app/main.py           Aplicação, proteção das rotas, câmeras, histórico e mídia
+app/routes/           Rotas de login/usuários, pessoas e alertas
+app/alerts.py         Alertas de ausência, câmera sem imagem e resumo diário
+app/jobs.py           Conversão de vídeos, limpeza e filas do WhatsApp
+app/                  Detecção, reconhecimento, gravação e banco de dados
 static/               Dashboard sem dependências externas de frontend
 whatsapp/             Integração Baileys e comprovantes de envio
 tests/                Testes de presença, armazenamento, API e navegador
@@ -230,6 +245,23 @@ data/whatsapp-auth/   Credenciais da sessão do WhatsApp
 
 **O sistema acompanha presença. Não detecta emergências, quedas ou problemas de saúde, nem confirma que seu pai está bem.**
 
+## Alertas no WhatsApp
+
+Em **Configurações → 05 · Alertas no WhatsApp**, ative **Enviar alertas**. As mensagens de texto vão para o número principal e para os familiares cadastrados.
+
+- **Ninguém apareceu:** avisa quando nenhuma pessoa é vista pelas câmeras há X horas (padrão 4; 0 desativa). Só conta com alguma câmera ligada e analisando. Não envia durante o silêncio noturno (padrão 22:00–07:00). Há um aviso por período de ausência.
+- **Câmera sem imagem:** avisa quando uma câmera ligada fica sem imagem por X minutos (padrão 10; 0 desativa) e avisa de novo quando ela volta. Câmeras pausadas por você não geram aviso.
+- **Resumo do dia:** no horário escolhido (padrão 21:00), envia os registros do dia, confirmados como pai, a identificar, última presença e tempo gravado.
+- **Enviar alerta de teste** confirma que números e WhatsApp estão funcionando. Os últimos alertas aparecem na visão geral, com o estado de envio.
+
+Alertas que não puderem ser enviados em até 6 horas expiram, para não chegar uma informação desatualizada. O gateway não repete a mesma mensagem para o mesmo número, mesmo após reinícios. Um alerta ajuda a perceber uma rotina diferente, mas não é um sistema de emergência.
+
+### Espaço em disco e monitoramento
+
+- Com menos espaço livre que o mínimo configurado (padrão 2 GB), os vídeos mais antigos de registros encerrados são apagados antes do prazo, para as gravações não pararem. O histórico permanece.
+- `GET /api/health` responde sem login, sem dados pessoais: `ok`, estado do WhatsApp, espaço livre e estado de cada câmera. Retorna 503 quando uma câmera ligada está sem imagem ou o disco está abaixo do mínimo. Útil para um monitor externo como Uptime Kuma.
+- Logs com data e hora aparecem no terminal ou em `journalctl --user -u camera-ai.service`. Ajuste com `LOG_LEVEL=DEBUG` no `.env`.
+
 ## Testes
 
 ```bash
@@ -238,6 +270,8 @@ npm test
 PYTHONPATH=. .venv/bin/python tests/full_pipeline.py
 PYTHONPATH=. .venv/bin/python tests/body_pipeline.py
 node tests/people-ui-smoke.mjs
+node tests/login-ui-smoke.mjs
+node tests/multi-recipient-gateway.mjs
 ```
 
 Os testes Python usam uma pasta temporária e um WhatsApp simulado; não enviam mensagens reais. Verificam duração e segmentação de vídeos, recuperação de interrupções, retenção, filtro do pai, timeout de envio, validação da API e proteção das rotas.
@@ -438,3 +472,31 @@ Na revisão de 29/09/2026, os registros antigos foram retirados da fila por soli
 do usuário, com estado `skipped`. Continuam no histórico, com indicação “Não enviar ·
 registro antigo”, e não entram no contador de pendências. Apenas vídeos novos seguem
 as configurações de envio. O início automático do serviço permanece desabilitado.
+
+## Enviar os vídeos do pai para familiares
+
+Em **Configurações → WhatsApp**, mantenha o seu telefone em **Seu número (principal)**
+e preencha **Outros familiares · somente meu pai**, com um número por linha incluindo
+DDI e DDD. São permitidos até nove familiares além do número principal. Salve as
+configurações e mantenha o envio pelo WhatsApp ativado.
+
+- O número principal mantém sua opção de receber todas as presenças ou somente o pai.
+- Familiares recebem somente registros confirmados do pai. Se **Enviar também
+  prováveis registros do pai** estiver habilitado, também recebem os que atendem
+  ao filtro facial. Reconhecimento apenas pela roupa não autoriza esse envio.
+- Um familiar novo recebe somente vídeos iniciados após seu cadastro. Adicionar
+  números não compartilha o histórico antigo nem repete vídeos já enviados.
+- O histórico mostra o estado de cada destinatário. **Tentar para este número**
+  repete somente a tentativa que falhou; destinatários com envio concluído são preservados.
+- Remover um número cancela suas entregas ainda pendentes. Um envio já em andamento
+  pode terminar. Remover e cadastrar novamente não libera vídeos antigos para ele.
+- O gateway identifica cada envio pelo vídeo e pelo endereço confirmado pelo
+  WhatsApp. Duas formas de escrever o mesmo número não geram mensagens duplicadas.
+
+O banco guarda esse controle em `clip_deliveries`. Registros antigos de envio
+individual são migrados sem repetir mensagens. Para consultar `/delivery` ou
+acionar `/retry` no gateway com vários destinatários, informe `clip_id` e `recipient`.
+
+Validação: `tests/test_deliveries.py`, `tests/recipients-ui-smoke.mjs` e
+`tests/multi-recipient-gateway.mjs`. Os testes usam números fictícios e um socket
+simulado; não enviam mensagens reais a familiares.

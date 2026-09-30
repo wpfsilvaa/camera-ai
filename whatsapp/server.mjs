@@ -7,8 +7,8 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import makeWASocket, { DisconnectReason, useMultiFileAuthState, makeCacheableSignalKeyStore, generateMessageIDV2 } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import pino from 'pino';
-import { validateSend, validateClip, validateRecipient } from './validation.mjs';
-import { resolveRecipient, updateReceipt, savedMessage, encodeMessage } from './delivery.mjs';
+import { validateSend, validateClip, validateRecipient, validateText } from './validation.mjs';
+import { resolveRecipient, updateReceipt, savedMessage, encodeMessage, deliveryKey, receiptEntries } from './delivery.mjs';
 
 process.umask(0o077);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -104,6 +104,44 @@ function authorized(req) {
   return value.length === expected.length && timingSafeEqual(value, expected);
 }
 
+async function resolveTarget(res, recipient, keyFor) {
+  try {
+    const jid = await resolveRecipient(socket, recipient);
+    return { jid, key: await keyFor(jid) };
+  } catch (error) {
+    json(res, error.code === 'RECIPIENT_NOT_FOUND' ? 422 : 503, {
+      error: error.code === 'RECIPIENT_NOT_FOUND' ? 'Número não encontrado no WhatsApp. Confira DDI e DDD.' : 'Consulta ao WhatsApp indisponível. Tente novamente.',
+    });
+    return null;
+  }
+}
+
+// A ledger entry means this message already went out or may have: never send it twice.
+function repeated(res, key) {
+  if (ledger[key]?.state === 'sent') { json(res, 200, { message_id: ledger[key].message_id }); return true; }
+  if (ledger[key]) { json(res, 409, { error: 'Envio já registrado ou em andamento.' }); return true; }
+  return false;
+}
+
+async function sendOnce(res, { jid, key }, recipient, content) {
+  // Earlier awaits yielded; check again right before reserving the key.
+  if (repeated(res, key)) return;
+  if (state !== 'connected' || !socket) return json(res, 503, { error: 'WhatsApp desconectado.' });
+  const messageId = generateMessageIDV2(socket.user?.id);
+  ledger[key] = { state: 'sending', recipient, resolved_jid: jid, message_id: messageId, at: Date.now() };
+  await persist();
+  try {
+    const message = await socket.sendMessage(jid, content, { messageId });
+    if (!message?.key?.id) throw new Error('Sem confirmação');
+    ledger[key] = { ...ledger[key], state: 'sent', message_id: message.key.id, message: encodeMessage(message.message) };
+    await persist();
+    return json(res, 200, { message_id: message.key.id });
+  } catch {
+    ledger[key].state = 'uncertain'; await persist();
+    return json(res, 409, { error: 'Envio sem confirmação. Confira o WhatsApp.' });
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   if (!authorized(req)) return json(res, 401, { error: 'Não autorizado.' });
   try {
@@ -118,56 +156,46 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { exists: true, jid });
     }
     if (req.method === 'POST' && req.url === '/delivery') {
-      const id = validateClip(await readBody(req));
-      const entry = ledger[id];
-      return json(res, 200, entry ? { state: entry.state, receipt: entry.receipt || 'unconfirmed', error: entry.receipt_error || null } : { state: 'unknown' });
+      const body = await readBody(req), id = validateClip(body);
+      const phone = body.recipient ? validateRecipient(body.recipient) : undefined;
+      const entries = receiptEntries(ledger, id, phone).map(([, entry]) => ({
+        recipient: entry.recipient, state: entry.state, receipt: entry.receipt || 'unconfirmed', error: entry.receipt_error || null,
+      }));
+      return json(res, 200, entries.length === 1 ? entries[0] : { state: entries.length ? 'multiple' : 'unknown', deliveries: entries });
     }
     if (req.method === 'POST' && req.url === '/retry') {
-      const id = validateClip(await readBody(req));
-      if (ledger[id]?.state === 'sending') return json(res, 409, { error: 'Envio em andamento.' });
-      // Keep successful receipts: retrying a timed out HTTP request must not duplicate a video.
-      if (ledger[id]?.state !== 'sent') { delete ledger[id]; await persist(); }
+      const body = await readBody(req), id = validateClip(body);
+      const phone = body.recipient ? validateRecipient(body.recipient) : undefined;
+      let entries = receiptEntries(ledger, id, phone);
+      if (phone && !entries.length && state === 'connected' && socket) {
+        const jid = await resolveRecipient(socket, phone);
+        const key = await deliveryKey(ledger, id, phone, jid, number => resolveRecipient(socket, number));
+        if (ledger[key]) entries = [[key, ledger[key]]];
+      }
+      if (!phone && entries.length > 1) return json(res, 400, { error: 'Informe o destinatário do reenvio.' });
+      if (entries.some(([, entry]) => entry.state === 'sending')) return json(res, 409, { error: 'Envio em andamento.' });
+      for (const [key, entry] of entries) if (entry.state !== 'sent') delete ledger[key];
+      await persist();
       return json(res, 200, { ok: true });
     }
     if (req.method === 'POST' && req.url === '/send') {
       const body = validateSend(await readBody(req));
-      const existing = ledger[body.clip_id];
-      if (existing?.state === 'sent') return json(res, 200, { message_id: existing.message_id });
-      if (existing) return json(res, 409, { error: 'Envio sem confirmação ou em andamento.' });
       if (state !== 'connected' || !socket) return json(res, 503, { error: 'WhatsApp desconectado.' });
+      const target = await resolveTarget(res, body.recipient, jid => deliveryKey(ledger, body.clip_id, body.recipient, jid, phone => resolveRecipient(socket, phone)));
+      if (!target) return;
+      await persist(); // Save any legacy receipt migration before responding.
+      if (repeated(res, target.key)) return;
       const file = await realpath(path.join(clips, `${body.clip_id}.mp4`));
       if (path.dirname(file) !== await realpath(clips)) return json(res, 400, { error: 'Arquivo inválido.' });
       if ((await stat(file)).size > 30 * 1024 * 1024) return json(res, 413, { error: 'Vídeo excede 30 MB. Reduza a duração dos segmentos.' });
-      // Filesystem checks yielded; another request may have reserved this clip meanwhile.
-      if (ledger[body.clip_id]?.state === 'sent') return json(res, 200, { message_id: ledger[body.clip_id].message_id });
-      if (ledger[body.clip_id]) return json(res, 409, { error: 'Envio sem confirmação ou em andamento.' });
+      return sendOnce(res, target, body.recipient, { video: { url: file }, caption: body.caption, mimetype: 'video/mp4' });
+    }
+    if (req.method === 'POST' && req.url === '/text') {
+      const body = validateText(await readBody(req));
       if (state !== 'connected' || !socket) return json(res, 503, { error: 'WhatsApp desconectado.' });
-      let jid;
-      try { jid = await resolveRecipient(socket, body.recipient); }
-      catch (error) {
-        return error.code === 'RECIPIENT_NOT_FOUND'
-          ? json(res, 422, { error: 'Número não encontrado no WhatsApp. Confira DDI e DDD.' })
-          : json(res, 503, { error: 'Consulta ao WhatsApp indisponível. Tente novamente.' });
-      }
-      // Recipient lookup also yielded: reserve only once across concurrent requests.
-      if (ledger[body.clip_id]?.state === 'sent') return json(res, 200, { message_id: ledger[body.clip_id].message_id });
-      if (ledger[body.clip_id]) return json(res, 409, { error: 'Envio já registrado ou em andamento.' });
-      const messageId = generateMessageIDV2(socket.user?.id);
-      ledger[body.clip_id] = { state: 'sending', recipient: body.recipient, resolved_jid: jid, message_id: messageId, at: Date.now() };
-
-      await persist();
-      try {
-        const message = await socket.sendMessage(jid, {
-          video: { url: file }, caption: body.caption, mimetype: 'video/mp4',
-        }, { messageId });
-        if (!message?.key?.id) throw new Error('Sem confirmação');
-        ledger[body.clip_id] = { ...ledger[body.clip_id], state: 'sent', message_id: message.key.id, message: encodeMessage(message.message) };
-        await persist();
-        return json(res, 200, { message_id: message.key.id });
-      } catch {
-        ledger[body.clip_id].state = 'uncertain'; await persist();
-        return json(res, 409, { error: 'Envio sem confirmação. Confira o WhatsApp.' });
-      }
+      const target = await resolveTarget(res, body.recipient, jid => `alert:${body.alert_id}:${jid}`);
+      if (!target) return;
+      return sendOnce(res, target, body.recipient, { text: body.text });
     }
     json(res, 404, { error: 'Rota não encontrada.' });
   } catch { json(res, 400, { error: 'Solicitação inválida ou arquivo indisponível.' }); }

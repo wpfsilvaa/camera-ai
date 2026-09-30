@@ -1,0 +1,177 @@
+"""WhatsApp text alerts: nobody seen for hours, a camera without image, the daily summary."""
+import logging
+import time
+from datetime import datetime
+
+import httpx
+
+from .config import WA_URL
+from .db import TZ
+
+log = logging.getLogger(__name__)
+
+CHECK_INTERVAL = 30
+# An alert that could not go out within this time no longer describes the present.
+STALE_SECONDS = 6 * 3600
+RETENTION_DAYS = 90
+
+
+def clock(timestamp):
+    return datetime.fromtimestamp(timestamp, TZ).strftime('%H:%M')
+
+
+def elapsed(seconds):
+    hours, minutes = divmod(int(seconds // 60), 60)
+    return f'{hours} h {minutes:02d} min' if hours else f'{minutes} min'
+
+
+def in_quiet_hours(hour, start, end):
+    if start == end:
+        return False
+    return start <= hour < end if start < end else hour >= start or hour < end
+
+
+class Alerts:
+    def __init__(self, db, config, cameras):
+        self.db, self.config, self.cameras = db, config, cameras
+        self.offline_since = {}  # camera id -> first moment seen without image
+        self.last_check = 0
+
+    # Detection ---------------------------------------------------------------
+
+    def check(self, now=None):
+        now = now or time.time()
+        self.last_check = now
+        settings = self.config.get()
+        if not settings.alerts_enabled:
+            self.offline_since.clear()
+            return
+        snapshots = self.cameras.snapshots()
+        self.check_cameras(settings, snapshots, now)
+        self.check_inactivity(settings, snapshots, now)
+        self.check_summary(settings, now)
+
+    def check_cameras(self, settings, snapshots, now):
+        limit = settings.camera_offline_minutes * 60
+        for camera in snapshots:
+            key = camera['id']
+            if not camera['enabled']:
+                self.offline_since.pop(key, None)  # Paused on purpose: nothing to report.
+            elif camera['state'] == 'online':
+                since = self.offline_since.pop(key, None)
+                if since is not None and self.exists(f'offline-{key}-{int(since)}'):
+                    self.raise_alert(f'online-{key}-{int(since)}', 'camera_online',
+                                     f'✅ A câmera {camera["name"]} voltou a transmitir após {elapsed(now - since)} sem imagem.', now)
+            else:
+                since = self.offline_since.setdefault(key, now)
+                if limit and now - since >= limit:
+                    self.raise_alert(f'offline-{key}-{int(since)}', 'camera_offline',
+                                     f'⚠️ A câmera {camera["name"]} está sem imagem desde as {clock(since)}. '
+                                     'Confira a energia, o Wi-Fi e o computador da câmera.', now)
+
+    def check_inactivity(self, settings, snapshots, now):
+        if not settings.inactivity_hours:
+            return
+        # Without a working, analyzing camera, silence says nothing about the house.
+        if not any(c['enabled'] and c['analysis_enabled'] and c['state'] == 'online' for c in snapshots):
+            return
+        if in_quiet_hours(datetime.fromtimestamp(now, TZ).hour, settings.quiet_start_hour, settings.quiet_end_hour):
+            return
+        last = self.db.rows("SELECT MAX(last_seen) AS t FROM events WHERE kind='presence'")[0]['t']
+        if last and now - last >= settings.inactivity_hours * 3600:
+            self.raise_alert(f'inactive-{int(last)}', 'inactivity',
+                             f'🔔 Ninguém apareceu nas câmeras desde as {clock(last)} (há {elapsed(now - last)}). '
+                             'Vale ligar para confirmar que está tudo bem.', now)
+
+    def check_summary(self, settings, now):
+        local = datetime.fromtimestamp(now, TZ)
+        if settings.daily_summary_hour < 0 or local.hour < settings.daily_summary_hour:
+            return
+        alert_id = f'summary-{local.date().isoformat()}'
+        if self.exists(alert_id):
+            return
+        stats = self.db.stats()
+        today = stats['today']
+        last = f'às {clock(stats["last_presence"])}' if stats['last_presence'] else 'sem registros'
+        lines = [f'📋 Resumo de hoje ({local.strftime("%d/%m")})',
+                 f'• Registros de presença: {today["total"]}',
+                 f'• Confirmados como seu pai: {today["father"]}',
+                 f'• A identificar: {today["unknown"]}',
+                 f'• Última presença: {last}',
+                 f'• Tempo gravado: {elapsed(stats["recorded_seconds_today"])}']
+        problems = self.db.rows("SELECT COUNT(*) AS n FROM alerts WHERE kind IN ('camera_offline','inactivity') AND created>=?",
+                                (local.replace(hour=0, minute=0, second=0, microsecond=0).timestamp(),))[0]['n']
+        if problems:
+            lines.append(f'• Alertas enviados hoje: {problems}')
+        self.raise_alert(alert_id, 'summary', '\n'.join(lines), now)
+
+    def send_test(self, now=None):
+        now = now or time.time()
+        return self.raise_alert(f'test-{int(now * 1000)}', 'test',
+                                '🧪 Teste de alerta do Casa Presente. Se recebeu esta mensagem, os alertas estão funcionando.', now)
+
+    # Storage -----------------------------------------------------------------
+
+    def exists(self, alert_id):
+        return bool(self.db.rows('SELECT 1 FROM alerts WHERE id=?', (alert_id,)))
+
+    def raise_alert(self, alert_id, kind, message, now):
+        """Record an alert once per id and queue it for every WhatsApp recipient."""
+        recipients = list(self.config.get().delivery_targets())
+        with self.db.connect() as db:
+            created = db.execute('INSERT OR IGNORE INTO alerts(id,kind,created,message) VALUES(?,?,?,?)',
+                                 (alert_id, kind, now, message)).rowcount
+            if created:
+                db.executemany('INSERT INTO alert_deliveries(alert_id,recipient) VALUES(?,?)',
+                               [(alert_id, phone) for phone in recipients])
+        if created:
+            log.info('Alerta %s registrado para %d destinatário(s)', alert_id, len(recipients))
+        return alert_id
+
+    def recent(self, limit=10):
+        alerts = self.db.rows('SELECT * FROM alerts ORDER BY created DESC LIMIT ?', (limit,))
+        deliveries = self.db.rows('''SELECT * FROM alert_deliveries WHERE alert_id IN
+            (SELECT id FROM alerts ORDER BY created DESC LIMIT ?) ORDER BY recipient''', (limit,))
+        for alert in alerts:
+            alert['deliveries'] = [d for d in deliveries if d['alert_id'] == alert['id']]
+        return alerts
+
+    def cleanup(self, now=None):
+        cutoff = (now or time.time()) - RETENTION_DAYS * 86400
+        self.db.execute('DELETE FROM alerts WHERE created<?', (cutoff,))
+
+    # Delivery ----------------------------------------------------------------
+
+    def mark(self, row, state, error=None, retry_at=0, sent_at=None):
+        self.db.execute('UPDATE alert_deliveries SET state=?,error=?,retry_at=?,sent_at=? WHERE alert_id=? AND recipient=?',
+                        (state, error, retry_at, sent_at, row['alert_id'], row['recipient']))
+
+    def deliver_one(self, client, now=None):
+        now = now or time.time()
+        rows = self.db.rows('''SELECT d.*,a.message,a.created FROM alert_deliveries d JOIN alerts a ON a.id=d.alert_id
+            WHERE d.state IN ('pending','retry') AND d.retry_at<=? ORDER BY a.created LIMIT 1''', (now,))
+        if not rows:
+            return False
+        row = rows[0]
+        if now - row['created'] > STALE_SECONDS:
+            self.mark(row, 'expired', 'Não foi possível enviar a tempo; o alerta ficou desatualizado.')
+            return True
+        if row['recipient'] not in self.config.get().delivery_targets():
+            self.mark(row, 'cancelled')
+            return True
+        self.db.execute('UPDATE alert_deliveries SET state=?,attempts=attempts+1 WHERE alert_id=? AND recipient=?',
+                        ('sending', row['alert_id'], row['recipient']))
+        try:
+            response = client.post(f'{WA_URL}/text', json={'alert_id': row['alert_id'], 'recipient': row['recipient'], 'text': row['message']})
+        except httpx.HTTPError:
+            response = None
+        if response is not None and response.status_code == 200:
+            self.mark(row, 'sent', sent_at=now)
+        elif response is not None and response.status_code == 422:
+            self.mark(row, 'failed', 'Número não encontrado no WhatsApp.')
+        elif response is not None and response.status_code == 409:
+            self.mark(row, 'uncertain', 'Envio sem confirmação. Confira o WhatsApp.')
+        else:
+            delay = min(600, 30 * 2 ** min(row['attempts'], 4))
+            self.mark(row, 'retry', 'WhatsApp indisponível. Nova tentativa automática.', now + delay)
+        return True

@@ -1,3 +1,4 @@
+import logging
 import shutil
 import subprocess
 import time
@@ -6,6 +7,8 @@ import uuid
 import cv2
 
 from .config import CLIPS
+
+log = logging.getLogger(__name__)
 
 
 class Recorder:
@@ -89,13 +92,34 @@ def transcode(db, row, directory=CLIPS):
         temporary.unlink(missing_ok=True)
 
 
-def cleanup(db, retention_days, directory=CLIPS):
+CLIP_FILES = ('mp4', 'avi', 'jpg', 'tmp.mp4', 'analyzed.mp4', 'analysis.avi', 'analysis.tmp.mp4')
+# Only finished clips of closed, idle events may be removed.
+REMOVABLE = """SELECT clips.id FROM clips JOIN events ON events.id=clips.event_id
+    WHERE events.ended IS NOT NULL AND events.analysis_state!='running'
+    AND clips.state IN ('ready','failed') AND clips.delivery!='sending'"""
+
+
+def free_space(directory=CLIPS):
+    return shutil.disk_usage(directory).free / 1024**3
+
+
+def expire(db, clip_id, directory=CLIPS):
+    for extension in CLIP_FILES:
+        (directory / f'{clip_id}.{extension}').unlink(missing_ok=True)
+    db.execute("UPDATE clips SET state='expired',error=NULL WHERE id=?", (clip_id,))
+
+
+def cleanup(db, retention_days, directory=CLIPS, min_free_gb=0):
     cutoff = time.time() - retention_days * 86400
     # Preserve active visits, even when they span the retention cutoff.
-    old = db.rows('''SELECT clips.id FROM clips JOIN events ON events.id=clips.event_id
-        WHERE events.ended IS NOT NULL AND events.analysis_state!='running' AND clips.started<?
-        AND clips.state IN ('ready','failed') AND clips.delivery!='sending' ''', (cutoff,))
-    for row in old:
-        for extension in ('mp4', 'avi', 'jpg', 'tmp.mp4', 'analyzed.mp4', 'analysis.avi', 'analysis.tmp.mp4'):
-            (directory / f"{row['id']}.{extension}").unlink(missing_ok=True)
-        db.execute("UPDATE clips SET state='expired',error=NULL WHERE id=?", (row['id'],))
+    for row in db.rows(REMOVABLE + ' AND clips.started<?', (cutoff,)):
+        expire(db, row['id'], directory)
+    # A full disk stops every recording: drop the oldest videos before that happens.
+    while min_free_gb and free_space(directory) < min_free_gb:
+        oldest = db.rows(REMOVABLE + ' ORDER BY clips.started LIMIT 20')
+        if not oldest:
+            log.warning('Pouco espaço em disco e nenhum vídeo antigo para remover.')
+            return
+        log.warning('Pouco espaço em disco: removendo %d vídeo(s) mais antigo(s).', len(oldest))
+        for row in oldest:
+            expire(db, row['id'], directory)

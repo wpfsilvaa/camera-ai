@@ -200,14 +200,83 @@ class ApiTests(unittest.TestCase):
             camera.request_recording(False)
             settings.enabled=False;self.main.config.save(settings)
 
-    def test_media_traversal_and_all_routes_require_password(self):
+    def test_media_traversal_and_all_routes_require_login(self):
         self.assertEqual(self.client.get('/media/gateway.token').status_code,404)
         self.assertEqual(self.client.get('/').status_code,200)
-        with patch.dict(os.environ,{'DASHBOARD_PASSWORD':'test-secret'}):
-            for route in ['/', '/api/settings', '/api/events', '/api/snapshot', '/api/stream.mjpeg', '/api/people', '/people-media/'+'a'*32+'.jpg', '/media/'+'a'*32+'.mp4', '/static/app.js']:
-                self.assertEqual(self.client.get(route).status_code,401)
-            self.assertEqual(self.client.get('/api/settings',auth=('admin','test-secret')).status_code,200)
+        headers = {'X-Casa-Request':'1'}
+        auth = self.main.auth
+        try:
+            self.assertEqual(self.client.post('/api/users',headers=headers,json={'username':'mae','password':'segredo-123','role':'family'}).status_code,422)
+            created = self.client.post('/api/users',headers=headers,json={'username':'Admin','name':'Adm','password':'segredo-123','role':'admin'})
+            self.assertEqual(created.status_code,201); self.assertTrue(created.json()['login_required'])
+            self.assertEqual(self.client.get('/',follow_redirects=False).headers['location'],'/login')
+            for route in ['/api/settings', '/api/events', '/api/snapshot', '/api/stream.mjpeg', '/api/people', '/api/users', '/people-media/'+'a'*32+'.jpg', '/media/'+'a'*32+'.mp4', '/static/app.js']:
+                self.assertEqual(self.client.get(route).status_code,401,route)
+            self.assertEqual(self.client.get('/login').status_code,200)
+            self.assertEqual(self.client.post('/api/auth/login',headers=headers,json={'username':'admin','password':'errada-123'}).status_code,401)
+            self.assertEqual(self.client.post('/api/auth/login',json={'username':'admin','password':'segredo-123'}).status_code,403)
+            login = self.client.post('/api/auth/login',headers=headers,json={'username':'ADMIN','password':'segredo-123'})
+            self.assertEqual(login.status_code,200)
+            self.assertIn('httponly',login.headers['set-cookie'].lower()); self.assertIn('samesite=strict',login.headers['set-cookie'].lower())
+            self.assertEqual(self.client.get('/api/settings').status_code,200)
+            self.assertEqual(self.client.get('/login',follow_redirects=False).status_code,303)
+            family = self.client.post('/api/users',headers=headers,json={'username':'ana','name':'Ana','password':'familia-123'}).json()['id']
+            self.assertEqual(self.client.post('/api/users',headers=headers,json={'username':'ana','password':'familia-123'}).status_code,409)
+            self.assertEqual(self.client.post('/api/users',headers=headers,json={'username':'bia','password':'curta'}).status_code,409)
+            admin_id = self.client.get('/api/auth/me').json()['user']['id']
+            self.assertEqual(self.client.delete(f'/api/users/{admin_id}',headers=headers).status_code,409)
+            self.assertEqual(self.client.patch(f'/api/users/{admin_id}',headers=headers,json={'role':'family'}).status_code,409)
 
+            viewer = TestClient(self.main.app)
+            viewer.post('/api/auth/login',headers=headers,json={'username':'ana','password':'familia-123','remember':True})
+            self.assertEqual(viewer.get('/api/auth/me').json()['user']['role'],'family')
+            self.assertEqual(viewer.get('/api/events').status_code,200)
+            self.assertEqual(viewer.get('/api/settings').json()['camera_source'],'')
+            self.assertEqual(viewer.get('/api/users').status_code,403)
+            self.assertEqual(viewer.put('/api/settings',headers=headers,json={}).status_code,403)
+            self.assertEqual(viewer.post('/api/auth/password',headers=headers,json={'current':'x','new':'nova-senha-1'}).status_code,409)
+            self.assertEqual(viewer.post('/api/auth/password',headers=headers,json={'current':'familia-123','new':'nova-senha-1'}).status_code,200)
+            self.assertEqual(viewer.get('/api/events').status_code,200)  # Own session survives the change.
+            self.assertEqual(self.client.patch(f'/api/users/{family}',headers=headers,json={'password':'resetada-1'}).status_code,200)
+            self.assertEqual(viewer.get('/api/events').status_code,401)  # Admin reset signs the account out.
+            self.assertEqual(self.client.delete(f'/api/users/{family}',headers=headers).status_code,200)
+            self.assertEqual(self.client.post('/api/auth/logout',headers=headers).status_code,200)
+            self.assertEqual(self.client.get('/api/settings').status_code,401)
+        finally:
+            auth.db.execute('DELETE FROM users')
+            self.client.cookies.clear()
+
+    def test_health_is_public_and_reports_components(self):
+        auth = self.main.auth
+        try:
+            auth.create_user('saude','Saúde','certa-1234','admin')
+            response = self.client.get('/api/health')
+            self.assertIn(response.status_code,(200,503))
+            body = response.json()
+            self.assertEqual(set(body),{'ok','whatsapp','disk_free_gb','cameras'})
+            self.assertEqual(body['cameras'][0]['id'],'main')
+            self.assertEqual(self.client.get('/api/alerts').status_code,401)
+        finally:
+            auth.db.execute('DELETE FROM users')
+
+    def test_login_attempts_are_limited(self):
+        headers = {'X-Casa-Request':'1'}
+        auth = self.main.auth
+        try:
+            auth.create_user('limite','Limite','certa-1234','admin')
+            for _ in range(5):
+                self.assertEqual(self.client.post('/api/auth/login',headers=headers,json={'username':'limite','password':'errada'}).status_code,401)
+            self.assertEqual(self.client.post('/api/auth/login',headers=headers,json={'username':'limite','password':'certa-1234'}).status_code,429)
+        finally:
+            auth.db.execute('DELETE FROM users'); auth.failures.clear()
+
+    def test_legacy_dashboard_password_becomes_admin(self):
+        from app.auth import Auth
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ,{'DASHBOARD_PASSWORD':'antiga'}):
+            auth = Auth(Database(Path(folder)/'db.sqlite3'))
+            token, _ = auth.login('local','admin','antiga',False)
+            self.assertEqual(auth.session_user(token)['role'],'admin')
+            self.assertIsNone(auth.login('local','admin','outra',False)[0])
 
 if __name__ == '__main__':
     unittest.main()

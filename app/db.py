@@ -1,6 +1,6 @@
 import json
 import sqlite3
-import time
+from bisect import bisect_right
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -30,8 +30,18 @@ class Database:
                     retry_at REAL NOT NULL DEFAULT 0, error TEXT, message_id TEXT,
                     recipient TEXT, sent_at REAL
                 );
+                CREATE TABLE IF NOT EXISTS clip_deliveries (
+                    clip_id TEXT NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
+                    recipient TEXT NOT NULL, father_only INTEGER NOT NULL DEFAULT 1,
+                    delivery TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
+                    retry_at REAL NOT NULL DEFAULT 0, error TEXT, message_id TEXT, sent_at REAL,
+                    PRIMARY KEY(clip_id,recipient)
+                );
                 CREATE INDEX IF NOT EXISTS idx_clips_event ON clips(event_id);
                 CREATE INDEX IF NOT EXISTS idx_events_started ON events(started);
+                -- The job loops poll these states every few seconds.
+                CREATE INDEX IF NOT EXISTS idx_clips_state ON clips(state);
+                CREATE INDEX IF NOT EXISTS idx_deliveries_state ON clip_deliveries(delivery);
                 CREATE TABLE IF NOT EXISTS people (
                     id TEXT PRIMARY KEY, name TEXT NOT NULL, is_father INTEGER NOT NULL DEFAULT 0,
                     created REAL NOT NULL
@@ -55,11 +65,28 @@ class Database:
                 CREATE INDEX IF NOT EXISTS sample_person ON person_samples(person_id);
                 CREATE TABLE IF NOT EXISTS recognition_meta (id INTEGER PRIMARY KEY, revision INTEGER NOT NULL);
                 INSERT OR IGNORE INTO recognition_meta VALUES(1,0);
+                CREATE TABLE IF NOT EXISTS alerts (
+                    id TEXT PRIMARY KEY, kind TEXT NOT NULL, created REAL NOT NULL, message TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_alerts_created ON alerts(created);
+                CREATE TABLE IF NOT EXISTS alert_deliveries (
+                    alert_id TEXT NOT NULL REFERENCES alerts(id) ON DELETE CASCADE, recipient TEXT NOT NULL,
+                    state TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
+                    retry_at REAL NOT NULL DEFAULT 0, error TEXT, sent_at REAL, PRIMARY KEY(alert_id,recipient)
+                );
                 CREATE TABLE IF NOT EXISTS face_enrollments (
                     id TEXT PRIMARY KEY, person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
                     created REAL NOT NULL, feature BLOB NOT NULL, model TEXT NOT NULL, quality REAL NOT NULL
                 );
             ''')
+            # Import legacy delivery evidence only once, without backfilling newly
+            # added recipients onto already sent or intentionally skipped clips.
+            db.execute("""INSERT OR IGNORE INTO clip_deliveries
+                (clip_id,recipient,delivery,attempts,retry_at,error,message_id,sent_at)
+                SELECT c.id,c.recipient,c.delivery,c.attempts,c.retry_at,c.error,c.message_id,c.sent_at
+                FROM clips c WHERE c.recipient IS NOT NULL AND c.recipient!=''
+                AND c.delivery IN ('sent','sending','uncertain','failed','retry')
+                AND NOT EXISTS(SELECT 1 FROM clip_deliveries d WHERE d.clip_id=c.id)""")
             columns = {r['name'] for r in db.execute('PRAGMA table_info(events)')}
             if 'identity_source' not in columns:
                 db.execute("ALTER TABLE events ADD COLUMN identity_source TEXT NOT NULL DEFAULT 'legacy'")
@@ -113,10 +140,30 @@ class Database:
     def end_event(self, event_id, now, reason):
         self.execute('UPDATE events SET ended=?, reason=? WHERE id=?', (now, reason, event_id))
 
+    def aggregate_delivery(self, clip_id):
+        """Summarize per-recipient deliveries onto the clip row shown in the history."""
+        rows = self.rows('SELECT * FROM clip_deliveries WHERE clip_id=?', (clip_id,))
+        if not rows:
+            return
+        active = [r for r in rows if r['delivery'] != 'cancelled']
+        state = aggregate_state({r['delivery'] for r in active})
+        errors = [r['error'] for r in active if r['error']]
+        waiting = [r['retry_at'] for r in active if r['delivery'] in ('pending', 'retry')]
+        single = active[0] if len(active) == 1 else None
+        self.execute('UPDATE clips SET delivery=?,attempts=?,retry_at=?,error=?,sent_at=?,message_id=?,recipient=? WHERE id=?', (
+            state, sum(r['attempts'] for r in rows), min(waiting, default=0), errors[0] if errors else None,
+            max((r['sent_at'] or 0 for r in active), default=0) if state == 'sent' else None,
+            single and single['message_id'], single and single['recipient'], clip_id))
+
     def recover(self):
+        # The gateway deduplicates alert ids, so an interrupted text can simply be retried.
+        self.execute("UPDATE alert_deliveries SET state='pending' WHERE state='sending'")
         self.execute("UPDATE events SET analysis_state='interrupted',analysis_error='Análise interrompida pelo reinício.' WHERE analysis_state='running'")
         self.execute("UPDATE events SET ended=last_seen,reason='interrupted' WHERE ended IS NULL")
         self.execute("UPDATE clips SET state='processing' WHERE state='recording'")
+        interrupted=self.rows("SELECT DISTINCT clip_id FROM clip_deliveries WHERE delivery='sending'")
+        self.execute("UPDATE clip_deliveries SET delivery='uncertain',error='Envio interrompido; confira o WhatsApp antes de reenviar.' WHERE delivery='sending'")
+        for row in interrupted:self.aggregate_delivery(row['clip_id'])
         # An interrupted upload may already have reached WhatsApp. Require manual retry.
         self.execute("UPDATE clips SET delivery='uncertain',error='Envio interrompido; confira o WhatsApp antes de reenviar.' WHERE delivery='sending'")
 
@@ -127,41 +174,101 @@ class Database:
         if camera_id:
             conditions.append('camera_id=?'); params.append(camera_id)
         where = 'WHERE ' + ' AND '.join(conditions) if conditions else ''
-        rows = self.rows(f'SELECT * FROM events {where} ORDER BY started DESC LIMIT ? OFFSET ?', (*params, limit, offset))
-        for row in rows:
-            row['clips'] = self.rows('SELECT * FROM clips WHERE event_id=? ORDER BY started', (row['id'],))
-            row['people'] = self.track_details(row['id']) if row['kind']!='manual' or row['analysis_state']=='complete' else []
-            row['probable_father'] = any(t['suggested_is_father'] and not t['reviewed'] for t in row['people'])
-        total = self.rows(f'SELECT COUNT(*) AS n FROM events {where}', params)[0]['n']
-        return {'events': rows, 'total': total}
+        with self.connect() as db:
+            events = [dict(r) for r in db.execute(f'SELECT * FROM events {where} ORDER BY started DESC LIMIT ? OFFSET ?', (*params, limit, offset))]
+            attach_details(db, events)
+            total = db.execute(f'SELECT COUNT(*) FROM events {where}', params).fetchone()[0]
+        return {'events': events, 'total': total}
+
+    def event(self, event_id):
+        """One event with its clips, deliveries and people, or None."""
+        with self.connect() as db:
+            events = [dict(r) for r in db.execute('SELECT * FROM events WHERE id=?', (event_id,))]
+            attach_details(db, events)
+        return events[0] if events else None
 
     def track_details(self, event_id):
-        rows = self.rows('''SELECT t.*, p.name, p.is_father, s.name AS suggested_name,
-            s.is_father AS suggested_is_father FROM person_tracks t
-            LEFT JOIN people p ON p.id=t.person_id LEFT JOIN people s ON s.id=t.suggested_id
-            WHERE event_id=? ORDER BY t.started,t.id''', (event_id,))
-        for row in rows:
-            row['diagnostic'] = json.loads(row['diagnostic'])
-            row['samples'] = self.rows("SELECT id,created,quality,person_id FROM person_samples WHERE track_id=? AND model LIKE 'sface-%' ORDER BY quality DESC,created DESC", (row['id'],))
-        return rows
+        with self.connect() as db:
+            return load_tracks(db, [event_id]).get(event_id, [])
 
     def stats(self, camera_id=None):
-        scope = " AND camera_id=?" if camera_id else ""
-        clip_scope = " AND event_id IN (SELECT id FROM events WHERE camera_id=?)" if camera_id else ""
+        scope = ' AND camera_id=?' if camera_id else ''
+        clip_scope = ' AND event_id IN (SELECT id FROM events WHERE camera_id=?)' if camera_id else ''
         params = (camera_id,) if camera_id else ()
         today = datetime.now(TZ).replace(hour=0, minute=0, second=0, microsecond=0)
-        days = []
-        for i in reversed(range(7)):
-            day = today - timedelta(days=i)
-            end = day + timedelta(days=1)
-            row = self.rows(f'''SELECT COUNT(*) AS total,
-                COALESCE(SUM(identity='father'),0) AS father,
-                COALESCE(SUM(identity='unknown'),0) AS unknown FROM events WHERE kind='presence' AND started>=? AND started<?{scope}''', (day.timestamp(), end.timestamp(), *params))[0]
-            days.append({'date': day.date().isoformat(), **row})
-        return {
-            'days': days, 'today': days[-1],
-            'last_presence': self.rows(f"SELECT MAX(last_seen) AS t FROM events WHERE kind='presence'{scope}", params)[0]['t'],
-            'pending': self.rows(f"SELECT COUNT(*) AS n FROM clips WHERE state='ready' AND delivery NOT IN ('sent','skipped'){clip_scope}", params)[0]['n'],
-            'sent_today': self.rows(f"SELECT COUNT(*) AS n FROM clips WHERE sent_at>=?{clip_scope}", (today.timestamp(), *params))[0]['n'],
-            'recorded_seconds_today': self.rows(f'SELECT COALESCE(SUM(duration),0) AS n FROM clips WHERE started>=?{clip_scope}', (today.timestamp(), *params))[0]['n'],
-        }
+        dates = [today - timedelta(days=i) for i in reversed(range(7))]
+        starts = [day.timestamp() for day in dates]
+        days = [{'date': day.date().isoformat(), 'total': 0, 'father': 0, 'unknown': 0} for day in dates]
+        with self.connect() as db:
+            # One pass over the week instead of one query per day.
+            for started, identity in db.execute(f"SELECT started,identity FROM events WHERE kind='presence' AND started>=?{scope}", (starts[0], *params)):
+                day = days[bisect_right(starts, started) - 1]
+                day['total'] += 1
+                if identity in ('father', 'unknown'):
+                    day[identity] += 1
+            one = lambda query, args=params: db.execute(query, args).fetchone()[0]
+            return {
+                'days': days, 'today': days[-1],
+                'last_presence': one(f"SELECT MAX(last_seen) FROM events WHERE kind='presence'{scope}"),
+                'pending': one(f"SELECT COUNT(*) FROM clips WHERE state='ready' AND delivery NOT IN ('sent','skipped'){clip_scope}"),
+                'sent_today': one(f'SELECT COUNT(*) FROM clips WHERE sent_at>=?{clip_scope}', (starts[-1], *params)),
+                'recorded_seconds_today': one(f'SELECT COALESCE(SUM(duration),0) FROM clips WHERE started>=?{clip_scope}', (starts[-1], *params)),
+            }
+
+
+def aggregate_state(states):
+    """The most actionable state among a clip's active recipients."""
+    if not states:
+        return 'skipped'
+    if states == {'sent'}:
+        return 'sent'
+    if 'sending' in states:
+        return 'sending'
+    if 'sent' in states:
+        return 'partial'
+    return next((state for state in ('pending', 'retry', 'uncertain') if state in states), 'failed')
+
+
+def ids_param(ids):
+    # A single JSON parameter avoids SQLite's bound-variable limit for long lists.
+    return json.dumps(list(ids))
+
+
+def attach_details(db, events):
+    """Load clips, deliveries and people for many events in a few queries."""
+    if not events:
+        return
+    clips = {}
+    for row in db.execute('SELECT * FROM clips WHERE event_id IN (SELECT value FROM json_each(?)) ORDER BY started', (ids_param(e['id'] for e in events),)):
+        clips.setdefault(row['event_id'], []).append({**dict(row), 'deliveries': []})
+    by_id = {clip['id']: clip for items in clips.values() for clip in items}
+    for row in db.execute('SELECT * FROM clip_deliveries WHERE clip_id IN (SELECT value FROM json_each(?)) ORDER BY recipient', (ids_param(by_id),)):
+        by_id[row['clip_id']]['deliveries'].append(dict(row))
+    # Manual recordings only list people after their offline analysis finished.
+    analyzed = [e['id'] for e in events if e['kind'] != 'manual' or e['analysis_state'] == 'complete']
+    tracks = load_tracks(db, analyzed)
+    for event in events:
+        event['clips'] = clips.get(event['id'], [])
+        event['people'] = tracks.get(event['id'], [])
+        event['probable_father'] = any(t['suggested_is_father'] and not t['reviewed'] for t in event['people'])
+
+
+def load_tracks(db, event_ids):
+    tracks = {}
+    if not event_ids:
+        return tracks
+    rows = [dict(r) for r in db.execute('''SELECT t.*, p.name, p.is_father, s.name AS suggested_name,
+        s.is_father AS suggested_is_father FROM person_tracks t
+        LEFT JOIN people p ON p.id=t.person_id LEFT JOIN people s ON s.id=t.suggested_id
+        WHERE event_id IN (SELECT value FROM json_each(?)) ORDER BY t.started,t.id''', (ids_param(event_ids),))]
+    samples = {}
+    for row in db.execute("""SELECT id,created,quality,person_id,track_id FROM person_samples
+        WHERE track_id IN (SELECT value FROM json_each(?)) AND model LIKE 'sface-%' ORDER BY quality DESC,created DESC""",
+            (ids_param(r['id'] for r in rows),)):
+        sample = dict(row)
+        samples.setdefault(sample.pop('track_id'), []).append(sample)
+    for row in rows:
+        row['diagnostic'] = json.loads(row['diagnostic'])
+        row['samples'] = samples.get(row['id'], [])
+        tracks.setdefault(row['event_id'], []).append(row)
+    return tracks

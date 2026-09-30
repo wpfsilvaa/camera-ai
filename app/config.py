@@ -2,6 +2,7 @@ import json
 import os
 import secrets
 import threading
+import time
 from pathlib import Path
 from uuid import uuid4
 
@@ -77,6 +78,8 @@ class Settings(CameraSettings):
     camera_source: str = os.environ.get('CAMERA_SOURCE', 'rtsp://192.168.1.103:8554/cam')
     camera_name: str = Field(default='Cozinha', min_length=1, max_length=60)
     recipient: str = ''
+    additional_recipients: list[str] = Field(default_factory=list, max_length=9)
+    recipient_since: dict[str,float] = Field(default_factory=dict)
     whatsapp_enabled: bool = False
     father_only: bool = True
     recognition_enabled: bool = True
@@ -91,6 +94,14 @@ class Settings(CameraSettings):
     send_probable_father: bool = False
     retention_days: int = Field(default=7, ge=1, le=90)
     cameras: list[ExtraCamera] = Field(default_factory=list, max_length=15)
+    # WhatsApp text alerts; zero turns each check off.
+    alerts_enabled: bool = False
+    inactivity_hours: float = Field(default=4, ge=0, le=24)
+    quiet_start_hour: int = Field(default=22, ge=0, le=23)
+    quiet_end_hour: int = Field(default=7, ge=0, le=23)
+    camera_offline_minutes: int = Field(default=10, ge=0, le=240)
+    daily_summary_hour: int = Field(default=21, ge=-1, le=23)
+    min_free_gb: float = Field(default=2, ge=0.5, le=100)
 
     @field_validator('cameras')
     @classmethod
@@ -106,6 +117,26 @@ class Settings(CameraSettings):
         if value and (not value.isascii() or not value.isdigit() or not 10 <= len(value) <= 15):
             raise ValueError('Use DDI + DDD + número, por exemplo 5511999999999.')
         return value
+
+    @field_validator('additional_recipients')
+    @classmethod
+    def additional_valid(cls, values, info):
+        result=[]
+        for value in values:
+            phone=cls.recipient_valid(value)
+            if not phone:
+                raise ValueError('Informe um número válido para cada familiar.')
+            if phone not in result and phone!=info.data.get('recipient'):
+                result.append(phone)
+        return result
+
+    def delivery_targets(self):
+        # Family members always receive only father records. The primary number
+        # retains its own existing all-presence/father-only preference.
+        targets={phone:True for phone in self.additional_recipients}
+        if self.recipient:
+            targets={self.recipient:self.father_only, **{p:v for p,v in targets.items() if p!=self.recipient}}
+        return targets
 
 class Config:
     def __init__(self, path=DATA / 'settings.json'):
@@ -127,6 +158,11 @@ class Config:
 
     def save(self, value):
         with self.lock:
+            old_targets=self.value.delivery_targets()
+            # The client cannot move a recipient's start date backwards and
+            # silently share old recordings when a family contact is added.
+            value.recipient_since={phone:self.value.recipient_since.get(phone,0) if phone in old_targets
+                else time.time() if self.path.exists() and phone!=value.recipient else 0 for phone in value.delivery_targets()}
             tmp = self.path.with_suffix('.tmp')
             tmp.write_text(value.model_dump_json(indent=2))
             tmp.chmod(0o600)

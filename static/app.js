@@ -6,7 +6,7 @@ const time = (seconds) => date(seconds, {hour:'2-digit',minute:'2-digit'});
 const day = (seconds) => date(seconds, {day:'2-digit',month:'short'});
 const duration = (seconds) => seconds < 60 ? `${Math.max(0, Math.round(seconds))} s` : `${Math.floor(seconds / 60)} min ${Math.round(seconds % 60)} s`;
 const identity = {father:['Meu pai','green'], unknown:['A identificar','amber'], other:['Outra pessoa','neutral']};
-const delivery = {skipped:'Não enviar · registro antigo',pending:'Na fila', sending:'Enviando…', sent:'Enviado', retry:'Nova tentativa', failed:'Falha no envio', uncertain:'Conferir envio'};
+const delivery = {partial:'Envio parcial',cancelled:'Destinatário removido',skipped:'Não enviar · registro antigo',pending:'Na fila', sending:'Enviando…', sent:'Enviado', retry:'Nova tentativa', failed:'Falha no envio', uncertain:'Conferir envio'};
 let settings, status, activePage = 'overview', historyFilter = 'all', offset = 0, total = 0;
 let recentEvents = [], historyEvents = [], selectedEvent, streamActive = false, toastTimer, polling = false;
 let profiles = [];
@@ -48,6 +48,7 @@ async function api(path, options = {}) {
   try { body = await response.json(); } catch { body = {}; }
   if (!response.ok) {
     const detail = Array.isArray(body.detail) ? body.detail.map(item => item.msg).join('; ') : body.detail;
+    if (response.status === 401 && !path.startsWith('/api/auth/')) location.replace('/login');
     const error=new Error(detail || 'Não foi possível concluir a operação.');
     error.status=response.status;
     throw error;
@@ -73,7 +74,7 @@ function deliveryLabel(clip, event) {
   if (clip.delivery === 'pending') {
     if(event.kind==='manual' && (event.analysis_state==='running' || event.identity==='unknown')) return 'Aguardando revisão';
     if (settings?.father_only && event.identity !== 'father' && !(settings.recognition_enabled && settings.send_probable_father && (event.people || []).some(t=>t.suggested_is_father && t.recognition_kind==='face' && !t.reviewed))) return 'Aguardando identificação';
-    if (!settings?.whatsapp_enabled || !settings?.recipient) return 'Envio desativado';
+    if (!settings?.whatsapp_enabled || !(settings?.recipient || settings?.additional_recipients?.length)) return 'Envio desativado';
   }
   return delivery[clip.delivery] || clip.delivery;
 }
@@ -85,18 +86,19 @@ function fillSettings() {
     if (field.type === 'checkbox') field.checked = value;
     else {
       if (field.tagName === 'SELECT' && ![...field.options].some(option => option.value === String(value))) field.add(new Option(name==='confidence'?`${Math.round(value * 100)}%`:String(value), value));
-      field.value = value;
+      field.value = name==='additional_recipients' ? value.join('\n') : value;
     }
   }
 }
 function route() {
   const requested = location.hash.slice(1) || 'overview';
-  activePage = ['overview','history','people','settings'].includes(requested) ? requested : 'overview';
+  activePage = ['overview','history','people','settings','users'].includes(requested) && (isAdmin() || !['users','settings'].includes(requested)) ? requested : 'overview';
   $$('.page').forEach(page => page.classList.toggle('hidden', page.id !== `page-${activePage}`));
   $$('.nav-link').forEach(link => link.classList.toggle('active', link.dataset.page === activePage));
-  $('#page-name').textContent = {overview:'Visão geral',history:'Histórico',people:'Pessoas',settings:'Configurações'}[activePage];
+  $('#page-name').textContent = {overview:'Visão geral',history:'Histórico',people:'Pessoas',settings:'Configurações',users:'Usuários'}[activePage];
   if (activePage === 'history') {loadHistory().catch(error => toast(error.message, true));loadHistoryCameras().catch(error=>toast(error.message,true));}
   if (activePage === 'people') renderProfiles();
+  if (activePage === 'users') loadUsers().catch(error => toast(error.message, true));
   updateStream();
   if(status) renderCameraList();
 }
@@ -105,6 +107,7 @@ window.addEventListener('hashchange', route);
 
 function renderStatus() {
   const {camera, whatsapp, stats} = status;
+  renderAlerts(status.alerts || []);
   $('#father-count').textContent = stats.today.father;
   $('#unknown-count').textContent = stats.today.unknown;
   $('#nav-count').textContent = stats.today.unknown;
@@ -137,7 +140,7 @@ function renderStatus() {
   const connected = whatsapp.state === 'connected';
   $('#wa-dot').className = `dot${connected ? '' : ' gray'}`;
   $('#wa-title').textContent = connected ? 'WhatsApp conectado' : 'Os registros vão até você';
-  $('#wa-description').textContent = connected ? (settings.whatsapp_enabled ? `Os vídeos ${settings.father_only ? 'confirmados como seu pai ' : ''}serão enviados para ${settings.recipient}.` : 'Agora configure o destinatário e ative os envios nas configurações.') : 'Conecte sua conta para receber os vídeos da câmera no WhatsApp.';
+  $('#wa-description').textContent = connected ? (settings.whatsapp_enabled ? `Os vídeos ${settings.father_only ? 'confirmados como seu pai ' : ''}serão enviados para ${settings.recipient || "os familiares cadastrados"}.${settings.additional_recipients?.length ? ` Mais ${settings.additional_recipients.length} familiar(es) recebem somente registros do seu pai.` : ""}` : 'Agora configure o destinatário e ative os envios nas configurações.') : 'Conecte sua conta para receber os vídeos da câmera no WhatsApp.';
   const waLabel = {connected:'Conectado',disconnected:'Desconectado',connecting:'Conectando',qr:'Aguardando QR',unavailable:'Indisponível'}[whatsapp.state] || 'Desconectado';
   $('#wa-status').textContent = waLabel; $('#wa-status').className = `pill ${connected ? 'green' : 'neutral'}`;
   $('#connect-whatsapp').innerHTML = connected ? 'Configurar envio <span>↗</span>' : 'Conectar WhatsApp <span>↗</span>';
@@ -184,12 +187,21 @@ async function loadHistory() {
   $('#page-indicator').textContent = total ? `${offset+1}–${Math.min(offset+20,total)} de ${total}` : 'Nenhum registro';
   $$('#history-table tr').forEach((row,i) => { const small=document.createElement('small');small.textContent=personSummary(historyEvents[i]);row.children[1].append(small); });
 }
+function clipDeliveriesHTML(clip,event) {
+  return (clip.deliveries || []).map(target=>{
+    const waiting=target.delivery==='pending' && target.father_only && event.identity!=='father' &&
+      !(settings.recognition_enabled && settings.send_probable_father && (event.people || []).some(t=>t.suggested_is_father && t.recognition_kind==='face' && !t.reviewed));
+    const state=waiting?'Aguardando identificação do pai':delivery[target.delivery] || target.delivery;
+    const retryable=clip.state==='ready' && ['failed','uncertain','retry'].includes(target.delivery);
+    return `<div class="recipient-delivery"><strong>${escapeHTML(target.recipient)}</strong> · ${escapeHTML(state)}${target.error?`<small>${escapeHTML(target.error)}</small>`:''}${retryable?`<button class="button secondary compact" data-retry="${clip.id}" data-recipient="${escapeHTML(target.recipient)}">Tentar para este número</button>`:''}</div>`;
+  }).join('');
+}
 function openEvent(event) {
   selectedEvent = event;
   $('#event-number').textContent = `${event.kind==='manual'?'GRAVAÇÃO MANUAL':'REGISTRO'} #${event.id} · ${event.camera_name || 'Câmera principal'}`;
   $('#event-title').textContent = date(event.started,{day:'2-digit',month:'long',hour:'2-digit',minute:'2-digit'});
   const reason = {manual_stopped:'Gravação encerrada por você',manual_started:'Gravação manual iniciada',analysis_paused:'Análise pausada; o vídeo ao vivo continuou',camera_error:'Encerrado por perda de sinal',interrupted:'Interrompido pelo reinício do sistema',settings_changed:'Encerrado ao pausar ou alterar a câmera',file_ended:'Fim do arquivo de vídeo',stopped:'Monitoramento encerrado'}[event.reason];
-  $('#event-content').innerHTML = `<div class="event-meta">${badge(event.identity)}<span>${event.ended ? duration(event.ended-event.started) : 'Em andamento'}</span><span>${event.kind==='manual' && event.analysis_state!=='complete' ? 'Gravação manual · aguardando análise' : `Máximo de ${event.max_people} pessoa(s) na imagem`}</span></div>${reason ? `<p class="footnote">${reason}</p>` : ''}${event.clips.map((clip,i) => `<article class="clip-card">${clip.state === 'ready' ? `<video class="event-video" controls preload="metadata" playsinline poster="/media/${clip.id}.jpg" src="/media/${clip.id}${clip.analyzed && event.analysis_state==='complete'?'.analyzed':''}.mp4"></video>` : `<p class="muted small">${escapeHTML(deliveryLabel(clip,event))}</p>`}<div class="clip-meta"><span>Parte ${i+1} · ${duration(clip.duration)}</span><span>${escapeHTML(deliveryLabel(clip,event))}</span></div>${clip.error ? `<p class="clip-error">${escapeHTML(clip.error)}</p>` : ''}${clip.state === 'ready' && ['failed','uncertain','retry'].includes(clip.delivery) ? `<button class="button secondary compact" data-retry="${clip.id}">Tentar envio novamente</button>` : ''}</article>`).join('')}<div class="label-actions"><h3>Seu pai aparece neste registro?</h3><p>${event.ended ? 'Confirme após revisar as partes. A confirmação vale para todos os vídeos deste registro.' : 'Aguarde o fim da gravação para confirmar a identidade.'}</p><div class="label-buttons">${[['father','Sim, é meu pai'],['other','Outra pessoa'],['unknown','Não sei identificar']].map(([value,label]) => `<button class="button ${value==='father'?'primary':'secondary'} ${event.identity===value?'selected':''}" data-label="${value}" ${event.ended?'':'disabled'}>${label}</button>`).join('')}</div><p>${settings.father_only && settings.whatsapp_enabled ? 'Ao confirmar “Meu pai”, os vídeos disponíveis entram na fila de envio ao WhatsApp.' : 'Você pode configurar quais registros serão enviados na tela de configurações.'}</p></div>`;
+  $('#event-content').innerHTML = `<div class="event-meta">${badge(event.identity)}<span>${event.ended ? duration(event.ended-event.started) : 'Em andamento'}</span><span>${event.kind==='manual' && event.analysis_state!=='complete' ? 'Gravação manual · aguardando análise' : `Máximo de ${event.max_people} pessoa(s) na imagem`}</span></div>${reason ? `<p class="footnote">${reason}</p>` : ''}${event.clips.map((clip,i) => `<article class="clip-card">${clip.state === 'ready' ? `<video class="event-video" controls preload="metadata" playsinline poster="/media/${clip.id}.jpg" src="/media/${clip.id}${clip.analyzed && event.analysis_state==='complete'?'.analyzed':''}.mp4"></video>` : `<p class="muted small">${escapeHTML(deliveryLabel(clip,event))}</p>`}<div class="clip-meta"><span>Parte ${i+1} · ${duration(clip.duration)}</span><span>${escapeHTML(deliveryLabel(clip,event))}</span></div>${clipDeliveriesHTML(clip,event)}${clip.error ? `<p class="clip-error">${escapeHTML(clip.error)}</p>` : ''}${!clip.deliveries?.length && clip.state === 'ready' && ['failed','uncertain','retry'].includes(clip.delivery) ? `<button class="button secondary compact" data-retry="${clip.id}">Tentar envio novamente</button>` : ''}</article>`).join('')}<div class="label-actions"><h3>Seu pai aparece neste registro?</h3><p>${event.ended ? 'Confirme após revisar as partes. A confirmação vale para todos os vídeos deste registro.' : 'Aguarde o fim da gravação para confirmar a identidade.'}</p><div class="label-buttons">${[['father','Sim, é meu pai'],['other','Outra pessoa'],['unknown','Não sei identificar']].map(([value,label]) => `<button class="button ${value==='father'?'primary':'secondary'} ${event.identity===value?'selected':''}" data-label="${value}" ${event.ended?'':'disabled'}>${label}</button>`).join('')}</div><p>${settings.father_only && settings.whatsapp_enabled ? 'Ao confirmar “Meu pai”, os vídeos disponíveis entram na fila de envio ao WhatsApp.' : 'Você pode configurar quais registros serão enviados na tela de configurações.'}</p></div>`;
   if(event.kind==='manual') {
     const running=event.analysis_state==='running';
     const complete=event.analysis_state==='complete';
@@ -214,8 +226,8 @@ document.addEventListener('click', event => {
   });
   const retryButton = event.target.closest('[data-retry]');
   if (retryButton && confirm('Confira se este vídeo já chegou ao WhatsApp. Tentar novamente pode repetir um envio cuja confirmação se perdeu. Continuar?')) action(retryButton, async () => {
-    await api(`/api/clips/${retryButton.dataset.retry}/retry`, {method:'POST'});
-    selectedEvent.clips.find(c => c.id === retryButton.dataset.retry).delivery = 'pending';
+    await api(`/api/clips/${retryButton.dataset.retry}/retry${retryButton.dataset.recipient?`?recipient=${encodeURIComponent(retryButton.dataset.recipient)}`:''}`, {method:'POST'});
+    selectedEvent = await api(`/api/events/${selectedEvent.id}`);
     openEvent(selectedEvent); toast('Vídeo devolvido à fila.');
   });
   const confirmTrack = event.target.closest('[data-confirm-track]');
@@ -277,7 +289,7 @@ $('#settings-form').addEventListener('submit', event => {
     const next = {...settings}, form = event.currentTarget || $('#settings-form');
     for (const [name, value] of Object.entries(next)) {
       const input = form.elements.namedItem(name); if (!input) continue;
-      next[name] = input.type === 'checkbox' ? input.checked : typeof value === 'number' ? Number(input.value) : input.value;
+      next[name] = name==='additional_recipients' ? input.value.split(/\r?\n/).map(v=>v.trim()).filter(Boolean) : input.type === 'checkbox' ? input.checked : typeof value === 'number' ? Number(input.value) : input.value;
     }
     settings = await api(cameraPath('/api/settings'),{method:'PUT',body:JSON.stringify(next)});
     fillSettings(); toast('Configurações salvas.'); await refresh();
@@ -456,9 +468,10 @@ for(const [id,operation] of [['pause-all-analysis','pause'],['resume-all-analysi
 }
 async function init() {
   $('#today-date').textContent = new Date().toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric',timeZone:'America/Sao_Paulo'});
-  try { settings=await api('/api/settings');fillSettings();route();await refresh(); }
+  try { await loadAccount();settings=await api('/api/settings');fillSettings();route();await refresh(); }
   catch(error) {toast(error.message,true);$('#connection-alert').classList.remove('hidden');}
   setInterval(refresh,3000);
   setInterval(()=>{$('#camera-clock').textContent=new Date().toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo'});},1000);
 }
-init();
+// users.js defines the account helpers; deferred scripts all run before this event.
+window.addEventListener('DOMContentLoaded', init);
