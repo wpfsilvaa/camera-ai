@@ -13,6 +13,10 @@ authInternalUsers:
       - action: read
         path: cam
 
+# WebRTC só oferece os endereços da rede local e do Tailscale (sem docker0 e afins).
+# Troque wlan0 pelo nome da sua interface (ip -br addr).
+webrtcIPsFromInterfacesList: [wlan0, tailscale0]
+
 paths:
   cam:
     runOnInit: >
