@@ -376,7 +376,7 @@ class CameraWorker:
                             self.sequence+=1
                     rates.append(time.perf_counter())
                     fps=(len(rates)-1)/(rates[-1]-rates[0]) if len(rates)>1 else 0
-                    tracks=[{'id':key,'name':labels.get(str(key),{}).get('name'),'lying_seconds':round(lying[key]) if key in lying else None,
+                    tracks=[{'id':key,'name':labels.get(str(key),{}).get('name'),'person_id':labels.get(str(key),{}).get('person_id'),'lying_seconds':round(lying[key]) if key in lying else None,
                              'held':labels.get(str(key),{}).get('held',False),
                              'source':labels.get(str(key),{}).get('source')} for key in ids]
                     self.update(state='online',error=None,people=count,last_frame=now,event_id=event_id,

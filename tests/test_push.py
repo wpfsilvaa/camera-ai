@@ -9,7 +9,7 @@ os.environ['CAMERA_DATA_DIR'] = TEMP.name
 os.environ['DASHBOARD_PASSWORD'] = ''
 
 from app.db import Database
-from app.push import PHOTOS, Push
+from app.push import PHOTOS, PRESENCE_COOLDOWN, Push
 
 KEYS = {'p256dh': 'BPUBLIC', 'auth': 'SECRET'}
 
@@ -63,9 +63,9 @@ class PushTests(unittest.TestCase):
     def test_presence_goes_only_to_devices_that_opted_in_and_opens_the_camera(self):
         self.push.subscribe('u1', {'endpoint': 'https://push/a', 'keys': KEYS})
         self.push.subscribe('u2', {'endpoint': 'https://push/b', 'keys': KEYS})
-        self.assertTrue(self.push.presence_enabled('https://push/b'))  # On by default.
+        self.assertEqual(self.push.presence_settings('https://push/b'), {'enabled': True, 'audience': 'all', 'quiet': False})
         self.push.set_presence('https://push/b', False)
-        self.assertFalse(self.push.presence_enabled('https://push/b'))
+        self.assertFalse(self.push.presence_settings('https://push/b')['enabled'])
         self.push.notify = self.push.send_all  # Send inline instead of in the background pool.
         self.assertTrue(self.push.presence('sala', 'Sala', now=1_000_000))
         self.assertEqual(len(self.sent), 1)
@@ -117,6 +117,56 @@ class PushTests(unittest.TestCase):
         # The service worker adds "Ver ao vivo" and "Conversar" when the payload names a camera.
         self.assertEqual((fall['camera'], fall['url']), ('sala', '/?camera=sala#overview'))
         self.assertEqual((summary['camera'], summary['url']), (None, '/#overview'))
+
+    def watch(self, frames):
+        """Run the identity watch inline over a scripted sequence of visible tracks, one per second."""
+        clock = {'now': 5_000_000}
+        script = iter(frames)
+        last = []
+
+        def people(camera_id):
+            nonlocal last
+            last = next(script, last)
+            return last
+        self.push.people = people
+        self.push.notify = self.push.send_all
+        self.push.spawn = lambda fn: fn()
+        self.push.clock = lambda: clock['now']
+        self.push.sleep = lambda seconds: clock.__setitem__('now', clock['now'] + seconds)
+        return clock['now']
+
+    def test_presence_filter_father_and_unknown(self):
+        for endpoint, audience in (('https://push/all', 'all'), ('https://push/dad', 'father'), ('https://push/unk', 'unknown')):
+            self.push.subscribe('u1', {'endpoint': endpoint, 'keys': KEYS})
+            self.push.set_presence(endpoint, True, audience)
+        unknown = {'id': 1, 'person_id': None, 'name': None}
+        father = {'id': 1, 'person_id': 'father', 'name': 'Seu Zé'}
+        # Face recognized after 3 s: "all" hears at once, "father" when recognized, "unknown" never.
+        start = self.watch([[unknown], [unknown], [unknown], [father]])
+        self.push.presence('main', 'Cozinha', now=start)
+        heard = [(endpoint, payload['body']) for endpoint, payload, _ in self.sent]
+        self.assertEqual([e for e, _ in heard], ['https://push/all', 'https://push/dad'])
+        self.assertIn('Seu Zé apareceu na câmera Cozinha', heard[1][1])
+        # Nobody recognized during the window: only "all" and "unknown".
+        self.sent.clear()
+        start = self.watch([[unknown]] * 20)
+        self.push.presence('main', 'Cozinha', now=start + PRESENCE_COOLDOWN)
+        self.assertEqual([e for e, _, _ in self.sent], ['https://push/all', 'https://push/unk'])
+        self.assertIn('Pessoa não reconhecida', self.sent[1][1]['body'])
+        with self.assertRaises(ValueError):
+            self.push.set_presence('https://push/all', True, 'vizinho')
+
+    def test_presence_quiet_hours_are_per_device(self):
+        self.push.subscribe('u1', {'endpoint': 'https://push/quiet', 'keys': KEYS})
+        self.push.subscribe('u2', {'endpoint': 'https://push/always', 'keys': KEYS})
+        self.push.set_presence('https://push/quiet', True, 'all', quiet=True)
+        self.push.notify = self.push.send_all
+        self.push.quiet = lambda now: True
+        self.push.presence('main', 'Cozinha', now=6_000_000)
+        self.assertEqual([e for e, _, _ in self.sent], ['https://push/always'])
+        # Other alerts (falls, absence) ignore this per-device preference.
+        self.push.send_all({'id': 'fall-main-3', 'kind': 'fall', 'message': 'Queda'})
+        self.assertEqual(len(self.sent), 3)
 
 
 if __name__ == '__main__':

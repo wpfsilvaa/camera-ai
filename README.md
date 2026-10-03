@@ -360,6 +360,7 @@ Pelo endereço `https://…ts.net`, o painel pode ser instalado como app: menu d
 
 - Cada usuário ativa em cada aparelho. Queda, ausência e fora da rotina chegam como notificação urgente; resumo e câmera, como normais.
 - **Avisar quando alguém aparecer** (ligado por padrão, por aparelho): uma notificação com a foto da câmera no início de cada presença, no máximo uma por minuto por câmera, sem WhatsApp. A notificação de possível queda também traz a foto. Presença e queda trazem os botões **Ver ao vivo** e **Conversar** (Android; o iPhone mostra os botões de forma limitada): **Conversar** abre a câmera já em chamada. Se o navegador bloquear o som ao abrir pela notificação, toque na tela. Tocar abre a câmera ao vivo; dali dá para usar **Conversar ao vivo**.
+- Em **Quem gera o aviso**, cada aparelho escolhe: **qualquer pessoa** (na hora), **só o pai** (quando o rosto dele for reconhecido) ou **só pessoas não reconhecidas**. Os dois últimos acompanham a câmera por até 15 s, porque o reconhecimento leva alguns segundos. **Silenciar no horário de silêncio** usa o horário dos alertas e vale só para o aviso de presença.
 - Funciona como reserva do WhatsApp: as notificações usam o Web Push do navegador (chaves VAPID geradas em `data/vapid.json`), não o Baileys.
 - Notificações exigem HTTPS: pelo endereço `http://192.168…` o painel explica que é preciso usar o endereço do Tailscale.
 - Sem conexão com a casa, o app mostra uma página explicando o que verificar.

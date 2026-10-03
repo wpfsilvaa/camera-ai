@@ -17,6 +17,8 @@ class Endpoint(BaseModel):
 
 class Presence(Endpoint):
     enabled: bool
+    audience: str = Field('all', pattern='^(all|father|unknown)$')
+    quiet: bool = False
 
 
 def build(push):
@@ -49,12 +51,12 @@ def build(push):
 
     @router.post('/api/push/presence-status')
     def presence_status(body: Endpoint):
-        return {'enabled': push.presence_enabled(body.endpoint)}
+        return push.presence_settings(body.endpoint)
 
     @router.post('/api/push/presence')
     def presence(body: Presence):
-        call_service(push.set_presence, body.endpoint, body.enabled)
-        return {'enabled': body.enabled}
+        call_service(push.set_presence, body.endpoint, body.enabled, body.audience, body.quiet)
+        return push.presence_settings(body.endpoint)
 
     @router.post('/api/push/test', status_code=201)
     def test(request: Request):

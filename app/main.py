@@ -3,6 +3,7 @@ import re
 import shutil
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Literal
 
 import httpx
@@ -12,12 +13,12 @@ from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
-from .alerts import Alerts
+from .alerts import Alerts, in_quiet_hours
 from .auth import COOKIE, Auth
 from .backup import Backups
 from .cameras import CameraManager
 from .config import CLIPS, DATA, ROOT, WA_URL, CameraSettings, ExtraCamera, Settings, config
-from .db import Database
+from .db import TZ, Database
 from .jobs import Jobs
 from .learning import LearningSuggestions
 from .offline import OfflineAnalysis
@@ -52,6 +53,15 @@ def latest_frame(camera_id):
 
 
 push.frame = latest_frame
+push.people = lambda camera_id: cameras.get(camera_id).snapshot()['tracks']
+
+
+def quiet_now(now):
+    settings = config.get()
+    return in_quiet_hours(datetime.fromtimestamp(now, TZ).hour, settings.quiet_start_hour, settings.quiet_end_hour)
+
+
+push.quiet = quiet_now
 
 
 @asynccontextmanager

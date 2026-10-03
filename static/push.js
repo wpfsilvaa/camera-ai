@@ -27,7 +27,8 @@
     show('#push-test', on);
     show('#push-disable', on);
     show('#presence-row', on);
-    if (on) $('#presence-push').checked = (await api('/api/push/presence-status', {method: 'POST', body: JSON.stringify({endpoint: (await currentSubscription()).endpoint})})).enabled;
+    if (on) fillPresence(await api('/api/push/presence-status', {method: 'POST', body: JSON.stringify({endpoint: (await currentSubscription()).endpoint})}));
+    else show('#presence-options', false);
     show('#install-app', Boolean(installPrompt));
   }
 
@@ -39,16 +40,29 @@
     toast('Notificações ativadas neste aparelho.');
     await render();
   }));
-  $('#presence-push').addEventListener('change', event => {
-    const input = event.currentTarget;
-    action(input, async () => {
-      const subscription = await currentSubscription();
-      try {
-        await api('/api/push/presence', {method: 'POST', body: JSON.stringify({endpoint: subscription.endpoint, enabled: input.checked})});
-      } catch (error) { input.checked = !input.checked; throw error; }
-      toast(input.checked ? 'Você será avisado neste aparelho quando alguém aparecer.' : 'Avisos de presença desligados neste aparelho.');
-    });
-  });
+  function fillPresence(presence) {
+    $('#presence-push').checked = presence.enabled;
+    $('#presence-audience').value = presence.audience;
+    $('#presence-quiet').checked = presence.quiet;
+    show('#presence-options', presence.enabled);
+    const hours = h => `${String(h).padStart(2, '0')}:00`;
+    if (typeof settings !== 'undefined' && settings) $('#presence-quiet-hours').textContent = `Sem aviso de presença das ${hours(settings.quiet_start_hour)} às ${hours(settings.quiet_end_hour)} (horário de silêncio dos alertas).`;
+  }
+
+  async function savePresence(input) {
+    const subscription = await currentSubscription();
+    const body = {endpoint: subscription.endpoint, enabled: $('#presence-push').checked, audience: $('#presence-audience').value, quiet: $('#presence-quiet').checked};
+    try {
+      fillPresence(await api('/api/push/presence', {method: 'POST', body: JSON.stringify(body)}));
+    } catch (error) {
+      if (input.type === 'checkbox') input.checked = !input.checked;
+      throw error;
+    }
+    toast(body.enabled ? 'Aviso de presença atualizado neste aparelho.' : 'Avisos de presença desligados neste aparelho.');
+  }
+  for (const id of ['#presence-push', '#presence-audience', '#presence-quiet']) {
+    $(id).addEventListener('change', event => action(event.currentTarget, () => savePresence(event.currentTarget)));
+  }
   $('#push-test').addEventListener('click', event => action(event.currentTarget, async () => {
     await api('/api/push/test', {method: 'POST'});
     toast('Notificação de teste enviada. Ela chega em alguns segundos.');

@@ -32,6 +32,14 @@ PRESENCE_COOLDOWN = 60
 PHOTOS = DATA / 'alerts'
 PHOTO_DAYS = 1
 PHOTOS.mkdir(exist_ok=True)
+# Per device: who triggers a presence notice. "father" and "unknown" wait for face recognition.
+AUDIENCES = ('all', 'father', 'unknown')
+IDENTIFY_SECONDS = 15
+FATHER = 'father'  # Fixed id of the father's profile.
+
+
+def clock(timestamp):
+    return f'{datetime.fromtimestamp(timestamp, TZ):%H:%M}'
 
 
 def load_keys():
@@ -62,6 +70,11 @@ class Push:
         self.lock = threading.Lock()
         self.last_presence = {}
         self.frame = None  # Set by the application: camera_id -> latest JPEG (with boxes and names) or None.
+        self.people = None  # camera_id -> visible tracks [{'id', 'person_id', 'name'}], for the presence filter.
+        self.quiet = None  # now -> True during the configured quiet hours.
+        # Seams for tests: where the identity watch runs and how it waits.
+        self.spawn = lambda fn: threading.Thread(target=fn, name='push-presence', daemon=True).start()
+        self.sleep, self.clock = time.sleep, time.time
 
     def subscribe(self, user_id, subscription, agent=''):
         endpoint = subscription.get('endpoint', '')
@@ -75,27 +88,73 @@ class Push:
     def unsubscribe(self, endpoint):
         self.db.execute('DELETE FROM push_subscriptions WHERE endpoint=?', (endpoint,))
 
-    def set_presence(self, endpoint, enabled):
+    def set_presence(self, endpoint, enabled, audience='all', quiet=False):
+        if audience not in AUDIENCES:
+            raise ValueError('Escolha quem deve gerar o aviso de presença.')
         with self.db.connect() as db:
-            changed = db.execute('UPDATE push_subscriptions SET presence=? WHERE endpoint=?', (int(enabled), endpoint)).rowcount
+            changed = db.execute('UPDATE push_subscriptions SET presence=?,presence_filter=?,presence_quiet=? WHERE endpoint=?',
+                                 (int(enabled), audience, int(quiet), endpoint)).rowcount
         if not changed:
             raise KeyError('Ative as notificações neste aparelho primeiro.')
 
-    def presence_enabled(self, endpoint):
-        rows = self.db.rows('SELECT presence FROM push_subscriptions WHERE endpoint=?', (endpoint,))
-        return bool(rows and rows[0]['presence'])
+    def presence_settings(self, endpoint):
+        rows = self.db.rows('SELECT presence,presence_filter,presence_quiet FROM push_subscriptions WHERE endpoint=?', (endpoint,))
+        if not rows:
+            return {'enabled': False, 'audience': 'all', 'quiet': False}
+        return {'enabled': bool(rows[0]['presence']), 'audience': rows[0]['presence_filter'], 'quiet': bool(rows[0]['presence_quiet'])}
+
+    def presence_devices(self, audience, now):
+        """Devices that want this kind of presence notice now (quiet hours honored per device)."""
+        rows = self.db.rows('SELECT endpoint,keys,presence_quiet FROM push_subscriptions WHERE presence=1 AND presence_filter=?', (audience,))
+        quiet = bool(self.quiet and self.quiet(now))
+        return [row for row in rows if not (quiet and row['presence_quiet'])]
 
     def presence(self, camera_id, camera_name, now=None):
-        """Camera listener: someone appeared, so devices that opted in can open the live view."""
+        """Camera listener: someone appeared, so devices that opted in can open the live view.
+
+        "all" devices hear right away. Recognition needs a few seconds, so devices that only want
+        the father, or only people not recognized, hear after watching the camera for a while.
+        """
         now = now or time.time()
         with self.lock:
             if now - self.last_presence.get(camera_id, 0) < PRESENCE_COOLDOWN:
                 return False
             self.last_presence[camera_id] = now
-        self.notify({'id': f'presence-{camera_id}', 'kind': 'presence', 'camera_id': camera_id,
-                     'photo': self.save_photo(camera_id, now),
-                     'message': f'Alguém apareceu na câmera {camera_name} às {datetime.fromtimestamp(now, TZ):%H:%M}. Toque para ver ao vivo.'})
+        if self.presence_devices('all', now):
+            self.notify(self.presence_alert(camera_id, now, 'all',
+                                            f'Alguém apareceu na câmera {camera_name} às {clock(now)}. Toque para ver ao vivo.'))
+        if self.people and (self.presence_devices('father', now) or self.presence_devices('unknown', now)):
+            self.spawn(lambda: self.watch_identity(camera_id, camera_name, now))
         return True
+
+    def presence_alert(self, camera_id, now, audience, message):
+        return {'id': f'presence-{camera_id}', 'kind': 'presence', 'camera_id': camera_id, 'created': now,
+                'audience': audience, 'photo': self.save_photo(camera_id, now), 'message': message}
+
+    def watch_identity(self, camera_id, camera_name, started):
+        """Follow the camera's tracks for IDENTIFY_SECONDS and tell "father" and "unknown" devices."""
+        seen, recognized, father_told = set(), set(), False
+        deadline = started + IDENTIFY_SECONDS
+        while True:
+            now = self.clock()
+            try:
+                tracks = self.people(camera_id) or []
+            except KeyError:  # Camera removed meanwhile.
+                tracks = []
+            for track in tracks:
+                seen.add(track['id'])
+                if track.get('person_id'):
+                    recognized.add(track['id'])
+                if track.get('person_id') == FATHER and not father_told:
+                    father_told = True
+                    self.notify(self.presence_alert(camera_id, now, 'father',
+                                                    f'{track.get("name") or "Seu pai"} apareceu na câmera {camera_name} às {clock(now)}.'))
+            if now >= deadline:
+                break
+            self.sleep(1)
+        if seen - recognized:
+            self.notify(self.presence_alert(camera_id, now, 'unknown',
+                                            f'Pessoa não reconhecida na câmera {camera_name} às {clock(started)}. Toque para ver ao vivo.'))
 
     def save_photo(self, camera_id, now):
         """Keep the current camera image for the notification; returns its URL or None."""
@@ -125,9 +184,12 @@ class Push:
                               # Alerts tied to a camera get "Ver ao vivo" and "Conversar" buttons.
                               'camera': camera,
                               'url': f'/?camera={quote(camera)}#overview' if camera else '/#overview'}, ensure_ascii=False)
-        only = ' WHERE presence=1' if alert['kind'] == 'presence' else ''
+        if alert['kind'] == 'presence':
+            rows = self.presence_devices(alert.get('audience', 'all'), alert.get('created') or time.time())
+        else:
+            rows = self.db.rows('SELECT endpoint,keys FROM push_subscriptions')
         sent = 0
-        for row in self.db.rows('SELECT endpoint,keys FROM push_subscriptions' + only):
+        for row in rows:
             if self.send(row['endpoint'], json.loads(row['keys']), payload, urgent=alert['kind'] in IMMEDIATE):
                 sent += 1
         return sent
