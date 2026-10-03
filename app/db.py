@@ -204,11 +204,12 @@ class Database:
         with self.connect() as db:
             return load_tracks(db, [event_id]).get(event_id, [])
 
-    def stats(self, camera_id=None):
+    def stats(self, camera_id=None, now=None):
+        """Last seven days up to `now` (default: the current time)."""
         scope = ' AND camera_id=?' if camera_id else ''
         clip_scope = ' AND event_id IN (SELECT id FROM events WHERE camera_id=?)' if camera_id else ''
         params = (camera_id,) if camera_id else ()
-        today = datetime.now(TZ).replace(hour=0, minute=0, second=0, microsecond=0)
+        today = (datetime.fromtimestamp(now, TZ) if now else datetime.now(TZ)).replace(hour=0, minute=0, second=0, microsecond=0)
         dates = [today - timedelta(days=i) for i in reversed(range(7))]
         starts = [day.timestamp() for day in dates]
         days = [{'date': day.date().isoformat(), 'total': 0, 'father': 0, 'unknown': 0} for day in dates]

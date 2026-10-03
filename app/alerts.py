@@ -129,7 +129,7 @@ class Alerts:
         alert_id = f'summary-{local.date().isoformat()}'
         if self.exists(alert_id):
             return
-        stats = self.db.stats()
+        stats = self.db.stats(now=now)
         today = stats['today']
         last = f'às {clock(stats["last_presence"])}' if stats['last_presence'] else 'sem registros'
         lines = [f'📋 Resumo de hoje ({local.strftime("%d/%m")})',
