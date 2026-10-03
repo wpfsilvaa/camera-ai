@@ -21,6 +21,16 @@
     return answer.session;
   }
 
+  function playOrAsk() {
+    // Opened from a notification, the browser may block sound until the first tap on the page.
+    speaker.play().catch(() => {
+      if (!call) return;
+      call.muted = true;
+      render();
+      document.addEventListener('pointerdown', () => speaker.play().then(() => { if (call) call.muted = false; render(); }).catch(() => {}), {once: true});
+    });
+  }
+
   function watch(pc) {
     pc.addEventListener('connectionstatechange', () => {
       if (call && pc.connectionState === 'failed') hangup('A conexão de áudio caiu. Confira a rede e chame de novo.');
@@ -34,7 +44,7 @@
     mute.classList.toggle('hidden', !call?.microphone);
     mute.textContent = call?.microphone && !call.microphone.enabled ? 'Ligar meu microfone' : 'Silenciar meu microfone';
     note.classList.toggle('hidden', !active);
-    if (active) note.textContent = call.microphone ? 'Em conversa: você ouve o ambiente e ele ouve você.' : 'Ouvindo o ambiente. Para falar, abra o painel pelo endereço https do Tailscale (…ts.net).';
+    if (active) note.textContent = call.muted ? 'Toque em qualquer lugar da tela para ouvir o ambiente.' : call.microphone ? 'Em conversa: você ouve o ambiente e ele ouve você.' : 'Ouvindo o ambiente. Para falar, abra o painel pelo endereço https do Tailscale (…ts.net).';
   }
 
   async function start() {
@@ -45,7 +55,7 @@
       call.peers.push(listen);
       watch(listen);
       listen.addTransceiver('audio', {direction: 'recvonly'});
-      listen.addEventListener('track', event => { speaker.srcObject = event.streams[0] || new MediaStream([event.track]); speaker.play().catch(() => {}); });
+      listen.addEventListener('track', event => { speaker.srcObject = event.streams[0] || new MediaStream([event.track]); playOrAsk(); });
       call.sessions.push(['listen', await negotiate('listen', listen, cameraId)]);
 
       // Browsers only release the microphone on HTTPS or localhost.

@@ -473,9 +473,13 @@ async function init() {
   $('#today-date').textContent = new Date().toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric',timeZone:'America/Sao_Paulo'});
   try {
     await loadAccount();settings=await api('/api/settings');fillSettings();route();await refresh();
-    // Notifications link to /?camera=<id>#overview: show that camera, then drop the parameter.
-    const camera=new URLSearchParams(location.search).get('camera');
-    if(camera){history.replaceState(null,'','/'+location.hash);if(knownCameras.some(c=>c.id===camera))await switchCamera(camera);}
+    // Notifications link to /?camera=<id>[&call=1]#overview: show that camera (and call it), then drop the parameters.
+    const params=new URLSearchParams(location.search), camera=params.get('camera');
+    if(camera){
+      history.replaceState(null,'','/'+location.hash);
+      if(knownCameras.some(c=>c.id===camera))await switchCamera(camera);
+      if(params.get('call')==='1')$('#intercom-call').click();
+    }
   }
   catch(error) {toast(error.message,true);$('#connection-alert').classList.remove('hidden');}
   setInterval(refresh,3000);

@@ -359,7 +359,7 @@ Em `mediamtx.yml`, troque `192.168.1.1` pelo IP do computador do painel: só ele
 Pelo endereço `https://…ts.net`, o painel pode ser instalado como app: menu do navegador → **Instalar app** (Android/Chrome) ou **Compartilhar → Adicionar à Tela de Início** (iPhone, iOS 16.4+). Em **Minha conta → Este aparelho**, toque em **Ativar notificações** e em **Testar**.
 
 - Cada usuário ativa em cada aparelho. Queda, ausência e fora da rotina chegam como notificação urgente; resumo e câmera, como normais.
-- **Avisar quando alguém aparecer** (ligado por padrão, por aparelho): uma notificação com a foto da câmera no início de cada presença, no máximo uma por minuto por câmera, sem WhatsApp. A notificação de possível queda também traz a foto. Tocar abre a câmera ao vivo; dali dá para usar **Conversar ao vivo**.
+- **Avisar quando alguém aparecer** (ligado por padrão, por aparelho): uma notificação com a foto da câmera no início de cada presença, no máximo uma por minuto por câmera, sem WhatsApp. A notificação de possível queda também traz a foto. Presença e queda trazem os botões **Ver ao vivo** e **Conversar** (Android; o iPhone mostra os botões de forma limitada): **Conversar** abre a câmera já em chamada. Se o navegador bloquear o som ao abrir pela notificação, toque na tela. Tocar abre a câmera ao vivo; dali dá para usar **Conversar ao vivo**.
 - Funciona como reserva do WhatsApp: as notificações usam o Web Push do navegador (chaves VAPID geradas em `data/vapid.json`), não o Baileys.
 - Notificações exigem HTTPS: pelo endereço `http://192.168…` o painel explica que é preciso usar o endereço do Tailscale.
 - Sem conexão com a casa, o app mostra uma página explicando o que verificar.

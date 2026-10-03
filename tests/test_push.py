@@ -106,8 +106,17 @@ class PushTests(unittest.TestCase):
         self.push.frame = lambda camera_id: None
         self.push.presence('sala', 'Sala', now=2_000_000)
         self.assertIsNone(self.sent[-1][1]['image'])
-        self.push.send_all({'id': 'fall-main-9', 'kind': 'fall', 'message': 'Queda', 'image': 1})
+        self.push.send_all({'id': 'fall-main-9', 'kind': 'fall', 'message': 'Queda', 'image': 1, 'camera_id': 'main'})
         self.assertEqual(self.sent[-1][1]['image'], '/alert-media/fall-main-9.jpg')
+
+    def test_camera_alerts_offer_live_view_and_call_buttons(self):
+        self.push.subscribe('u1', {'endpoint': 'https://push/a', 'keys': KEYS})
+        self.push.send_all({'id': 'fall-sala-1', 'kind': 'fall', 'message': 'Queda', 'image': 1, 'camera_id': 'sala'})
+        self.push.send_all({'id': 'summary-x', 'kind': 'summary', 'message': 'Resumo'})
+        fall, summary = self.sent[0][1], self.sent[1][1]
+        # The service worker adds "Ver ao vivo" and "Conversar" when the payload names a camera.
+        self.assertEqual((fall['camera'], fall['url']), ('sala', '/?camera=sala#overview'))
+        self.assertEqual((summary['camera'], summary['url']), (None, '/#overview'))
 
 
 if __name__ == '__main__':

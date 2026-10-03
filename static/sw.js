@@ -19,12 +19,16 @@ self.addEventListener('push', event => {
     body: data.body, tag: data.tag, image: data.image || undefined, renotify: true, icon: '/static/icon-192.png', badge: '/static/icon-192.png',
     requireInteraction: Boolean(data.urgent), vibrate: data.urgent ? [300, 100, 300, 100, 300] : [120],
     data: {url: data.url || '/'},
+    actions: data.camera ? [{action: 'live', title: 'Ver ao vivo'}, {action: 'talk', title: 'Conversar'}] : [],
   }));
 });
 
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-  const url = new URL(event.notification.data.url, self.location.origin).href;
+  const target = new URL(event.notification.data.url, self.location.origin);
+  // "Conversar" opens the camera already calling; the body and "Ver ao vivo" just open it.
+  if (event.action === 'talk') target.searchParams.set('call', '1');
+  const url = target.href;
   event.waitUntil(self.clients.matchAll({type: 'window', includeUncontrolled: true}).then(windows => {
     const open = windows.find(client => new URL(client.url).origin === self.location.origin);
     return open ? open.navigate(url).then(client => (client || open).focus()) : self.clients.openWindow(url);

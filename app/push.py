@@ -122,6 +122,8 @@ class Push:
         photo = alert.get('photo') or (f'/alert-media/{alert["id"]}.jpg' if alert.get('image') else None)
         payload = json.dumps({'title': TITLES.get(alert['kind'], 'Casa Presente'), 'body': alert['message'],
                               'tag': alert['id'], 'urgent': alert['kind'] in URGENT, 'image': photo,
+                              # Alerts tied to a camera get "Ver ao vivo" and "Conversar" buttons.
+                              'camera': camera,
                               'url': f'/?camera={quote(camera)}#overview' if camera else '/#overview'}, ensure_ascii=False)
         only = ' WHERE presence=1' if alert['kind'] == 'presence' else ''
         sent = 0

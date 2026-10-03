@@ -59,6 +59,12 @@ class AlertsTests(unittest.TestCase):
             return httpx.Response(self.status, json={'message_id': 'x'})
         return httpx.Client(transport=httpx.MockTransport(handler))
 
+    def test_fall_alert_tells_listeners_which_camera(self):
+        heard = []
+        self.alerts.listeners.append(heard.append)
+        self.alerts.fall('sala', 'Sala', b'JPEG', 50, now=MORNING)
+        self.assertEqual((heard[0]['kind'], heard[0]['camera_id'], heard[0]['image']), ('fall', 'sala', 1))
+
     def test_quiet_hours_wrap_midnight(self):
         self.assertTrue(in_quiet_hours(23, 22, 7))
         self.assertTrue(in_quiet_hours(3, 22, 7))

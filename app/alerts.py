@@ -152,7 +152,7 @@ class Alerts:
         return self.raise_alert(alert_id, 'fall',
                                 f'🚨 Possível queda na câmera {camera_name}: uma pessoa está deitada fora da cama/sofá '
                                 f'há {round(seconds)} s ({clock(now)}). Ligue ou peça para alguém verificar agora.',
-                                now, image=True)
+                                now, image=True, camera_id=camera_id)
 
     def send_test(self, now=None):
         now = now or time.time()
@@ -164,7 +164,7 @@ class Alerts:
     def exists(self, alert_id):
         return bool(self.db.rows('SELECT 1 FROM alerts WHERE id=?', (alert_id,)))
 
-    def raise_alert(self, alert_id, kind, message, now, image=False):
+    def raise_alert(self, alert_id, kind, message, now, image=False, camera_id=None):
         """Record an alert once per id and queue it for every WhatsApp recipient."""
         recipients = list(self.config.get().delivery_targets())
         with self.db.connect() as db:
@@ -175,7 +175,7 @@ class Alerts:
                                [(alert_id, phone) for phone in recipients])
         if created:
             log.info('Alerta %s registrado para %d destinatário(s)', alert_id, len(recipients))
-            alert = {'id': alert_id, 'kind': kind, 'created': now, 'message': message, 'image': int(image)}
+            alert = {'id': alert_id, 'kind': kind, 'created': now, 'message': message, 'image': int(image), 'camera_id': camera_id}
             for listener in self.listeners:
                 try:
                     listener(alert)
