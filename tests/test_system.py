@@ -210,6 +210,8 @@ class ApiTests(unittest.TestCase):
             created = self.client.post('/api/users',headers=headers,json={'username':'Admin','name':'Adm','password':'segredo-123','role':'admin'})
             self.assertEqual(created.status_code,201); self.assertTrue(created.json()['login_required'])
             self.assertEqual(self.client.get('/',follow_redirects=False).headers['location'],'/login')
+            # A notification link survives the login.
+            self.assertEqual(self.client.get('/?camera=main&call=1',follow_redirects=False).headers['location'],'/login?next=/%3Fcamera%3Dmain%26call%3D1')
             for route in ['/api/settings', '/api/events', '/api/snapshot', '/api/stream.mjpeg', '/api/people', '/api/users', '/people-media/'+'a'*32+'.jpg', '/media/'+'a'*32+'.mp4', '/static/app.js']:
                 self.assertEqual(self.client.get(route).status_code,401,route)
             self.assertEqual(self.client.get('/login').status_code,200)
@@ -217,7 +219,12 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(self.client.post('/api/auth/login',json={'username':'admin','password':'segredo-123'}).status_code,403)
             login = self.client.post('/api/auth/login',headers=headers,json={'username':'ADMIN','password':'segredo-123'})
             self.assertEqual(login.status_code,200)
-            self.assertIn('httponly',login.headers['set-cookie'].lower()); self.assertIn('samesite=strict',login.headers['set-cookie'].lower())
+            # Lax keeps the session on links opened from notifications and other apps; writes need X-Casa-Request.
+            self.assertIn('httponly',login.headers['set-cookie'].lower()); self.assertIn('samesite=lax',login.headers['set-cookie'].lower())
+            self.assertNotIn('max-age',login.headers['set-cookie'].lower())
+            # Opening the page re-issues the cookie (migrates older Strict cookies), still a browser-session cookie.
+            page = self.client.get('/')
+            self.assertIn('samesite=lax',page.headers['set-cookie'].lower()); self.assertNotIn('max-age',page.headers['set-cookie'].lower())
             self.assertEqual(self.client.get('/api/settings').status_code,200)
             self.assertEqual(self.client.get('/login',follow_redirects=False).status_code,303)
             family = self.client.post('/api/users',headers=headers,json={'username':'ana','name':'Ana','password':'familia-123'}).json()['id']
@@ -229,6 +236,8 @@ class ApiTests(unittest.TestCase):
 
             viewer = TestClient(self.main.app)
             viewer.post('/api/auth/login',headers=headers,json={'username':'ana','password':'familia-123','remember':True})
+            remembered = viewer.get('/').headers['set-cookie'].lower()
+            self.assertIn('max-age=',remembered); self.assertIn('samesite=lax',remembered)
             self.assertEqual(viewer.get('/api/auth/me').json()['user']['role'],'family')
             self.assertEqual(viewer.get('/api/events').status_code,200)
             self.assertEqual(viewer.get('/api/settings').json()['camera_source'],'')

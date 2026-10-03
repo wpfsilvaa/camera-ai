@@ -5,6 +5,7 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Literal
+from urllib.parse import quote
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -14,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from .alerts import Alerts, in_quiet_hours
-from .auth import COOKIE, Auth
+from .auth import COOKIE, SAME_SITE, Auth
 from .backup import Backups
 from .cameras import CameraManager
 from .config import CLIPS, DATA, ROOT, WA_URL, CameraSettings, ExtraCamera, Settings, config
@@ -22,7 +23,7 @@ from .db import TZ, Database
 from .jobs import Jobs
 from .learning import LearningSuggestions
 from .offline import OfflineAnalysis
-from .proxy import allowed_origins
+from .proxy import allowed_origins, is_https
 from .push import Push
 from .recognition import Recognition
 from .storage import Storage
@@ -98,7 +99,9 @@ async def protect(request: Request, call_next):
         path = request.url.path
         if request.state.user is None and path not in PUBLIC:
             if request.method == 'GET' and path == '/':
-                return RedirectResponse('/login', status_code=303)
+                # Keep a notification link (?camera=…&call=1) across the login.
+                query = request.url.query
+                return RedirectResponse(f'/login?next={quote("/?" + query)}' if query else '/login', status_code=303)
             return JSONResponse({'detail': 'Entre novamente para continuar.'}, status_code=401)
         user = request.state.user
         if user and user['role'] != 'admin':
@@ -121,8 +124,14 @@ async def protect(request: Request, call_next):
 
 
 @app.get('/')
-def index():
-    return FileResponse(ROOT / 'static/index.html')
+def index(request: Request):
+    response = FileResponse(ROOT / 'static/index.html')
+    # Re-issue the session cookie with the current SameSite policy (older logins used Strict).
+    token = request.cookies.get(COOKIE)
+    valid, max_age = auth.cookie_lifetime(token)
+    if valid:
+        response.set_cookie(COOKIE, token, max_age=max_age, httponly=True, samesite=SAME_SITE, secure=is_https(request), path='/')
+    return response
 
 
 @app.get('/api/settings')

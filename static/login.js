@@ -20,7 +20,12 @@ form.addEventListener('submit', async event => {
   try {
     const response = await fetch('/api/auth/login', {method:'POST', headers:{'Content-Type':'application/json','X-Casa-Request':'1'},
       body:JSON.stringify({username:form.username.value, password:form.password.value, remember:form.remember.checked})});
-    if (response.ok) { location.replace('/'); return; }
+    if (response.ok) {
+      // Back to the link that asked for the login (only paths on this site).
+      const next = new URLSearchParams(location.search).get('next') || '/';
+      location.replace(/^\/(?!\/)/.test(next) ? next : '/');
+      return;
+    }
     const body = await response.json().catch(() => ({}));
     error.textContent = body.detail || 'Não foi possível entrar.';
   } catch {

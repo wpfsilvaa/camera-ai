@@ -8,6 +8,9 @@ import time
 from uuid import uuid4
 
 COOKIE = 'casa_session'
+# Lax: links opened from a notification, another app or WhatsApp keep the session (Strict dropped it).
+# Cross-site writes stay blocked by the X-Casa-Request header and Origin checks; every GET is read-only.
+SAME_SITE = 'lax'
 ROLES = ('admin', 'family')
 SESSION_SECONDS = 12 * 3600
 REMEMBER_SECONDS = 30 * 24 * 3600
@@ -156,6 +159,14 @@ class Auth:
             row = connection.execute('''SELECT u.id,u.username,u.name,u.role FROM sessions s JOIN users u ON u.id=s.user_id
                 WHERE s.token_hash=? AND s.expires>?''', (token_hash(token), time.time())).fetchone()
             return True, dict(row) if row else None
+
+    def cookie_lifetime(self, token):
+        """(valid, max_age) to re-issue a session cookie: max_age None keeps a browser-session cookie."""
+        rows = self.db.rows('SELECT created,expires FROM sessions WHERE token_hash=? AND expires>?', (token_hash(token), time.time())) if token else []
+        if not rows:
+            return False, None
+        remembered = rows[0]['expires'] - rows[0]['created'] > SESSION_SECONDS
+        return True, int(rows[0]['expires'] - time.time()) if remembered else None
 
     def prune_sessions(self):
         self.db.execute('DELETE FROM sessions WHERE expires<?', (time.time(),))
