@@ -65,6 +65,15 @@ class AlertsTests(unittest.TestCase):
         self.alerts.fall('sala', 'Sala', b'JPEG', 50, now=MORNING)
         self.assertEqual((heard[0]['kind'], heard[0]['camera_id'], heard[0]['image']), ('fall', 'sala', 1))
 
+    def test_restricted_alert_names_the_person_with_the_photo(self):
+        heard = []
+        self.alerts.listeners.append(heard.append)
+        self.alerts.restricted('main', 'Cozinha', b'JPEG', 'Meu pai', now=MORNING)
+        self.assertEqual((heard[0]['kind'], heard[0]['camera_id'], heard[0]['image']), ('restricted', 'main', 1))
+        self.assertIn('Meu pai entrou na área restrita da câmera Cozinha', heard[0]['message'])
+        self.alerts.restricted('main', 'Cozinha', b'JPEG', None, now=MORNING + 60)
+        self.assertTrue(heard[1]['message'].startswith('⚠️ Uma pessoa entrou'))
+
     def test_quiet_hours_wrap_midnight(self):
         self.assertTrue(in_quiet_hours(23, 22, 7))
         self.assertTrue(in_quiet_hours(3, 22, 7))

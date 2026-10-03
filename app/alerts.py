@@ -154,6 +154,15 @@ class Alerts:
                                 f'há {round(seconds)} s ({clock(now)}). Ligue ou peça para alguém verificar agora.',
                                 now, image=True, camera_id=camera_id)
 
+    def restricted(self, camera_id, camera_name, jpeg, name, now=None):
+        """Someone watched entered a restricted area (the fridge, in restricted mode): alert with the photo."""
+        now = now or time.time()
+        alert_id = f'restricted-{camera_id}-{int(now)}'
+        (IMAGES / f'{alert_id}.jpg').write_bytes(jpeg)
+        return self.raise_alert(alert_id, 'restricted',
+                                f'⚠️ {name or "Uma pessoa"} entrou na área restrita da câmera {camera_name} ({clock(now)}). '
+                                f'O vídeo fica no histórico.', now, image=True, camera_id=camera_id)
+
     def send_test(self, now=None):
         now = now or time.time()
         return self.raise_alert(f'test-{int(now * 1000)}', 'test',

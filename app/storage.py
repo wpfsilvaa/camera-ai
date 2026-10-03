@@ -83,10 +83,12 @@ class Storage:
                 events = ids_param(r[0] for r in db.execute(REMOVABLE_EVENTS, cutoff))
                 tracks = 'SELECT id FROM person_tracks WHERE event_id IN (SELECT value FROM json_each(:events))'
                 samples = [r[0] for r in db.execute(f'SELECT id FROM person_samples WHERE track_id IN ({tracks})', {'events': events})]
+                photos = [CLIPS / f'{r[0]}.jpg' for r in db.execute(
+                    'SELECT id FROM event_photos WHERE event_id IN (SELECT value FROM json_each(:events))', {'events': events})]
                 db.execute(f'DELETE FROM person_samples WHERE track_id IN ({tracks})', {'events': events})
-                for table, column in (('person_tracks', 'event_id'), ('clips', 'event_id'), ('events', 'id')):
+                for table, column in (('person_tracks', 'event_id'), ('clips', 'event_id'), ('event_photos', 'event_id'), ('events', 'id')):
                     db.execute(f'DELETE FROM {table} WHERE {column} IN (SELECT value FROM json_each(:events))', {'events': events})
-            photos = [PEOPLE / f'{sample_id}.jpg' for sample_id in samples]
+            photos += [PEOPLE / f'{sample_id}.jpg' for sample_id in samples]
             freed += size(photos)
             for photo in photos:
                 photo.unlink(missing_ok=True)

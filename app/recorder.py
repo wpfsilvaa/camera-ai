@@ -153,6 +153,11 @@ def cleanup(db, retention_days, directory=CLIPS, min_free_gb=0):
     # Preserve active visits, even when they span the retention cutoff.
     for row in db.rows(REMOVABLE + ' AND clips.started<?', (cutoff,)):
         expire(db, row['id'], directory)
+    # Photos of records without video (restricted mode) follow the same retention.
+    for row in db.rows('''SELECT p.id FROM event_photos p JOIN events e ON e.id=p.event_id
+            WHERE e.ended IS NOT NULL AND p.created<?''', (cutoff,)):
+        (directory / f"{row['id']}.jpg").unlink(missing_ok=True)
+        db.execute('DELETE FROM event_photos WHERE id=?', (row['id'],))
     # A full disk stops every recording: drop the oldest videos before that happens.
     while min_free_gb and free_space(directory) < min_free_gb:
         oldest = db.rows(REMOVABLE + ' ORDER BY clips.started LIMIT 20')

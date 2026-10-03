@@ -3,10 +3,11 @@ import logging
 import os
 import threading
 import time
+import uuid
 from collections import deque
 from pathlib import Path
 
-from .config import DATA, MODEL, POSE_MODEL, CAMERA_FIELDS
+from .config import CLIPS, DATA, MODEL, POSE_MODEL, CAMERA_FIELDS
 os.environ.setdefault('YOLO_CONFIG_DIR', str(DATA / 'ultralytics'))
 os.environ.setdefault('OPENCV_FFMPEG_CAPTURE_OPTIONS', 'rtsp_transport;tcp')
 
@@ -16,11 +17,16 @@ import numpy as np
 from .falls import FallDetector
 from .overlay import annotate, draw_zones
 from .presence import Presence
+from .restricted import PhotoSchedule, RestrictedWatch
 from .tracking import PersonTracker
 from .recorder import Recorder
 from .recognition import Recognition
 
 log = logging.getLogger(__name__)
+# A loop pass above this is logged with its stages; so is waiting this long for a camera frame.
+STALL_SECONDS = .3
+STALL_WAIT_SECONDS = 1.0
+RESTRICTED_COLOR=(60,60,200)  # BGR: restricted areas are red, fall areas blue.
 # Ultralytics initialization touches process-wide configuration; serialize warmup.
 MODEL_LOAD_LOCK = threading.Lock()
 
@@ -95,12 +101,18 @@ class CameraWorker:
         # Called with (camera_id, camera_name, jpeg bytes, seconds lying) when a fall is suspected.
         self.on_fall=None
         self.on_presence=None  # Called with (camera_id, camera_name, time) when a presence record starts.
+        # Called with (camera_id, camera_name, jpeg bytes, person name) when a restricted area visit starts.
+        self.on_restricted=None
+        self.restricted=RestrictedWatch()
+        self.photos=PhotoSchedule()
+        self.last_stall_log=0
         self.jpeg=None
         self.sequence=0
         self.status={'state':'paused','people':0,'last_frame':None,'event_id':None,'error':None,
                      'inference_ms':None,'detection_fps':0,'fps':0,'frame_age_ms':None,'device':None,'gpu':None,'half':False,
                      'analysis_active':False,'manual_recording':False,'manual_requested':False,'manual_event_id':None,
-                     'source_width':None,'source_height':None,'source_fps':None,'input_fps':None,'tracks':[]}
+                     'source_width':None,'source_height':None,'source_fps':None,'input_fps':None,'tracks':[],
+                     'restricted_recording':False}
 
     def update(self, **values):
         with self.lock:
@@ -121,6 +133,17 @@ class CameraWorker:
             self.status['manual_requested']=enabled
         return {'requested':enabled}
 
+    def report_stall(self, lap, recording):
+        """Log where the time went when one loop pass is slow (at most every 5 s)."""
+        waited,work=lap[1]-lap[0],lap[-1]-lap[1]
+        if (work<STALL_SECONDS and waited<STALL_WAIT_SECONDS) or time.monotonic()-self.last_stall_log<5:
+            return
+        self.last_stall_log=time.monotonic()
+        stages=('controle','detecção','desenho/gravação','prévia')
+        detail=', '.join(f'{name} {(end-begin)*1000:.0f} ms' for name,begin,end in zip(stages,lap[1:],lap[2:]))
+        log.warning('Câmera %s: volta lenta de %.0f ms (espera por quadro %.0f ms; %s)%s',
+                    self.camera_id,work*1000,waited*1000,detail,' durante gravação' if recording else '')
+
     def check_falls(self, result, tracker, boxes, ids, frame, now, settings):
         """Update lying durations from pose keypoints and report new suspected falls."""
         if not settings.fall_detection_enabled or result.keypoints is None:
@@ -139,6 +162,36 @@ class CameraWorker:
                 except Exception:
                     log.exception('Falha ao registrar possível queda')
         return lying
+
+    def check_restricted(self, zone, boxes, ids, labels, frame, now, settings):
+        """Update the restricted area visit; alert once when it starts, if enabled."""
+        height,width=frame.shape[:2]
+        inside=self.restricted.update(boxes,ids,labels,(width,height),settings.restricted_zones,settings.restricted_who)
+        if zone.update(now,len(inside))!='start' or not settings.restricted_alert or not self.on_restricted:
+            return
+        name=next((labels.get(str(k),{}).get('name') for k in inside if labels.get(str(k),{}).get('name')),None)
+        snapshot=draw_zones(annotate(frame,boxes,ids,labels),settings.restricted_zones,RESTRICTED_COLOR)
+        encoded,jpeg=cv2.imencode('.jpg',resize_width(snapshot,1280),[cv2.IMWRITE_JPEG_QUALITY,85])
+        if encoded:
+            try:
+                self.on_restricted(self.camera_id,settings.camera_name,jpeg.tobytes(),name)
+            except Exception:
+                log.exception('Falha ao registrar visita à área restrita')
+
+    def keep_photo(self, event_id, frame, now, ids, labels):
+        """Restricted mode: a few photos show who was there in a record without video."""
+        # Someone recognized is news; unrecognized people count as one, so tracker churn spends no photos.
+        people={labels.get(str(k),{}).get('name') or '?' for k in ids}
+        if not self.photos.due(event_id,now,people):
+            return
+        try:
+            encoded,jpeg=cv2.imencode('.jpg',resize_width(frame,1280),[cv2.IMWRITE_JPEG_QUALITY,80])
+            if encoded:
+                photo_id=uuid.uuid4().hex
+                (CLIPS/f'{photo_id}.jpg').write_bytes(jpeg.tobytes())
+                self.db.add_photo(photo_id,event_id,now)
+        except Exception:
+            log.exception('Falha ao guardar foto do registro')
 
     def start(self):
         self.thread=threading.Thread(target=self.run,daemon=True,name=f'camera-{self.camera_id}')
@@ -185,6 +238,9 @@ class CameraWorker:
             reason='stopped'
             tracker=None
             presence=Presence(settings.min_presence_seconds,settings.absence_seconds)
+            # A restricted area visit, timed like presence; in restricted mode it gates recording.
+            zone=Presence(settings.min_presence_seconds,settings.absence_seconds)
+            self.restricted.reset()
             self.recognition.reset_tracks()
             last_recognition=last_db_touch=0
             rates=deque(maxlen=90)
@@ -214,6 +270,7 @@ class CameraWorker:
                     if not current.enabled or any(getattr(current,k)!=getattr(settings,k) for k in restart):
                         reason='settings_changed'
                         break
+                    lap_start=time.perf_counter()
                     if live:
                         ok,original,now=live.read()
                     else:
@@ -233,6 +290,7 @@ class CameraWorker:
                         continue
                     # Tolerance avoids accidentally reducing a 30 fps source to 15 fps.
                     next_frame=now+1/settings.fps-.003
+                    lap=[lap_start,time.perf_counter()]  # Stage times, logged when the loop stalls.
                     if analysis_active != current.analysis_enabled:
                         if event_id is not None:
                             recorder.finish(latest_time)
@@ -247,6 +305,8 @@ class CameraWorker:
                         detected_boxes=[];detected_ids=[];last_inference_ms=None;detected_lying={}
                         detections.clear();next_detection=0
                         self.falls.reset()
+                        zone=Presence(settings.min_presence_seconds,settings.absence_seconds)
+                        self.restricted.reset()
                         analysis_active=current.analysis_enabled
                         self.update(analysis_active=analysis_active)
                     with self.lock:
@@ -264,6 +324,7 @@ class CameraWorker:
                         self.db.end_event(manual_event,latest_time,'manual_stopped')
                         manual_event=None
                         presence=Presence(settings.min_presence_seconds,settings.absence_seconds)
+                    lap.append(time.perf_counter())
                     boxes=[];ids=[];labels={};count=0;inference_ms=None;action=None
                     lying={}
                     if analysis_active and now>=next_detection:
@@ -338,6 +399,11 @@ class CameraWorker:
                             last_recognition=now
                             self.recognition.submit(event_id,original,boxes,ids,now,current)
                         labels=self.recognition.labels(ids,boxes,now,current.face_hold_seconds) if current.recognition_enabled else {}
+                        if current.restricted_enabled:
+                            self.check_restricted(zone,boxes,ids,labels,original,now,current)
+                        elif zone.active or zone.candidate is not None:
+                            zone=Presence(settings.min_presence_seconds,settings.absence_seconds)
+                    lap.append(time.perf_counter())
                     if analysis_active:
                         lying=detected_lying
                         boxes,ids=detected_boxes,detected_ids
@@ -347,11 +413,13 @@ class CameraWorker:
                     latest_time=now
                     annotated=annotate(original,boxes,ids,labels,lying) if analysis_active else original
                     if event_id is not None:
-                        recorded=resize_width(annotated,settings.recording_width)
-                        if recorder.writer is None:
-                            recorder.start(event_id,recorded,now,settings.fps)
+                        if current.restricted_enabled and not zone.active:
+                            recorder.finish(now)  # Restricted mode: the record goes on, without video.
+                            self.keep_photo(event_id,annotated,now,ids,labels)
+                        elif recorder.writer is None:
+                            recorder.start(event_id,resize_width(annotated,settings.recording_width),now,settings.fps)
                         else:
-                            recorder.write(recorded,now)
+                            recorder.write(resize_width(annotated,settings.recording_width),now)
                         if action=='end':
                             recorder.finish(now)
                             self.db.end_event(event_id,now,'absence')
@@ -369,14 +437,19 @@ class CameraWorker:
                         if now-last_db_touch>=.5:
                             self.db.touch_event(manual_event,now,count)
                             last_db_touch=now
+                    lap.append(time.perf_counter())
                     preview=resize_width(annotated,current.preview_width)
                     if analysis_active and current.fall_detection_enabled:
                         preview=draw_zones(preview,current.fall_zones)
+                    if analysis_active and current.restricted_enabled:
+                        preview=draw_zones(preview,current.restricted_zones,RESTRICTED_COLOR)
                     encoded,jpeg=cv2.imencode('.jpg',preview,[cv2.IMWRITE_JPEG_QUALITY,78])
                     if encoded:
                         with self.lock:
                             self.jpeg=jpeg.tobytes()
                             self.sequence+=1
+                    lap.append(time.perf_counter())
+                    self.report_stall(lap,event_id is not None)
                     rates.append(time.perf_counter())
                     fps=(len(rates)-1)/(rates[-1]-rates[0]) if len(rates)>1 else 0
                     tracks=[{'id':key,'name':labels.get(str(key),{}).get('name'),'person_id':labels.get(str(key),{}).get('person_id'),'lying_seconds':round(lying[key]) if key in lying else None,
@@ -385,7 +458,8 @@ class CameraWorker:
                     self.update(state='online',error=None,people=count,last_frame=now,event_id=event_id,
                         input_fps=round(live.measured_fps(),1) if live else source_fps,
                         manual_event_id=manual_event,manual_recording=manual_event is not None,
-                        inference_ms=inference_ms,detection_fps=round((len(detections)-1)/(detections[-1]-detections[0]),1) if len(detections)>1 else 0,fps=round(fps,1),frame_age_ms=round((time.time()-now)*1000,1),tracks=tracks)
+                        inference_ms=inference_ms,detection_fps=round((len(detections)-1)/(detections[-1]-detections[0]),1) if len(detections)>1 else 0,fps=round(fps,1),frame_age_ms=round((time.time()-now)*1000,1),tracks=tracks,
+                        restricted_recording=bool(current.restricted_enabled and zone.active and event_id is not None))
             except Exception as exc:
                 reason='camera_error'
                 message=str(exc) if isinstance(exc,RuntimeError) else f'Falha na captura/detecção ({type(exc).__name__}). Confira os requisitos e a câmera.'

@@ -22,10 +22,11 @@ KEYS = DATA / 'vapid.json'
 CONTACT = 'mailto:casa-presente@localhost'
 TITLES = {'fall': 'Possível queda', 'routine': 'Fora da rotina', 'inactivity': 'Ninguém apareceu',
           'camera_offline': 'Câmera sem imagem', 'camera_online': 'Câmera voltou', 'summary': 'Resumo do dia',
-          'backup': 'Backup falhou', 'test': 'Teste de notificação', 'presence': 'Presença detectada'}
+          'backup': 'Backup falhou', 'test': 'Teste de notificação', 'presence': 'Presença detectada',
+          'restricted': 'Área restrita'}
 URGENT = {'fall', 'routine', 'inactivity'}
 # Delivered right away even with the phone asleep (high push priority), without the urgent alert style.
-IMMEDIATE = URGENT | {'presence'}
+IMMEDIATE = URGENT | {'presence', 'restricted'}
 # A person walking in and out restarts the record; one notification per camera in this window is enough.
 PRESENCE_COOLDOWN = 60
 # Presence photos live next to the alert photos (served, behind login, by /alert-media/) for a day.

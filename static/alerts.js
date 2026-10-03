@@ -1,4 +1,4 @@
-const alertKinds = {fall:['Possível queda','red'], routine:['Fora da rotina','amber'], backup:['Backup falhou','red'], inactivity:['Ausência','amber'], camera_offline:['Câmera sem imagem','red'], camera_online:['Câmera voltou','green'], summary:['Resumo do dia','neutral'], test:['Teste','neutral']};
+const alertKinds = {fall:['Possível queda','red'], restricted:['Área restrita','amber'], routine:['Fora da rotina','amber'], backup:['Backup falhou','red'], inactivity:['Ausência','amber'], camera_offline:['Câmera sem imagem','red'], camera_online:['Câmera voltou','green'], summary:['Resumo do dia','neutral'], test:['Teste','neutral']};
 const alertStates = {pending:'na fila', retry:'nova tentativa', sending:'enviando', sent:'enviado', failed:'falhou', uncertain:'conferir', expired:'expirado', cancelled:'cancelado'};
 
 function alertDelivery(alert) {

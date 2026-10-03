@@ -45,6 +45,7 @@ alerts.listeners.append(push.notify)
 jobs = Jobs(db, config, recognition, alerts, auth, learning, backups)
 cameras.fall_handler = alerts.fall
 cameras.presence_handler = push.presence
+cameras.restricted_handler = alerts.restricted
 
 
 def latest_frame(camera_id):

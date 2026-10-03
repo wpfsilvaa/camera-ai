@@ -84,6 +84,11 @@ class Database:
                     state TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
                     retry_at REAL NOT NULL DEFAULT 0, error TEXT, sent_at REAL, PRIMARY KEY(alert_id,recipient)
                 );
+                -- Restricted mode keeps a few photos of records recorded without video.
+                CREATE TABLE IF NOT EXISTS event_photos (
+                    id TEXT PRIMARY KEY, event_id INTEGER NOT NULL REFERENCES events(id), created REAL NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_photos_event ON event_photos(event_id);
                 CREATE TABLE IF NOT EXISTS face_enrollments (
                     id TEXT PRIMARY KEY, person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
                     created REAL NOT NULL, feature BLOB NOT NULL, model TEXT NOT NULL, quality REAL NOT NULL
@@ -153,6 +158,9 @@ class Database:
 
     def touch_event(self, event_id, now, count):
         self.execute('UPDATE events SET last_seen=?, max_people=MAX(max_people,?) WHERE id=?', (now, count, event_id))
+
+    def add_photo(self, photo_id, event_id, now):
+        self.execute('INSERT INTO event_photos(id,event_id,created) VALUES(?,?,?)', (photo_id, event_id, now))
 
     def end_event(self, event_id, now, reason):
         self.execute('UPDATE events SET ended=?, reason=? WHERE id=?', (now, reason, event_id))
@@ -262,11 +270,15 @@ def attach_details(db, events):
     by_id = {clip['id']: clip for items in clips.values() for clip in items}
     for row in db.execute('SELECT * FROM clip_deliveries WHERE clip_id IN (SELECT value FROM json_each(?)) ORDER BY recipient', (ids_param(by_id),)):
         by_id[row['clip_id']]['deliveries'].append(dict(row))
+    photos = {}
+    for row in db.execute('SELECT * FROM event_photos WHERE event_id IN (SELECT value FROM json_each(?)) ORDER BY created', (ids_param(e['id'] for e in events),)):
+        photos.setdefault(row['event_id'], []).append(dict(row))
     # Manual recordings only list people after their offline analysis finished.
     analyzed = [e['id'] for e in events if e['kind'] != 'manual' or e['analysis_state'] == 'complete']
     tracks = load_tracks(db, analyzed)
     for event in events:
         event['clips'] = clips.get(event['id'], [])
+        event['photos'] = photos.get(event['id'], [])
         event['people'] = tracks.get(event['id'], [])
         event['probable_father'] = any(t['suggested_is_father'] and not t['reviewed'] for t in event['people'])
 

@@ -79,6 +79,28 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(self.db.rows("SELECT person_id FROM person_samples WHERE id=?", ('d' * 31 + 'f',))[0]['person_id'], 'father')
         self.assertGreaterEqual(result['freed_bytes'], 2250)
 
+    def photo(self, event, key, created):
+        photo = key * 32
+        self.db.add_photo(photo, event, created)
+        (CLIPS / f'{photo}.jpg').write_bytes(b'p' * 80)
+        return CLIPS / f'{photo}.jpg'
+
+    def test_restricted_mode_photos_leave_with_their_record(self):
+        old, recent = self.photo(self.old, '1', self.now - 10 * DAY), self.photo(self.recent, '2', self.now - DAY)
+        self.storage.delete_history(7, self.now)
+        self.assertFalse(old.exists())
+        self.assertTrue(recent.exists())
+        self.assertEqual([r['event_id'] for r in self.db.rows('SELECT event_id FROM event_photos')], [self.recent])
+
+    def test_restricted_mode_photos_follow_the_video_retention(self):
+        from app.recorder import cleanup
+        old, kept = self.photo(self.old, '1', self.now - 10 * DAY), self.photo(self.open, '2', self.now - 20 * DAY)
+        cleanup(self.db, 7)
+        self.assertFalse(old.exists())
+        self.assertTrue(kept.exists())   # The record is still open.
+        self.assertEqual(len(self.db.rows('SELECT id FROM event_photos')), 1)
+        self.assertEqual(len(self.db.event(self.old)['photos']), 0)
+
     def test_a_video_still_going_to_one_recipient_is_kept(self):
         self.db.execute("INSERT INTO clip_deliveries(clip_id,recipient,delivery) VALUES(?,?,'sending')", ('a' * 32, '5511999999999'))
         self.assertEqual(self.storage.delete_videos(7, self.now)['videos'], 1)  # Only the taught record's video.

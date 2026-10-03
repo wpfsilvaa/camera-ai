@@ -43,6 +43,11 @@ class CameraSettings(BaseModel):
     fps: int = Field(default=30, ge=5, le=30)
     # Normalized [x1, y1, x2, y2] areas (bed, sofa) where lying down is expected.
     fall_zones: list[list[float]] = Field(default_factory=list, max_length=10)
+    # Restricted mode: video is recorded only while a watched person is inside one of these areas.
+    restricted_enabled: bool = False
+    restricted_zones: list[list[float]] = Field(default_factory=list, max_length=10)
+    restricted_who: str = 'father'
+    restricted_alert: bool = False
 
     @field_validator('camera_source')
     @classmethod
@@ -62,13 +67,20 @@ class CameraSettings(BaseModel):
             raise ValueError('Informe o nome da câmera.')
         return value
 
-    @field_validator('fall_zones')
+    @field_validator('fall_zones', 'restricted_zones')
     @classmethod
     def zones_valid(cls, zones):
         for zone in zones:
             if len(zone) != 4 or not all(0 <= v <= 1 for v in zone) or zone[0] >= zone[2] or zone[1] >= zone[3]:
-                raise ValueError('Área ignorada inválida.')
+                raise ValueError('Área marcada inválida.')
         return [[round(v, 4) for v in zone] for zone in zones]
+
+    @field_validator('restricted_who')
+    @classmethod
+    def who_valid(cls, value):
+        if value not in ('father', 'father_or_unknown', 'anyone'):
+            raise ValueError('Escolha quem ativa a área restrita.')
+        return value
 
     @field_validator('device')
     @classmethod

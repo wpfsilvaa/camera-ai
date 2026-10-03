@@ -59,6 +59,7 @@ body.readonly .admin-only,body.readonly #add-camera,body.readonly #remove-camera
 .zone-stage p{position:absolute;inset:0;pointer-events:none;display:grid;place-items:center;margin:0;color:#c9d6c4;padding:16px;text-align:center}
 .zone-actions{display:flex;gap:16px;align-items:center}
 .zone-actions span{margin-right:auto}
+.event-photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin:12px 0 4px}.event-photos figure{margin:0}.event-photos img{display:block;width:100%;border-radius:10px;background:#1d2c26;aspect-ratio:16/9;object-fit:cover}.event-photos figcaption{font-size:11px;color:var(--muted);margin-top:4px}
 .alert-photo{grid-column:2}
 .alert-photo img{max-width:220px;border-radius:8px;margin-top:6px;display:block}
 @media(max-width:500px){.alert-photo{grid-column:1}}

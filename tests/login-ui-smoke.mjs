@@ -64,7 +64,27 @@ try {
   const withZone=await page.evaluate(()=>fetch('/api/settings').then(r=>r.json()));
   assert.equal(withZone.fall_detection_enabled,true); assert.equal(withZone.fall_zones.length,1);
   assert.ok(Math.abs(withZone.fall_zones[0][0]-.5)<.02 && Math.abs(withZone.fall_zones[0][3]-.9)<.02, JSON.stringify(withZone.fall_zones));
-  if (shots) await page.locator('.zone-editor').screenshot({path:`${shots}/fall-zones.png`});
+  if (shots) await page.locator('.zone-editor[data-zones="fall_zones"]').screenshot({path:`${shots}/fall-zones.png`});
+  // Restricted mode: its own areas (the fridge), drawn and saved apart from the fall areas.
+  await page.check('[name=restricted_enabled]'); await page.check('[name=restricted_alert]');
+  await page.selectOption('[name=restricted_who]','father_or_unknown');
+  const fridgeEditor=page.locator('.zone-editor[data-zones="restricted_zones"]');
+  await fridgeEditor.locator('canvas').scrollIntoViewIfNeeded();
+  const fridge=await fridgeEditor.locator('canvas').boundingBox();
+  await page.mouse.move(fridge.x+fridge.width*.6,fridge.y+fridge.height*.1);await page.mouse.down();
+  await page.mouse.move(fridge.x+fridge.width*.9,fridge.y+fridge.height*.8,{steps:4});await page.mouse.up();
+  await fridgeEditor.locator('.zone-actions span',{hasText:'1 área'}).waitFor();
+  await page.locator('#zone-count',{hasText:'1 área'}).waitFor();
+  // The 3 s status poll reloads the settings; an area drawn but not yet saved must survive it.
+  await page.waitForResponse(r=>r.url().includes('/api/settings') && r.request().method()==='GET');
+  await page.click('#save-settings');
+  await page.locator('#toast',{hasText:'Configurações salvas'}).waitFor();
+  const restricted=await page.evaluate(()=>fetch('/api/settings').then(r=>r.json()));
+  assert.equal(restricted.restricted_enabled,true); assert.equal(restricted.restricted_alert,true);
+  assert.equal(restricted.restricted_who,'father_or_unknown'); assert.equal(restricted.fall_zones.length,1);
+  assert.equal(restricted.restricted_zones.length,1);
+  assert.ok(Math.abs(restricted.restricted_zones[0][0]-.6)<.02 && Math.abs(restricted.restricted_zones[0][3]-.8)<.02, JSON.stringify(restricted.restricted_zones));
+  if (shots) await fridgeEditor.locator('..').screenshot({path:`${shots}/restricted-mode.png`});
   if (shots) await page.locator('#page-settings .settings-panel').last().screenshot({path:`${shots}/alerts-settings.png`});
   await page.fill('[name=recipient]','5511999999999'); await page.click('#save-settings');
   await page.locator('#toast',{hasText:'Configurações salvas'}).waitFor();

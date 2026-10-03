@@ -51,15 +51,15 @@ def annotate(frame, boxes, ids, labels, lying=None):
     return output
 
 
-def draw_zones(frame, zones):
-    """Shade the areas where lying down is expected (bed, sofa) on the live preview."""
+def draw_zones(frame, zones, color=(190,160,90)):
+    """Shade marked areas on the live preview: where lying down is expected, or restricted areas."""
     if not zones:
         return frame
     output=frame.copy()
     height,width=output.shape[:2]
     for x1,y1,x2,y2 in zones:
-        cv2.rectangle(output,(round(x1*width),round(y1*height)),(round(x2*width),round(y2*height)),(190,160,90),-1)
+        cv2.rectangle(output,(round(x1*width),round(y1*height)),(round(x2*width),round(y2*height)),color,-1)
     output=cv2.addWeighted(output,.25,frame,.75,0)
     for x1,y1,x2,y2 in zones:
-        cv2.rectangle(output,(round(x1*width),round(y1*height)),(round(x2*width),round(y2*height)),(190,160,90),2)
+        cv2.rectangle(output,(round(x1*width),round(y1*height)),(round(x2*width),round(y2*height)),color,2)
     return output

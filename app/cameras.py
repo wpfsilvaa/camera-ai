@@ -13,6 +13,7 @@ class CameraManager:
         self.running = False
         self.fall_handler = None  # Set by the application; receives suspected falls from every camera.
         self.presence_handler = None  # Receives each new presence record from every camera.
+        self.restricted_handler = None  # Receives each visit to a restricted area (restricted mode).
         self.workers = {}
         self.add_worker('main', recognition)
 
@@ -20,6 +21,7 @@ class CameraManager:
         worker = CameraWorker(self.db, CameraConfigView(self.config, camera_id), recognition, camera_id)
         worker.on_fall = lambda *args: self.fall_handler and self.fall_handler(*args)
         worker.on_presence = lambda *args: self.presence_handler and self.presence_handler(*args)
+        worker.on_restricted = lambda *args: self.restricted_handler and self.restricted_handler(*args)
         self.workers[camera_id] = worker
         return worker
 
