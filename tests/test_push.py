@@ -9,7 +9,7 @@ os.environ['CAMERA_DATA_DIR'] = TEMP.name
 os.environ['DASHBOARD_PASSWORD'] = ''
 
 from app.db import Database
-from app.push import Push
+from app.push import PHOTOS, Push
 
 KEYS = {'p256dh': 'BPUBLIC', 'auth': 'SECRET'}
 
@@ -88,6 +88,26 @@ class PushTests(unittest.TestCase):
         self.assertTrue(self.push.presence('sala', 'Sala', now=1030))
         self.assertTrue(self.push.presence('main', 'Cozinha', now=1061))
         self.assertEqual(len(self.sent), 3)
+
+    def test_presence_and_fall_notifications_carry_a_photo(self):
+        self.push.subscribe('u1', {'endpoint': 'https://push/a', 'keys': KEYS})
+        self.push.notify = self.push.send_all
+        self.push.frame = lambda camera_id: b'JPEG-' + camera_id.encode()
+        self.push.presence('main', 'Cozinha', now=2_000_000)
+        photo = self.sent[-1][1]['image']
+        self.assertEqual(photo, '/alert-media/presence-main-2000000.jpg')
+        self.assertEqual((PHOTOS / 'presence-main-2000000.jpg').read_bytes(), b'JPEG-main')
+        # Photos older than a day are removed when a new one is saved.
+        self.push.frame = lambda camera_id: b'JPEG'
+        os.utime(PHOTOS / 'presence-main-2000000.jpg', (2_000_000, 2_000_000))
+        self.push.presence('main', 'Cozinha', now=2_000_000 + 2 * 86400)
+        self.assertFalse((PHOTOS / 'presence-main-2000000.jpg').exists())
+        # No image yet (camera starting): the notification goes without a photo.
+        self.push.frame = lambda camera_id: None
+        self.push.presence('sala', 'Sala', now=2_000_000)
+        self.assertIsNone(self.sent[-1][1]['image'])
+        self.push.send_all({'id': 'fall-main-9', 'kind': 'fall', 'message': 'Queda', 'image': 1})
+        self.assertEqual(self.sent[-1][1]['image'], '/alert-media/fall-main-9.jpg')
 
 
 if __name__ == '__main__':

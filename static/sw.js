@@ -16,7 +16,7 @@ self.addEventListener('fetch', event => {
 self.addEventListener('push', event => {
   const data = event.data ? event.data.json() : {title: 'Casa Presente', body: ''};
   event.waitUntil(self.registration.showNotification(data.title, {
-    body: data.body, tag: data.tag, renotify: true, icon: '/static/icon-192.png', badge: '/static/icon-192.png',
+    body: data.body, tag: data.tag, image: data.image || undefined, renotify: true, icon: '/static/icon-192.png', badge: '/static/icon-192.png',
     requireInteraction: Boolean(data.urgent), vibrate: data.urgent ? [300, 100, 300, 100, 300] : [120],
     data: {url: data.url || '/'},
   }));

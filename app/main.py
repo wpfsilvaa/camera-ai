@@ -45,6 +45,15 @@ cameras.fall_handler = alerts.fall
 cameras.presence_handler = push.presence
 
 
+def latest_frame(camera_id):
+    worker = cameras.get(camera_id)
+    with worker.lock:
+        return worker.jpeg
+
+
+push.frame = latest_frame
+
+
 @asynccontextmanager
 async def lifespan(app):
     db.recover()

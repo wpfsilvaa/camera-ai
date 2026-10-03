@@ -28,6 +28,10 @@ URGENT = {'fall', 'routine', 'inactivity'}
 IMMEDIATE = URGENT | {'presence'}
 # A person walking in and out restarts the record; one notification per camera in this window is enough.
 PRESENCE_COOLDOWN = 60
+# Presence photos live next to the alert photos (served, behind login, by /alert-media/) for a day.
+PHOTOS = DATA / 'alerts'
+PHOTO_DAYS = 1
+PHOTOS.mkdir(exist_ok=True)
 
 
 def load_keys():
@@ -57,6 +61,7 @@ class Push:
         self.pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix='push')
         self.lock = threading.Lock()
         self.last_presence = {}
+        self.frame = None  # Set by the application: camera_id -> latest JPEG (with boxes and names) or None.
 
     def subscribe(self, user_id, subscription, agent=''):
         endpoint = subscription.get('endpoint', '')
@@ -88,8 +93,21 @@ class Push:
                 return False
             self.last_presence[camera_id] = now
         self.notify({'id': f'presence-{camera_id}', 'kind': 'presence', 'camera_id': camera_id,
+                     'photo': self.save_photo(camera_id, now),
                      'message': f'Alguém apareceu na câmera {camera_name} às {datetime.fromtimestamp(now, TZ):%H:%M}. Toque para ver ao vivo.'})
         return True
+
+    def save_photo(self, camera_id, now):
+        """Keep the current camera image for the notification; returns its URL or None."""
+        jpeg = self.frame(camera_id) if self.frame else None
+        if not jpeg:
+            return None
+        for old in PHOTOS.glob('presence-*.jpg'):
+            if old.stat().st_mtime < now - PHOTO_DAYS * 86400:
+                old.unlink(missing_ok=True)
+        name = f'presence-{camera_id}-{int(now)}.jpg'
+        (PHOTOS / name).write_bytes(jpeg)
+        return f'/alert-media/{name}'
 
     def devices(self, user_id):
         return self.db.rows('SELECT endpoint,agent,created,last_ok FROM push_subscriptions WHERE user_id IS ? ORDER BY created', (user_id,))
@@ -100,8 +118,10 @@ class Push:
 
     def send_all(self, alert):
         camera = alert.get('camera_id')
+        # Fall alerts keep their photo in data/alerts/<id>.jpg; presence passes its own.
+        photo = alert.get('photo') or (f'/alert-media/{alert["id"]}.jpg' if alert.get('image') else None)
         payload = json.dumps({'title': TITLES.get(alert['kind'], 'Casa Presente'), 'body': alert['message'],
-                              'tag': alert['id'], 'urgent': alert['kind'] in URGENT,
+                              'tag': alert['id'], 'urgent': alert['kind'] in URGENT, 'image': photo,
                               'url': f'/?camera={quote(camera)}#overview' if camera else '/#overview'}, ensure_ascii=False)
         only = ' WHERE presence=1' if alert['kind'] == 'presence' else ''
         sent = 0
