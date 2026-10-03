@@ -1,25 +1,7 @@
-// Live two-way conversation with the camera computer (WebRTC through MediaMTX; the server only relays the offers).
+// Live two-way conversation with the camera computer (see rtc.js).
 (() => {
   let call = null;
   const button = $('#intercom-call'), mute = $('#intercom-mute'), note = $('#intercom-note'), speaker = $('#intercom-audio');
-
-  function gathered(pc) {
-    // Non-trickle WHIP/WHEP: send the offer once candidates are known (or after 2 s with what we have).
-    if (pc.iceGatheringState === 'complete') return Promise.resolve();
-    return new Promise(resolve => {
-      const done = () => pc.iceGatheringState === 'complete' && resolve();
-      pc.addEventListener('icegatheringstatechange', done);
-      setTimeout(resolve, 2000);
-    });
-  }
-
-  async function negotiate(kind, pc, cameraId) {
-    await pc.setLocalDescription(await pc.createOffer());
-    await gathered(pc);
-    const answer = await api(`/api/intercom/${kind}`, {method: 'POST', body: JSON.stringify({camera_id: cameraId, sdp: pc.localDescription.sdp})});
-    await pc.setRemoteDescription({type: 'answer', sdp: answer.sdp});
-    return answer.session;
-  }
 
   function playOrAsk() {
     // Opened from a notification, the browser may block sound until the first tap on the page.
@@ -56,7 +38,7 @@
       watch(listen);
       listen.addTransceiver('audio', {direction: 'recvonly'});
       listen.addEventListener('track', event => { speaker.srcObject = event.streams[0] || new MediaStream([event.track]); playOrAsk(); });
-      call.sessions.push(['listen', await negotiate('listen', listen, cameraId)]);
+      call.sessions.push(['listen', await rtcNegotiate('listen', listen, cameraId)]);
 
       // Browsers only release the microphone on HTTPS or localhost.
       if (window.isSecureContext && navigator.mediaDevices?.getUserMedia) {
@@ -66,7 +48,7 @@
         call.peers.push(talk);
         watch(talk);
         talk.addTransceiver(call.microphone, {direction: 'sendonly'});
-        call.sessions.push(['talk', await negotiate('talk', talk, cameraId)]);
+        call.sessions.push(['talk', await rtcNegotiate('talk', talk, cameraId)]);
       }
       render();
     } catch (error) {
@@ -84,8 +66,7 @@
     speaker.srcObject = null;
     render();
     if (message) toast(message, true);
-    await Promise.all(ended.sessions.filter(([, session]) => session).map(([kind, session]) =>
-      api('/api/intercom/hangup', {method: 'POST', keepalive: true, body: JSON.stringify({camera_id: ended.cameraId, kind, session})}).catch(() => {})));
+    await Promise.all(ended.sessions.map(([kind, session]) => rtcHangup(ended.cameraId, kind, session)));
   }
 
   button.addEventListener('click', event => action(event.currentTarget, () => call ? hangup() : start()));

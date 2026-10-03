@@ -89,7 +89,7 @@ PUBLIC = {
 # Family accounts are read-only; these (their own password and devices) are the only changes they may make.
 FAMILY_WRITES = {'/api/auth/logout', '/api/auth/password', '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/test',
                  '/api/push/presence-status', '/api/push/presence',
-                 '/api/intercom/listen', '/api/intercom/talk', '/api/intercom/hangup'}
+                 '/api/intercom/listen', '/api/intercom/talk', '/api/intercom/video', '/api/intercom/hangup'}
 
 
 @app.middleware('http')

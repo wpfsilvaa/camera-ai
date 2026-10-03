@@ -125,7 +125,7 @@ function renderStatus() {
   const [label, color] = states[camera.state] || states.offline;
   $('#camera-state').className = `pill ${color}`; $('#camera-state').textContent = label;
   $('#camera-health-dot').className = `dot${online ? '' : camera.state === 'offline' ? ' error' : ' gray'}`;
-  $('#camera-placeholder').classList.toggle('hidden', online && streamActive);
+  $('#camera-placeholder').classList.toggle('hidden', online && (streamActive || Boolean(window.liveVideo?.playing())));
   $('#live-image').classList.toggle('hidden', !online || !streamActive);
   $('#camera-placeholder-title').textContent = {paused:'Pronto para acompanhar',connecting:'Conectando à câmera…',offline:'Câmera indisponível',online:'Recebendo imagem…'}[camera.state] || 'Aguardando câmera';
   $('#camera-placeholder-description').textContent = camera.error || (camera.state === 'paused' ? 'Inicie a câmera para ver a imagem ao vivo.' : 'A imagem aparecerá aqui assim que estiver disponível.');
@@ -379,6 +379,14 @@ async function refresh() {
 }
 function updateStream() {
   const wanted = activePage === 'overview' && !document.hidden && status?.camera.state === 'online';
+  // Light mode (live-video.js): WebRTC from the camera computer instead of the server's MJPEG.
+  const direct = window.liveVideo?.direct();
+  window.liveVideo?.show(wanted && direct);
+  if (direct) {
+    if (streamActive) { $('#live-image').removeAttribute('src'); $('#live-image').classList.add('hidden'); streamActive = false; }
+    if (!wanted || !window.liveVideo.playing()) $('#camera-placeholder').classList.remove('hidden');
+    return;
+  }
   if (wanted && !streamActive) {
     $('#live-image').src = cameraPath('/api/stream.mjpeg?t=' + Date.now());
     streamActive = true;

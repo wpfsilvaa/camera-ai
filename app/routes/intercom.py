@@ -7,9 +7,10 @@ from pydantic import BaseModel, Field
 
 from ..services import call_service
 
-# MediaMTX on the camera computer: "mic" is its echo-cancelled microphone, "talk" plays on its speaker.
+# MediaMTX on the camera computer: "mic" is its echo-cancelled microphone, "talk" plays on its speaker,
+# "cam-lite" is a ≈450 kbps copy of the camera for phones (the RTSP "cam" is ≈10 Mbps).
 WEBRTC_PORT = 8889
-PATHS = {'listen': ('mic', 'whep'), 'talk': ('talk', 'whip')}
+PATHS = {'listen': ('mic', 'whep'), 'talk': ('talk', 'whip'), 'video': ('cam-lite', 'whep')}
 SESSION = re.compile(r'^[0-9a-f-]{36}$')
 
 
@@ -20,7 +21,7 @@ class Offer(BaseModel):
 
 class Hangup(BaseModel):
     camera_id: str = Field('main', max_length=40)
-    kind: str = Field(pattern='^(listen|talk)$')
+    kind: str = Field(pattern='^(listen|talk|video)$')
     session: str = Field(pattern=SESSION.pattern)
 
 
@@ -56,7 +57,8 @@ def build(config):
         if response.status_code == 400 and kind == 'talk':
             raise HTTPException(409, 'Outra pessoa já está falando com este ambiente. Tente de novo em instantes.')
         if response.status_code == 404:
-            raise HTTPException(502, 'O microfone deste ambiente não está configurado no MediaMTX.')
+            what = 'O vídeo leve' if kind == 'video' else 'O microfone'
+            raise HTTPException(502, f'{what} deste ambiente não está configurado no MediaMTX.')
         if response.status_code != 201:
             raise HTTPException(502, f'O computador da câmera recusou a chamada (código {response.status_code}).')
         session = response.headers.get('location', '').rstrip('/').rsplit('/', 1)[-1]
@@ -69,6 +71,10 @@ def build(config):
     @router.post('/api/intercom/talk', status_code=201)
     async def talk(body: Offer):
         return await negotiate('talk', body)
+
+    @router.post('/api/intercom/video', status_code=201)
+    async def video(body: Offer):
+        return await negotiate('video', body)
 
     @router.post('/api/intercom/hangup')
     async def hangup(body: Hangup):

@@ -341,7 +341,13 @@ Na visão geral, **Conversar ao vivo** abre uma chamada com o computador da câm
 - O painel só repassa a negociação (WebRTC/WHIP/WHEP) e exige login; o áudio vai direto entre o navegador e o computador da câmera. Fora de casa, instale também o Tailscale no computador da câmera.
 - Só uma pessoa fala por vez; uma segunda chamada recebe o aviso de ambiente ocupado.
 
-O computador da câmera precisa do MediaMTX com os caminhos `mic` e `talk` e do cancelamento de eco do PipeWire. Os arquivos de referência ficam em `notebook/`; no computador da câmera (Linux com PipeWire):
+### Vídeo leve no celular
+
+Abaixo da imagem ao vivo, **Com detecções** mostra o vídeo processado pelo painel (caixas e nomes) e **Leve** recebe o vídeo direto do computador da câmera por WebRTC: 640 px, 15 quadros/s e cerca de 450 kbps, contra ≈10 Mbps do stream original. No celular o padrão é **Leve**; a escolha fica salva em cada aparelho. O vídeo leve não mostra as detecções e só é codificado enquanto alguém assiste (cerca de meio núcleo no notebook); a primeira imagem leva uns 4 s. Se falhar, o painel volta sozinho para o vídeo com detecções.
+
+Teste com o notebook real: `node tests/live-video-ui-smoke.mjs` (servidor temporário, sem mexer no histórico).
+
+O computador da câmera precisa do MediaMTX com os caminhos `mic`, `talk` e `cam-lite` e do cancelamento de eco do PipeWire. Os arquivos de referência ficam em `notebook/`; no computador da câmera (Linux com PipeWire):
 
 ```bash
 install -Dm644 notebook/60-echo-cancel.conf ~/.config/pipewire/pipewire.conf.d/60-echo-cancel.conf

@@ -54,6 +54,22 @@ class IntercomTests(unittest.TestCase):
         self.assertEqual(seen[0].headers['content-type'], 'application/sdp')
         self.assertEqual(seen[0].content, b'v=0 offer')
 
+    def test_light_video_reads_the_lite_camera_path(self):
+        seen = []
+
+        def handler(request):
+            seen.append(request)
+            if request.method == 'DELETE':
+                return httpx.Response(200)
+            return httpx.Response(201, text='v=0 video', headers={'Location': f'/cam-lite/whep/{SESSION}'})
+
+        client, patcher = client_for(handler)
+        self.addCleanup(patcher.stop)
+        self.assertEqual(client.post('/api/intercom/video', json={'sdp': 'v=0'}).json(), {'sdp': 'v=0 video', 'session': SESSION})
+        self.assertEqual(str(seen[0].url), 'http://192.168.1.103:8889/cam-lite/whep')
+        client.post('/api/intercom/hangup', json={'kind': 'video', 'session': SESSION})
+        self.assertEqual(str(seen[1].url), f'http://192.168.1.103:8889/cam-lite/whep/{SESSION}')
+
     def test_busy_speaker_and_offline_computer_have_clear_errors(self):
         client, patcher = client_for(lambda request: httpx.Response(400, text='path busy'))
         self.addCleanup(patcher.stop)

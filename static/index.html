@@ -48,13 +48,13 @@
           <article class="panel live-panel">
             <div class="panel-heading"><div><span class="section-dot"></span><h2 id="camera-title">Cozinha</h2><span class="muted small">Selecionada</span></div><span class="pill neutral" id="camera-state">Pausada</span></div>
             <div class="camera-view">
-              <img id="live-image" class="hidden" alt="Imagem ao vivo da câmera da cozinha">
+              <img id="live-image" class="hidden" alt="Imagem ao vivo da câmera da cozinha"><video id="live-video" class="hidden" muted autoplay playsinline aria-label="Vídeo leve ao vivo da câmera"></video>
               <div class="camera-placeholder" id="camera-placeholder"><span class="camera-outline">◉</span><strong id="camera-placeholder-title">Pronto para acompanhar</strong><p id="camera-placeholder-description">Inicie a câmera para ver a imagem ao vivo.</p></div>
               <div class="camera-overlays"><span class="camera-tag" id="live-tag">CÂMERA 01</span><span id="camera-clock">--:--:--</span></div>
               <div class="camera-bottom"><span id="people-count">Aguardando câmera</span><span id="recording-badge" class="hidden"><span class="record-dot"></span> GRAVANDO</span></div>
             </div>
             <div class="live-footer"><div><span class="dot gray" id="camera-health-dot"></span><span id="camera-footer">Monitoramento pausado</span></div><button class="button primary compact" id="toggle-monitor">Iniciar câmera <span>▶</span></button></div>
-            <div class="monitor-controls"><button class="button secondary compact" id="toggle-analysis">Pausar análise</button><button class="button secondary compact" id="toggle-recording">Gravar manualmente</button><button class="button secondary compact" id="fullscreen-camera">Tela cheia</button><button class="button secondary compact" id="intercom-call">Conversar ao vivo <span>🎙</span></button><button class="button secondary compact hidden" id="intercom-mute">Silenciar meu microfone</button></div><p class="monitor-note muted hidden" id="intercom-note" role="status"></p><audio id="intercom-audio" autoplay playsinline class="hidden"></audio>
+            <div class="monitor-controls"><button class="button secondary compact" id="toggle-analysis">Pausar análise</button><button class="button secondary compact" id="toggle-recording">Gravar manualmente</button><div class="view-mode" role="group" aria-label="Tipo de vídeo"><button type="button" data-view="boxes" title="Imagem processada pelo servidor, com caixas e nomes">Com detecções</button><button type="button" data-view="direct" title="Direto da câmera, ≈450 kbps: ideal no 4G">Leve</button></div><button class="button secondary compact" id="fullscreen-camera">Tela cheia</button><button class="button secondary compact" id="intercom-call">Conversar ao vivo <span>🎙</span></button><button class="button secondary compact hidden" id="intercom-mute">Silenciar meu microfone</button></div><p class="monitor-note muted hidden" id="intercom-note" role="status"></p><audio id="intercom-audio" autoplay playsinline class="hidden"></audio>
             <p id="analysis-note" class="monitor-note">A análise identifica as pessoas. Você pode pausá-la e continuar assistindo.</p>
             <div id="offline-note" class="monitor-note hidden"><span id="offline-text"></span> <button class="text-button" id="cancel-offline">Cancelar análise do vídeo</button></div>
           </article>
@@ -170,6 +170,8 @@
   <script src="/static/backup.js" defer></script>
   <script src="/static/push.js" defer></script>
   <script src="/static/storage.js" defer></script>
+  <script src="/static/rtc.js" defer></script>
+  <script src="/static/live-video.js" defer></script>
   <script src="/static/intercom.js" defer></script>
   <div id="toast" class="toast hidden" role="status"></div>
 </body>
