@@ -1,0 +1,11 @@
+.git
+.venv
+node_modules
+data
+test-results
+graphify-out
+__pycache__
+**/__pycache__
+*.pt
+*.onnx
+.env

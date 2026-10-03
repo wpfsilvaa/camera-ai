@@ -34,13 +34,17 @@ try{
  assert.equal((await alert({recipient:primary})).status,200,'alert text is idempotent');
  assert.equal((await alert({recipient:sister})).status,200);
  assert.equal((await alert({recipient:primary,alert_id:'../bad'})).status,400);
+ await mkdir(path.join(data,'alerts'));await writeFile(path.join(data,'alerts','fall-main-1759000000.jpg'),'jpeg');
+ assert.equal((await alert({recipient:primary,alert_id:'fall-main-1759000000',image:true})).status,200,'photo alert');
+ assert.equal((await alert({recipient:primary,alert_id:'fall-main-1759000001',image:true})).status,200,'missing photo still sends text');
  const rows=(await readFile(path.join(data,'test-sends.jsonl'),'utf8')).trim().split('\n').map(JSON.parse);
- assert.equal(rows.filter(r=>r.jid==='551199999999@s.whatsapp.net').length,2,'one clip and one alert');
+ assert.equal(rows.filter(r=>r.jid==='551199999999@s.whatsapp.net').length,4,'one clip and three alerts');
  assert.equal(rows.filter(r=>r.jid==='551188888888@s.whatsapp.net').length,3);
+ assert.deepEqual(rows.slice(-2).map(r=>r.kind),['image','text'],'photo when present, text otherwise');
  assert.equal(rows.filter(r=>r.jid==='551177777777@s.whatsapp.net').length,2);
  const receipt=await (await post('/delivery',{clip_id:clip,recipient:primary})).json();
  assert.equal(receipt.receipt,'delivered');
- console.log('Gateway HTTP validado: concorrência, dois destinatários, número canônico, migração antiga, falha isolada, reenvio seletivo, alertas de texto idempotentes e confirmações. Baileys simulado; nenhum envio real.');
+ console.log('Gateway HTTP validado: concorrência, dois destinatários, número canônico, migração antiga, falha isolada, reenvio seletivo, alertas de texto e foto idempotentes e confirmações. Baileys simulado; nenhum envio real.');
 }finally{
  server.kill('SIGTERM');await new Promise(resolve=>{server.once('exit',resolve);setTimeout(()=>{server.kill('SIGKILL');resolve();},3000).unref();});
  await rm(data,{recursive:true,force:true});

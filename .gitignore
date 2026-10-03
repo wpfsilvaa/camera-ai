@@ -13,5 +13,5 @@ data/
 test-results/
 scripts/__pycache__/
 app/__pycache__/
-
+graphify-out/
 

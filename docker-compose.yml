@@ -1,0 +1,20 @@
+# docker compose up -d   ·   logs: docker compose logs -f   ·   GPU: see docker-compose.gpu.yml
+services:
+  casa-presente:
+    build: .
+    image: casa-presente:latest
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      HOST: 0.0.0.0          # Inside the container; publishing below decides who can reach it.
+      CAMERA_DATA_DIR: /app/data
+    ports:
+      # Only this computer (and Tailscale Serve on it). For the home network use "8000:8000".
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/app/data     # History, faces, settings, WhatsApp session, videos: keep outside the image.
+    # USB webcam instead of RTSP: uncomment and use camera address 0.
+    # devices:
+    #   - /dev/video0:/dev/video0

@@ -14,13 +14,18 @@ from pydantic import BaseModel, Field
 
 from .alerts import Alerts
 from .auth import COOKIE, Auth
+from .backup import Backups
 from .cameras import CameraManager
 from .config import CLIPS, DATA, ROOT, WA_URL, CameraSettings, ExtraCamera, Settings, config
 from .db import Database
 from .jobs import Jobs
+from .learning import LearningSuggestions
 from .offline import OfflineAnalysis
+from .proxy import allowed_origins
+from .push import Push
 from .recognition import Recognition
-from .routes import alerts as alert_routes, auth as auth_routes, people as people_routes
+from .storage import Storage
+from .routes import alerts as alert_routes, auth as auth_routes, backup as backup_routes, intercom as intercom_routes, people as people_routes, push as push_routes, storage as storage_routes
 from .services import call_service
 
 db = Database()
@@ -30,7 +35,14 @@ camera = cameras.get()  # Compatibility for the original single-camera API.
 offline = OfflineAnalysis(db)
 auth = Auth(db)
 alerts = Alerts(db, config, cameras)
-jobs = Jobs(db, config, recognition, alerts, auth)
+learning = LearningSuggestions(db, recognition, config)
+backups = Backups(db, config, alerts)
+push = Push(db)
+storage = Storage(db)
+alerts.listeners.append(push.notify)
+jobs = Jobs(db, config, recognition, alerts, auth, learning, backups)
+cameras.fall_handler = alerts.fall
+cameras.presence_handler = push.presence
 
 
 @asynccontextmanager
@@ -48,9 +60,16 @@ async def lifespan(app):
 app = FastAPI(title='Casa Presente', lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
-PUBLIC = {'/login', '/api/health', '/api/auth/me', '/api/auth/login', '/static/login.css', '/static/login.js', '/static/favicon.svg'}
-# Family accounts are read-only; these are the only changes they may make.
-FAMILY_WRITES = {'/api/auth/logout', '/api/auth/password'}
+PUBLIC = {
+    '/login', '/api/auth/me', '/api/auth/login', '/api/health',
+    '/static/login.css', '/static/login.js', '/static/favicon.svg', '/static/offline.html',
+    # Installable app files carry no personal data and are fetched without cookies.
+    '/sw.js', '/manifest.webmanifest', '/static/icon-192.png', '/static/icon-512.png', '/static/icon-maskable.png',
+}
+# Family accounts are read-only; these (their own password and devices) are the only changes they may make.
+FAMILY_WRITES = {'/api/auth/logout', '/api/auth/password', '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/test',
+                 '/api/push/presence-status', '/api/push/presence',
+                 '/api/intercom/listen', '/api/intercom/talk', '/api/intercom/hangup'}
 
 
 @app.middleware('http')
@@ -64,14 +83,14 @@ async def protect(request: Request, call_next):
             return JSONResponse({'detail': 'Entre novamente para continuar.'}, status_code=401)
         user = request.state.user
         if user and user['role'] != 'admin':
-            if request.method not in ('GET', 'HEAD', 'OPTIONS') and path not in FAMILY_WRITES or path.startswith('/api/users'):
+            if request.method not in ('GET', 'HEAD', 'OPTIONS') and path not in FAMILY_WRITES or path.startswith(('/api/users', '/api/backup', '/api/learning', '/api/storage')):
                 return JSONResponse({'detail': 'Seu acesso é somente para visualização. Peça a um administrador.'}, status_code=403)
     # Prevent other sites from changing local settings through the browser.
     if request.method not in ('GET', 'HEAD', 'OPTIONS'):
         if request.headers.get('x-casa-request') != '1':
             return JSONResponse({'detail': 'Requisição não autorizada.'}, status_code=403)
         origin = request.headers.get('origin')
-        if origin and origin != f'{request.url.scheme}://{request.headers.get("host")}':
+        if origin and origin not in allowed_origins(request):
             return JSONResponse({'detail': 'Origem inválida.'}, status_code=403)
     response = await call_next(request)
     response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -328,6 +347,10 @@ async def stream(request: Request, camera_id: str = 'main'):
 
 
 app.include_router(auth_routes.build(auth))
-app.include_router(people_routes.build(recognition))
+app.include_router(people_routes.build(recognition, learning))
 app.include_router(alert_routes.build(alerts, config))
+app.include_router(backup_routes.build(backups))
+app.include_router(intercom_routes.build(config))
+app.include_router(push_routes.build(push))
+app.include_router(storage_routes.build(storage))
 app.mount('/static', StaticFiles(directory=ROOT / 'static'), name='static')

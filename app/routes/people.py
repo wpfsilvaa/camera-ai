@@ -38,9 +38,18 @@ def decode_photo(content):
     return image
 
 
-def build(recognition):
-    """People profiles, face enrollment and identity confirmation."""
+def build(recognition, learning):
+    """People profiles, face enrollment, identity confirmation and suggested examples."""
     router = APIRouter()
+
+    @router.get('/api/learning')
+    def learning_suggestions():
+        return learning.pending()
+
+    @router.post('/api/learning/{sample_id}/{decision}')
+    def decide_suggestion(sample_id: str, decision: Literal['approve', 'reject']):
+        call_service(learning.decide, sample_id, decision == 'approve')
+        return {'ok': True}
 
     @router.get('/api/people')
     def people():

@@ -1,0 +1,13 @@
+[Unit]
+Description=MediaMTX da cozinha (câmera, microfone e alto-falante)
+After=pipewire.service pipewire-pulse.service wireplumber.service
+Wants=pipewire-pulse.service
+
+[Service]
+WorkingDirectory=%h/.config/mediamtx
+ExecStart=/usr/local/bin/mediamtx %h/.config/mediamtx/mediamtx.yml
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

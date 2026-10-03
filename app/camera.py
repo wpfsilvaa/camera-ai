@@ -6,14 +6,15 @@ import time
 from collections import deque
 from pathlib import Path
 
-from .config import DATA, MODEL, CAMERA_FIELDS
+from .config import DATA, MODEL, POSE_MODEL, CAMERA_FIELDS
 os.environ.setdefault('YOLO_CONFIG_DIR', str(DATA / 'ultralytics'))
 os.environ.setdefault('OPENCV_FFMPEG_CAPTURE_OPTIONS', 'rtsp_transport;tcp')
 
 import cv2
 import numpy as np
 
-from .overlay import annotate
+from .falls import FallDetector
+from .overlay import annotate, draw_zones
 from .presence import Presence
 from .tracking import PersonTracker
 from .recorder import Recorder
@@ -87,6 +88,10 @@ class CameraWorker:
         self.lock=threading.Lock()
         self.thread=None
         self.manual_requested=False
+        self.falls=FallDetector()
+        # Called with (camera_id, camera_name, jpeg bytes, seconds lying) when a fall is suspected.
+        self.on_fall=None
+        self.on_presence=None  # Called with (camera_id, camera_name, time) when a presence record starts.
         self.jpeg=None
         self.sequence=0
         self.status={'state':'paused','people':0,'last_frame':None,'event_id':None,'error':None,
@@ -112,6 +117,25 @@ class CameraWorker:
             self.manual_requested=enabled
             self.status['manual_requested']=enabled
         return {'requested':enabled}
+
+    def check_falls(self, result, tracker, boxes, ids, frame, now, settings):
+        """Update lying durations from pose keypoints and report new suspected falls."""
+        if not settings.fall_detection_enabled or result.keypoints is None:
+            self.falls.reset()
+            return {}
+        points=result.keypoints.data.cpu().numpy()
+        keypoints=[points[i] if i<len(points) else None for i in tracker.last_indices]
+        height,width=frame.shape[:2]
+        lying,falls=self.falls.update(now,boxes,ids,keypoints,(width,height),settings.fall_zones,settings.fall_seconds)
+        if falls and self.on_fall:
+            snapshot=annotate(frame,boxes,ids,{},lying)
+            encoded,jpeg=cv2.imencode('.jpg',resize_width(snapshot,1280),[cv2.IMWRITE_JPEG_QUALITY,85])
+            if encoded:
+                try:
+                    self.on_fall(self.camera_id,settings.camera_name,jpeg.tobytes(),max(lying[k] for k in falls))
+                except Exception:
+                    log.exception('Falha ao registrar possível queda')
+        return lying
 
     def start(self):
         self.thread=threading.Thread(target=self.run,daemon=True,name=f'camera-{self.camera_id}')
@@ -175,7 +199,7 @@ class CameraWorker:
                     source_fps=30
                 self.update(source_width=int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),source_height=int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),source_fps=round(source_fps,1))
                 next_frame=next_detection=0
-                detected_boxes=[];detected_ids=[];last_inference_ms=None
+                detected_boxes=[];detected_ids=[];last_inference_ms=None;detected_lying={}
                 detections=deque(maxlen=90)
                 file_start=time.time()
                 file_frames=0
@@ -217,8 +241,9 @@ class CameraWorker:
                         if not current.analysis_enabled:
                             release_model()
                         tracker=None
-                        detected_boxes=[];detected_ids=[];last_inference_ms=None
+                        detected_boxes=[];detected_ids=[];last_inference_ms=None;detected_lying={}
                         detections.clear();next_detection=0
+                        self.falls.reset()
                         analysis_active=current.analysis_enabled
                         self.update(analysis_active=analysis_active)
                     with self.lock:
@@ -237,6 +262,7 @@ class CameraWorker:
                         manual_event=None
                         presence=Presence(settings.min_presence_seconds,settings.absence_seconds)
                     boxes=[];ids=[];labels={};count=0;inference_ms=None;action=None
+                    lying={}
                     if analysis_active and now>=next_detection:
                         setup_started=time.time()
                         import torch
@@ -248,14 +274,16 @@ class CameraWorker:
                         torch.set_num_threads(2)
                         if cuda:
                             torch.backends.cudnn.benchmark=True
-                        options=(device,half,settings.detection_size)
+                        weights=POSE_MODEL if current.fall_detection_enabled else MODEL
+                        options=(device,half,settings.detection_size,weights)
                         if model is None or model_options!=options:
                             load_started=setup_started
-                            if not Path(MODEL).is_file():
-                                raise RuntimeError('Modelo YOLO não encontrado. Verifique YOLO_MODEL.')
+                            if not Path(weights).is_file():
+                                raise RuntimeError('Modelo YOLO não encontrado. Verifique YOLO_MODEL/POSE_MODEL ou execute scripts/download_models.py.')
                             with MODEL_LOAD_LOCK:
                                 from ultralytics import YOLO
-                                model=YOLO(MODEL)
+                                model=YOLO(weights)
+                                self.falls.reset()
                                 if model.names.get(0)!='person':
                                     raise RuntimeError('O modelo precisa detectar a classe person (0).')
                                 # Warm up at the actual inference shape before opening the video.
@@ -282,6 +310,7 @@ class CameraWorker:
                         result=model.predict(original,classes=[0],conf=tracker.low_confidence,imgsz=settings.detection_size,
                             device=device,quantize=16 if half else 32,max_det=20,verbose=False)[0]
                         boxes,ids=tracker.update(result.boxes,original,now)
+                        detected_lying=self.check_falls(result,tracker,boxes,ids,original,now,current)
                         count=len(boxes)
                         inference_ms=round((time.perf_counter()-begin)*1000,1)
                         result=None
@@ -294,6 +323,11 @@ class CameraWorker:
                             if action=='start':
                                 event_id=self.db.start_event(now,count,camera_id=self.camera_id,camera_name=settings.camera_name,
                                     camera_settings=settings.model_dump(include=CAMERA_FIELDS-{'camera_source'}))
+                                if self.on_presence:
+                                    try:
+                                        self.on_presence(self.camera_id,settings.camera_name,now)
+                                    except Exception:
+                                        log.exception('Falha ao avisar sobre a presença')
                             if event_id is not None and count and now-last_db_touch>=.5:
                                 self.db.touch_event(event_id,now,count)
                                 last_db_touch=now
@@ -302,12 +336,13 @@ class CameraWorker:
                             self.recognition.submit(event_id,original,boxes,ids,now,current)
                         labels=self.recognition.labels(ids,boxes,now,current.face_hold_seconds) if current.recognition_enabled else {}
                     if analysis_active:
+                        lying=detected_lying
                         boxes,ids=detected_boxes,detected_ids
                         count=len(boxes)
                         inference_ms=last_inference_ms
                         labels=self.recognition.labels(ids,boxes,now,current.face_hold_seconds) if current.recognition_enabled else {}
                     latest_time=now
-                    annotated=annotate(original,boxes,ids,labels) if analysis_active else original
+                    annotated=annotate(original,boxes,ids,labels,lying) if analysis_active else original
                     if event_id is not None:
                         recorded=resize_width(annotated,settings.recording_width)
                         if recorder.writer is None:
@@ -332,6 +367,8 @@ class CameraWorker:
                             self.db.touch_event(manual_event,now,count)
                             last_db_touch=now
                     preview=resize_width(annotated,current.preview_width)
+                    if analysis_active and current.fall_detection_enabled:
+                        preview=draw_zones(preview,current.fall_zones)
                     encoded,jpeg=cv2.imencode('.jpg',preview,[cv2.IMWRITE_JPEG_QUALITY,78])
                     if encoded:
                         with self.lock:
@@ -339,7 +376,7 @@ class CameraWorker:
                             self.sequence+=1
                     rates.append(time.perf_counter())
                     fps=(len(rates)-1)/(rates[-1]-rates[0]) if len(rates)>1 else 0
-                    tracks=[{'id':key,'name':labels.get(str(key),{}).get('name'),
+                    tracks=[{'id':key,'name':labels.get(str(key),{}).get('name'),'lying_seconds':round(lying[key]) if key in lying else None,
                              'held':labels.get(str(key),{}).get('held',False),
                              'source':labels.get(str(key),{}).get('source')} for key in ids]
                     self.update(state='online',error=None,people=count,last_frame=now,event_id=event_id,

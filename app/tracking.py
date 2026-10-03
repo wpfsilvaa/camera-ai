@@ -43,6 +43,8 @@ class PersonTracker:
         active = self.tracker.tracked_stracks + self.tracker.lost_stracks
         for track in active:
             self.seen.setdefault(track.track_id, timestamp)
+        # Column 7 is the detection index, which links a track to its pose keypoints.
+        self.last_indices = [int(row[7]) for row in tracks]
         ids = [int(row[4]) for row in tracks]
         for key in ids:
             self.seen[key] = timestamp

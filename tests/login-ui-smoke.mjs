@@ -1,6 +1,6 @@
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
@@ -52,14 +52,64 @@ try {
   assert.equal(saved.alerts_enabled,true); assert.equal(saved.inactivity_hours,3); assert.equal(saved.daily_summary_hour,20);
   await page.click('#test-alert');
   await page.locator('#toast',{hasText:'Cadastre ao menos um número'}).waitFor();
+  // Fall zones: draw one over the (stopped) camera area and save it.
+  await page.check('[name=fall_detection_enabled]');
+  await page.locator('#zone-canvas').scrollIntoViewIfNeeded();
+  const zone=await page.locator('#zone-canvas').boundingBox();
+  await page.mouse.move(zone.x+zone.width*.5,zone.y+zone.height*.5);await page.mouse.down();
+  await page.mouse.move(zone.x+zone.width*.9,zone.y+zone.height*.9,{steps:4});await page.mouse.up();
+  await page.locator('#zone-count',{hasText:'1 área'}).waitFor();
+  await page.click('#save-settings');
+  await page.locator('#toast',{hasText:'Configurações salvas'}).waitFor();
+  const withZone=await page.evaluate(()=>fetch('/api/settings').then(r=>r.json()));
+  assert.equal(withZone.fall_detection_enabled,true); assert.equal(withZone.fall_zones.length,1);
+  assert.ok(Math.abs(withZone.fall_zones[0][0]-.5)<.02 && Math.abs(withZone.fall_zones[0][3]-.9)<.02, JSON.stringify(withZone.fall_zones));
+  if (shots) await page.locator('.zone-editor').screenshot({path:`${shots}/fall-zones.png`});
   if (shots) await page.locator('#page-settings .settings-panel').last().screenshot({path:`${shots}/alerts-settings.png`});
   await page.fill('[name=recipient]','5511999999999'); await page.click('#save-settings');
   await page.locator('#toast',{hasText:'Configurações salvas'}).waitFor();
   await page.click('#test-alert');
   await page.goto(base+'/#overview');
   await page.locator('.alert-row',{hasText:'Teste de alerta'}).waitFor();
+  await page.locator('#routine-text',{hasText:'Costuma aparecer por volta das 07:'}).waitFor();
+  assert.ok(await page.locator('#routine-chart .routine-bar').count()>=4);
+  if (shots) await page.locator('.routine-panel').screenshot({path:`${shots}/routine.png`});
   if (shots) await page.locator('.alerts-panel').screenshot({path:`${shots}/alerts-overview.png`});
+  // Backup: an existing folder, saved, then "back up now".
+  await mkdir(path.join(data,'copias'));
+  await page.goto(base+'/#settings');
+  await page.fill('[name=backup_dir]',path.join(data,'copias'));
+  await page.click('#save-settings');
+  await page.locator('#toast',{hasText:'Configurações salvas'}).waitFor();
+  await page.click('#backup-now');
+  await page.locator('#toast',{hasText:'Backup criado'}).waitFor();
+  await page.locator('#backup-status',{hasText:'1 cópia(s)'}).waitFor();
+  if (shots) await page.locator('#backup-now').locator('xpath=..').screenshot({path:`${shots}/backup.png`});
+  // Free space: preview for old records, then delete their history (dialogs are accepted).
+  await page.selectOption('#clean-days','3');
+  await page.locator('#clean-preview',{hasText:'registro(s) sem rosto ensinado'}).waitFor();
+  const before=await page.evaluate(()=>fetch('/api/storage?older_than_days=3').then(r=>r.json()));
+  assert.ok(before.preview.events>=10, JSON.stringify(before.preview));
+  if (shots) await page.locator('#storage-usage').locator('xpath=..').screenshot({path:`${shots}/storage.png`});
+  await page.click('#clean-history');
+  await page.locator('#toast',{hasText:'Espaço liberado'}).waitFor();
+  const after=await page.evaluate(()=>fetch('/api/storage?older_than_days=3').then(r=>r.json()));
+  assert.equal(after.preview.events,0); assert.equal(after.events,before.events-before.preview.events);
+  // A suggested face waits for approval on the People page.
+  await page.goto(base+'/#people');
+  await page.locator('.learning-card',{hasText:'Parece ser Meu pai'}).waitFor();
+  if (shots) await page.locator('#learning-panel').screenshot({path:`${shots}/learning.png`});
+  await page.click('[data-decision=approve]');
+  await page.locator('#toast',{hasText:'Exemplo aprovado'}).waitFor();
+  await page.locator('#learning-panel').waitFor({state:'hidden'});
+  // Installable app: public manifest and icons, service worker in control, device status shown.
+  const manifest=await (await fetch(base+'/manifest.webmanifest')).json();
+  assert.equal(manifest.display,'standalone'); assert.equal((await fetch(base+'/static/icon-512.png')).status,200);
+  await page.goto(base+'/');
+  await page.waitForFunction(()=>navigator.serviceWorker.controller||navigator.serviceWorker.getRegistration().then(r=>r&&r.active));
   await page.click('#account-button');
+  await page.locator('#push-status',{hasText:/Notificações|notificações/}).waitFor();
+  assert.equal(await page.locator('#push-enable').isVisible(),true);
   if (shots) await page.screenshot({path:`${shots}/account.png`});
   await page.click('#logout-button');
   await page.waitForURL(base+'/login');
@@ -80,7 +130,7 @@ try {
   await phone.goto(base+'/login');
   assert.equal(await phone.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   if (shots) await phone.screenshot({path:`${shots}/login-phone.png`,fullPage:true});
-  console.log('PASS: primeiro administrador, login, erro de senha, alertas, usuário família somente leitura, saída e tela móvel.');
+  console.log('PASS: primeiro administrador, login, erro de senha, alertas, áreas de queda, rotina, aprovação de exemplos, backup, limpeza de espaço, app instalável, usuário família somente leitura, saída e tela móvel.');
 } catch (error) {
   console.error(logs); throw error;
 } finally {

@@ -7,6 +7,10 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 
+# Short moments lying (bending down, picking something up) stay unmarked.
+VISIBLE_LYING=5
+
+
 @lru_cache(maxsize=256)
 def label_image(text, size, color):
     candidates = ['/usr/share/fonts/TTF/DejaVuSans.ttf','/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf']
@@ -18,7 +22,8 @@ def label_image(text, size, color):
     return cv2.cvtColor(np.asarray(image),cv2.COLOR_RGB2BGR)
 
 
-def annotate(frame, boxes, ids, labels):
+def annotate(frame, boxes, ids, labels, lying=None):
+    lying=lying or {}
     output=frame.copy()
     height,width=output.shape[:2]
     size=max(15,min(26,round(width/70)))
@@ -32,11 +37,29 @@ def annotate(frame, boxes, ids, labels):
             text+=' · corpo/roupa'
         if name and item.get('held'):
             text+=' · tracking'
-        rgb=(164,112,36) if item.get('source')=='body' else (38,126,84) if name else (113,103,56)
+        seconds=lying.get(key)
+        if seconds is not None and seconds>=VISIBLE_LYING:
+            text+=f' · deitado {round(seconds)} s'
+        rgb=((196,52,44) if seconds is not None and seconds>=VISIBLE_LYING else
+             (164,112,36) if item.get('source')=='body' else (38,126,84) if name else (113,103,56))
         cv2.rectangle(output,(x1,y1),(x2,y2),rgb[::-1],2)
         label=label_image(text,size,rgb)
         lh,lw=label.shape[:2]
         lx=min(x1,max(0,width-lw));ly=max(0,y1-lh)
         crop=label[:min(lh,height-ly),:min(lw,width-lx)]
         output[ly:ly+crop.shape[0],lx:lx+crop.shape[1]]=crop
+    return output
+
+
+def draw_zones(frame, zones):
+    """Shade the areas where lying down is expected (bed, sofa) on the live preview."""
+    if not zones:
+        return frame
+    output=frame.copy()
+    height,width=output.shape[:2]
+    for x1,y1,x2,y2 in zones:
+        cv2.rectangle(output,(round(x1*width),round(y1*height)),(round(x2*width),round(y2*height)),(190,160,90),-1)
+    output=cv2.addWeighted(output,.25,frame,.75,0)
+    for x1,y1,x2,y2 in zones:
+        cv2.rectangle(output,(round(x1*width),round(y1*height)),(round(x2*width),round(y2*height)),(190,160,90),2)
     return output

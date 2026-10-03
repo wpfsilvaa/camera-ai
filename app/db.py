@@ -65,6 +65,15 @@ class Database:
                 CREATE INDEX IF NOT EXISTS sample_person ON person_samples(person_id);
                 CREATE TABLE IF NOT EXISTS recognition_meta (id INTEGER PRIMARY KEY, revision INTEGER NOT NULL);
                 INSERT OR IGNORE INTO recognition_meta VALUES(1,0);
+                CREATE TABLE IF NOT EXISTS push_subscriptions (
+                    endpoint TEXT PRIMARY KEY, user_id TEXT, keys TEXT NOT NULL, agent TEXT NOT NULL DEFAULT '',
+                    created REAL NOT NULL, last_ok REAL, presence INTEGER NOT NULL DEFAULT 1
+                );
+                CREATE TABLE IF NOT EXISTS learning_suggestions (
+                    sample_id TEXT PRIMARY KEY REFERENCES person_samples(id) ON DELETE CASCADE,
+                    person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+                    score REAL NOT NULL, created REAL NOT NULL, state TEXT NOT NULL DEFAULT 'pending'
+                );
                 CREATE TABLE IF NOT EXISTS alerts (
                     id TEXT PRIMARY KEY, kind TEXT NOT NULL, created REAL NOT NULL, message TEXT NOT NULL
                 );
@@ -103,6 +112,10 @@ class Database:
             clip_columns = {r['name'] for r in db.execute('PRAGMA table_info(clips)')}
             if 'analyzed' not in clip_columns:
                 db.execute('ALTER TABLE clips ADD COLUMN analyzed INTEGER NOT NULL DEFAULT 0')
+            if 'presence' not in {r['name'] for r in db.execute('PRAGMA table_info(push_subscriptions)')}:
+                db.execute('ALTER TABLE push_subscriptions ADD COLUMN presence INTEGER NOT NULL DEFAULT 1')
+            if 'image' not in {r['name'] for r in db.execute('PRAGMA table_info(alerts)')}:
+                db.execute('ALTER TABLE alerts ADD COLUMN image INTEGER NOT NULL DEFAULT 0')
             track_columns = {r['name'] for r in db.execute('PRAGMA table_info(person_tracks)')}
             if 'diagnostic' not in track_columns:
                 db.execute("ALTER TABLE person_tracks ADD COLUMN diagnostic TEXT NOT NULL DEFAULT '{}'")

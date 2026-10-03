@@ -11,7 +11,17 @@ class CameraManager:
         self.db, self.config = db, config
         self.lock = threading.RLock()
         self.running = False
-        self.workers = {'main': CameraWorker(db, CameraConfigView(config, 'main'), recognition, 'main')}
+        self.fall_handler = None  # Set by the application; receives suspected falls from every camera.
+        self.presence_handler = None  # Receives each new presence record from every camera.
+        self.workers = {}
+        self.add_worker('main', recognition)
+
+    def add_worker(self, camera_id, recognition):
+        worker = CameraWorker(self.db, CameraConfigView(self.config, camera_id), recognition, camera_id)
+        worker.on_fall = lambda *args: self.fall_handler and self.fall_handler(*args)
+        worker.on_presence = lambda *args: self.presence_handler and self.presence_handler(*args)
+        self.workers[camera_id] = worker
+        return worker
 
     def get(self, camera_id='main'):
         with self.lock:
@@ -23,8 +33,7 @@ class CameraManager:
         with self.lock:
             ids = {'main'} | {c.id for c in self.config.get().cameras}
             for camera_id in ids - self.workers.keys():
-                worker = CameraWorker(self.db, CameraConfigView(self.config, camera_id), Recognition(self.db), camera_id)
-                self.workers[camera_id] = worker
+                worker = self.add_worker(camera_id, Recognition(self.db))
                 if self.running:
                     worker.start()
 

@@ -80,6 +80,7 @@ function deliveryLabel(clip, event) {
 }
 function fillSettings() {
   const form = $('#settings-form');
+  if (activePage === 'settings') { renderZoneEditor(); loadBackup().catch(() => {}); loadStorage().catch(() => {}); }
   for (const [name, value] of Object.entries(settings)) {
     const field = form.elements.namedItem(name);
     if (!field) continue;
@@ -97,7 +98,8 @@ function route() {
   $$('.nav-link').forEach(link => link.classList.toggle('active', link.dataset.page === activePage));
   $('#page-name').textContent = {overview:'Visão geral',history:'Histórico',people:'Pessoas',settings:'Configurações',users:'Usuários'}[activePage];
   if (activePage === 'history') {loadHistory().catch(error => toast(error.message, true));loadHistoryCameras().catch(error=>toast(error.message,true));}
-  if (activePage === 'people') renderProfiles();
+  if (activePage === 'people') { renderProfiles(); loadLearning().catch(error => toast(error.message, true)); }
+  if (activePage === 'settings') renderZoneEditor();
   if (activePage === 'users') loadUsers().catch(error => toast(error.message, true));
   updateStream();
   if(status) renderCameraList();
@@ -108,6 +110,7 @@ window.addEventListener('hashchange', route);
 function renderStatus() {
   const {camera, whatsapp, stats} = status;
   renderAlerts(status.alerts || []);
+  loadRoutine().catch(() => {});
   $('#father-count').textContent = stats.today.father;
   $('#unknown-count').textContent = stats.today.unknown;
   $('#nav-count').textContent = stats.today.unknown;
@@ -468,7 +471,12 @@ for(const [id,operation] of [['pause-all-analysis','pause'],['resume-all-analysi
 }
 async function init() {
   $('#today-date').textContent = new Date().toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric',timeZone:'America/Sao_Paulo'});
-  try { await loadAccount();settings=await api('/api/settings');fillSettings();route();await refresh(); }
+  try {
+    await loadAccount();settings=await api('/api/settings');fillSettings();route();await refresh();
+    // Notifications link to /?camera=<id>#overview: show that camera, then drop the parameter.
+    const camera=new URLSearchParams(location.search).get('camera');
+    if(camera){history.replaceState(null,'','/'+location.hash);if(knownCameras.some(c=>c.id===camera))await switchCamera(camera);}
+  }
   catch(error) {toast(error.message,true);$('#connection-alert').classList.remove('hidden');}
   setInterval(refresh,3000);
   setInterval(()=>{$('#camera-clock').textContent=new Date().toLocaleTimeString('pt-BR',{timeZone:'America/Sao_Paulo'});},1000);

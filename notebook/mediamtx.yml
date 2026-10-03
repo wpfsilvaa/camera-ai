@@ -1,0 +1,42 @@
+# Casa Presente: câmera, microfone e alto-falante da cozinha.
+# Só este notebook e o servidor do painel (192.168.1.1) podem publicar e ouvir o microfone; a rede local só vê a câmera.
+authInternalUsers:
+  - user: any
+    ips: [127.0.0.1, ::1, 192.168.1.1]
+    permissions:
+      - action: publish
+      - action: read
+      - action: playback
+      - action: api
+  - user: any
+    permissions:
+      - action: read
+        path: cam
+
+paths:
+  cam:
+    runOnInit: >
+      ffmpeg -hide_banner -loglevel warning
+      -f v4l2 -input_format mjpeg -video_size 1920x1080 -framerate 24 -i /dev/video0
+      -an -c:v libx264 -preset ultrafast -pix_fmt yuv420p -crf 18 -g 60 -bf 0
+      -f rtsp rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH
+    runOnInitRestart: yes
+
+  # Microfone com eco cancelado; só captura enquanto alguém está ouvindo.
+  mic:
+    runOnDemand: >
+      ffmpeg -hide_banner -loglevel warning
+      -f pulse -fragment_size 1920 -i cozinha-microfone
+      -ac 1 -c:a libopus -b:a 48k -application voip -frame_duration 20
+      -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH
+    runOnDemandRestart: yes
+    runOnDemandCloseAfter: 5s
+
+  # Voz de quem chama, publicada pelo painel; toca no alto-falante com eco cancelado.
+  talk:
+    runOnAvailable: >
+      ffmpeg -hide_banner -loglevel warning
+      -fflags nobuffer -flags low_delay -rtsp_transport tcp
+      -i rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH
+      -vn -ac 1 -f pulse -buffer_duration 60 -device cozinha-falante Chamada
+    runOnAvailableRestart: yes

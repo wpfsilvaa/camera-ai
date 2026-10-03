@@ -5,8 +5,9 @@ from datetime import datetime
 
 import httpx
 
-from .config import WA_URL
+from .config import DATA, WA_URL
 from .db import TZ
+from .routine import DAY_STARTS, FIRST_MARGIN as ROUTINE_MARGIN, Routine, clock_text
 
 log = logging.getLogger(__name__)
 
@@ -14,6 +15,8 @@ CHECK_INTERVAL = 30
 # An alert that could not go out within this time no longer describes the present.
 STALE_SECONDS = 6 * 3600
 RETENTION_DAYS = 90
+IMAGES = DATA / 'alerts'
+IMAGES.mkdir(exist_ok=True)
 
 
 def clock(timestamp):
@@ -25,6 +28,11 @@ def elapsed(seconds):
     return f'{hours} h {minutes:02d} min' if hours else f'{minutes} min'
 
 
+def watching(snapshots):
+    # Without a working, analyzing camera, silence says nothing about the house.
+    return any(c['enabled'] and c['analysis_enabled'] and c['state'] == 'online' for c in snapshots)
+
+
 def in_quiet_hours(hour, start, end):
     if start == end:
         return False
@@ -32,10 +40,12 @@ def in_quiet_hours(hour, start, end):
 
 
 class Alerts:
-    def __init__(self, db, config, cameras):
+    def __init__(self, db, config, cameras, routine=None):
         self.db, self.config, self.cameras = db, config, cameras
+        self.routine = routine or Routine(db)
         self.offline_since = {}  # camera id -> first moment seen without image
         self.last_check = 0
+        self.listeners = []  # Called with each new alert (e.g. push notifications).
 
     # Detection ---------------------------------------------------------------
 
@@ -48,7 +58,9 @@ class Alerts:
             return
         snapshots = self.cameras.snapshots()
         self.check_cameras(settings, snapshots, now)
-        self.check_inactivity(settings, snapshots, now)
+        if watching(snapshots):
+            self.check_routine(settings, now)
+            self.check_inactivity(settings, now)
         self.check_summary(settings, now)
 
     def check_cameras(self, settings, snapshots, now):
@@ -69,16 +81,43 @@ class Alerts:
                                      f'⚠️ A câmera {camera["name"]} está sem imagem desde as {clock(since)}. '
                                      'Confira a energia, o Wi-Fi e o computador da câmera.', now)
 
-    def check_inactivity(self, settings, snapshots, now):
+    def check_routine(self, settings, now):
+        """Morning check: he usually shows up by a certain time and has not yet today."""
+        if not settings.routine_alerts_enabled:
+            return
+        local = datetime.fromtimestamp(now, TZ)
+        midnight = local.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+        expected = self.routine.expected_first(now)
+        if expected is None or now - midnight < expected or self.seen_today(midnight):
+            return
+        usual = clock_text(expected - ROUTINE_MARGIN)
+        self.raise_alert(f'routine-{local.date().isoformat()}', 'routine',
+                         f'🔔 Hoje ainda ninguém apareceu nas câmeras. Normalmente ele aparece até as {usual}. '
+                         'Vale ligar para confirmar que está tudo bem.', now)
+
+    def seen_today(self, midnight):
+        return bool(self.db.rows("SELECT 1 FROM events WHERE kind='presence' AND last_seen>=? LIMIT 1",
+                                 (midnight + DAY_STARTS * 3600,)))
+
+    def inactivity_limit(self, settings, now):
+        """The configured hours, raised to his usual longest daytime gap once the routine is known."""
+        summary = self.routine.summary(now)
+        usual = summary['usual_gap_hours'] if summary['learned'] else None
+        return max(settings.inactivity_hours, min(12, usual + .5)) if usual else settings.inactivity_hours
+
+    def check_inactivity(self, settings, now):
         if not settings.inactivity_hours:
             return
-        # Without a working, analyzing camera, silence says nothing about the house.
-        if not any(c['enabled'] and c['analysis_enabled'] and c['state'] == 'online' for c in snapshots):
+        local = datetime.fromtimestamp(now, TZ)
+        if in_quiet_hours(local.hour, settings.quiet_start_hour, settings.quiet_end_hour):
             return
-        if in_quiet_hours(datetime.fromtimestamp(now, TZ).hour, settings.quiet_start_hour, settings.quiet_end_hour):
+        midnight = local.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+        # Before today's first appearance, the routine check speaks with a better reference.
+        if settings.routine_alerts_enabled and self.routine.summary(now)['learned'] and not self.seen_today(midnight):
             return
         last = self.db.rows("SELECT MAX(last_seen) AS t FROM events WHERE kind='presence'")[0]['t']
-        if last and now - last >= settings.inactivity_hours * 3600:
+        limit = self.inactivity_limit(settings, now)
+        if last and now - last >= limit * 3600:
             self.raise_alert(f'inactive-{int(last)}', 'inactivity',
                              f'🔔 Ninguém apareceu nas câmeras desde as {clock(last)} (há {elapsed(now - last)}). '
                              'Vale ligar para confirmar que está tudo bem.', now)
@@ -99,11 +138,21 @@ class Alerts:
                  f'• A identificar: {today["unknown"]}',
                  f'• Última presença: {last}',
                  f'• Tempo gravado: {elapsed(stats["recorded_seconds_today"])}']
-        problems = self.db.rows("SELECT COUNT(*) AS n FROM alerts WHERE kind IN ('camera_offline','inactivity') AND created>=?",
+        problems = self.db.rows("SELECT COUNT(*) AS n FROM alerts WHERE kind IN ('camera_offline','inactivity','routine','fall') AND created>=?",
                                 (local.replace(hour=0, minute=0, second=0, microsecond=0).timestamp(),))[0]['n']
         if problems:
             lines.append(f'• Alertas enviados hoje: {problems}')
         self.raise_alert(alert_id, 'summary', '\n'.join(lines), now)
+
+    def fall(self, camera_id, camera_name, jpeg, seconds, now=None):
+        """A person has been lying outside the ignored areas: alert right away, with the photo."""
+        now = now or time.time()
+        alert_id = f'fall-{camera_id}-{int(now)}'
+        (IMAGES / f'{alert_id}.jpg').write_bytes(jpeg)
+        return self.raise_alert(alert_id, 'fall',
+                                f'🚨 Possível queda na câmera {camera_name}: uma pessoa está deitada fora da cama/sofá '
+                                f'há {round(seconds)} s ({clock(now)}). Ligue ou peça para alguém verificar agora.',
+                                now, image=True)
 
     def send_test(self, now=None):
         now = now or time.time()
@@ -115,17 +164,23 @@ class Alerts:
     def exists(self, alert_id):
         return bool(self.db.rows('SELECT 1 FROM alerts WHERE id=?', (alert_id,)))
 
-    def raise_alert(self, alert_id, kind, message, now):
+    def raise_alert(self, alert_id, kind, message, now, image=False):
         """Record an alert once per id and queue it for every WhatsApp recipient."""
         recipients = list(self.config.get().delivery_targets())
         with self.db.connect() as db:
-            created = db.execute('INSERT OR IGNORE INTO alerts(id,kind,created,message) VALUES(?,?,?,?)',
-                                 (alert_id, kind, now, message)).rowcount
+            created = db.execute('INSERT OR IGNORE INTO alerts(id,kind,created,message,image) VALUES(?,?,?,?,?)',
+                                 (alert_id, kind, now, message, int(image))).rowcount
             if created:
                 db.executemany('INSERT INTO alert_deliveries(alert_id,recipient) VALUES(?,?)',
                                [(alert_id, phone) for phone in recipients])
         if created:
             log.info('Alerta %s registrado para %d destinatário(s)', alert_id, len(recipients))
+            alert = {'id': alert_id, 'kind': kind, 'created': now, 'message': message, 'image': int(image)}
+            for listener in self.listeners:
+                try:
+                    listener(alert)
+                except Exception:
+                    log.exception('Falha ao avisar %s sobre o alerta', listener)
         return alert_id
 
     def recent(self, limit=10):
@@ -138,6 +193,8 @@ class Alerts:
 
     def cleanup(self, now=None):
         cutoff = (now or time.time()) - RETENTION_DAYS * 86400
+        for row in self.db.rows('SELECT id FROM alerts WHERE created<? AND image=1', (cutoff,)):
+            (IMAGES / f'{row["id"]}.jpg').unlink(missing_ok=True)
         self.db.execute('DELETE FROM alerts WHERE created<?', (cutoff,))
 
     # Delivery ----------------------------------------------------------------
@@ -148,7 +205,7 @@ class Alerts:
 
     def deliver_one(self, client, now=None):
         now = now or time.time()
-        rows = self.db.rows('''SELECT d.*,a.message,a.created FROM alert_deliveries d JOIN alerts a ON a.id=d.alert_id
+        rows = self.db.rows('''SELECT d.*,a.message,a.created,a.image FROM alert_deliveries d JOIN alerts a ON a.id=d.alert_id
             WHERE d.state IN ('pending','retry') AND d.retry_at<=? ORDER BY a.created LIMIT 1''', (now,))
         if not rows:
             return False
@@ -162,7 +219,8 @@ class Alerts:
         self.db.execute('UPDATE alert_deliveries SET state=?,attempts=attempts+1 WHERE alert_id=? AND recipient=?',
                         ('sending', row['alert_id'], row['recipient']))
         try:
-            response = client.post(f'{WA_URL}/text', json={'alert_id': row['alert_id'], 'recipient': row['recipient'], 'text': row['message']})
+            response = client.post(f'{WA_URL}/text', json={'alert_id': row['alert_id'], 'recipient': row['recipient'],
+                                                              'text': row['message'], 'image': bool(row['image'])})
         except httpx.HTTPError:
             response = None
         if response is not None and response.status_code == 200:

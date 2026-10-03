@@ -229,6 +229,12 @@ O gateway Baileys só escuta em `127.0.0.1:3001`, com token interno. QR code, gr
 app/main.py           Aplicação, proteção das rotas, câmeras, histórico e mídia
 app/routes/           Rotas de login/usuários, pessoas e alertas
 app/alerts.py         Alertas de ausência, câmera sem imagem e resumo diário
+app/falls.py          Possível queda: postura pelo YOLO26 pose e áreas ignoradas
+app/routine.py        Rotina aprendida (horário de costume e intervalo normal)
+app/learning.py       Sugestões de exemplos de rosto para aprovar
+app/backup.py         Backup diário e rotação das cópias
+app/push.py           Notificações Web Push do app instalável
+app/proxy.py          Regras para acesso via Tailscale Serve
 app/jobs.py           Conversão de vídeos, limpeza e filas do WhatsApp
 app/                  Detecção, reconhecimento, gravação e banco de dados
 static/               Dashboard sem dependências externas de frontend
@@ -243,7 +249,7 @@ data/whatsapp-auth/   Credenciais da sessão do WhatsApp
 
 `data/`, `.env`, gravações e modelos estão no `.gitignore`. Não compartilhe a pasta de sessão do WhatsApp. O serviço deve permanecer aberto, o computador ligado e a câmera transmitindo.
 
-**O sistema acompanha presença. Não detecta emergências, quedas ou problemas de saúde, nem confirma que seu pai está bem.**
+**O sistema acompanha presença e pode sinalizar uma possível queda, mas não substitui um sistema de emergência: pode não perceber uma queda fora da câmera ou avisar por engano, e não confirma que seu pai está bem.**
 
 ## Alertas no WhatsApp
 
@@ -256,7 +262,130 @@ Em **Configurações → 05 · Alertas no WhatsApp**, ative **Enviar alertas**. 
 
 Alertas que não puderem ser enviados em até 6 horas expiram, para não chegar uma informação desatualizada. O gateway não repete a mesma mensagem para o mesmo número, mesmo após reinícios. Um alerta ajuda a perceber uma rotina diferente, mas não é um sistema de emergência.
 
+### Rotina aprendida
+
+Com **Usar a rotina aprendida** (padrão), após 7 dias com registros o sistema conhece:
+
+- **O horário de costume:** a primeira aparição do dia (depois das 04:00), separada entre dias úteis e fim de semana quando há dias suficientes. Se hoje ninguém apareceu até o horário habitual mais 30 minutos, chega: “Hoje ainda ninguém apareceu nas câmeras. Normalmente ele aparece até as 07:40.”
+- **O intervalo normal:** o maior tempo sem aparecer durante o dia (07:00–22:00). O aviso de ausência nunca dispara antes desse intervalo habitual (+30 min, até 12 h), o que evita alarme em dias comuns.
+
+A visão geral mostra a rotina e um gráfico da média de registros por hora nos últimos 28 dias. São estatísticas simples (mediana e percentil 90), recalculadas a cada 10 minutos, sem enviar dados para fora.
+
+## Possível queda
+
+Em **Configurações → 06 · Possível queda**, ative **Detectar pessoa deitada fora da cama/sofá**. A detecção passa a usar o modelo **YOLO26 pose** (`yolo26n-pose.pt`), que detecta as mesmas pessoas e também os pontos do corpo.
+
+- O tronco (quadril → ombros) na horizontal indica pessoa deitada. Sem pontos confiáveis, uma silhueta bem mais larga que alta também conta.
+- Deitado por mais que o tempo configurado (padrão 45 s), fora das áreas ignoradas, gera alerta **imediato** com foto no WhatsApp e notificação urgente no app. Um aviso por episódio; levantar-se encerra o episódio.
+- Brechas de até 3 s na detecção não zeram a contagem.
+- **Áreas ignoradas:** desenhe sobre a imagem da câmera os lugares onde deitar é normal (cama, sofá, poltrona). Vale a posição do quadril.
+
+### Calibrar na sua câmera
+
+1. Ative a opção e salve. A caixa da pessoa fica **vermelha com “deitado N s”** a partir de 5 s; as áreas ignoradas aparecem sombreadas na visão ao vivo.
+2. Peça para alguém deitar no sofá/cama: a caixa não deve ficar vermelha. Se ficar, aumente a área.
+3. Peça para alguém deitar no chão, em um ponto visível: a caixa deve ficar vermelha e o alerta chegar após o tempo configurado.
+4. Com uma gravação, teste sem enviar nada:
+
+```bash
+.venv/bin/python scripts/fall_replay.py data/clips/<id>.mp4 --seconds 45 --zone 0.55,0.40,1,1
+```
+
+A queda precisa estar visível na câmera. Móveis na frente, pouca luz ou uma pessoa muito pequena na imagem reduzem a detecção. `tests/fall_pipeline.py` valida o modelo real com um vídeo sintético (pessoa em pé, depois deitada).
+
+## Aprendizado com aprovação
+
+A cada 5 minutos, o sistema procura em registros encerrados rostos reconhecidos com **alta semelhança** (padrão 0,65, acima do limite de reconhecimento) que também:
+
+- confirmem a mesma pessoa com margem sobre os outros perfis;
+- sejam pelo menos tão nítidos quanto a mediana dos exemplos atuais;
+- tragam um ângulo novo (quase idênticos a um exemplo existente são ignorados).
+
+O melhor rosto de cada pessoa rastreada aparece em **Pessoas → Sugestões para aprender**. **Aprovar** faz o mesmo que confirmar no Histórico: o rosto vira exemplo e o registro fica identificado. **Não é** descarta a sugestão para sempre. Nada é aprendido sem aprovação. Ajuste ou desative em **Configurações → 04 · Pessoas**.
+
+## Backup automático
+
+Em **Configurações → 07 · Backup automático**, informe uma pasta de outro disco (HD externo) ou sincronizada com a nuvem (Google Drive, Dropbox, Syncthing) e ative. Todo dia, no horário escolhido (padrão 03:00), é criado um `casa-presente-AAAAMMDD-HHMMSS.tar.gz` com:
+
+- histórico (cópia consistente do SQLite, mesmo com as câmeras gravando);
+- configurações, fotos e exemplos de rostos, fotos de alertas.
+
+Vídeos ficam de fora (expiram e ocupariam muito espaço). A sessão do WhatsApp também, por segurança: após restaurar, conecte de novo pelo QR code. São mantidas as últimas 14 cópias. Se a pasta não estiver disponível (HD desconectado), o painel mostra a falha e chega um alerta.
+
+Restaurar (no mesmo ou em outro computador):
+
+```bash
+systemctl --user stop camera-ai.service
+.venv/bin/python scripts/restore_backup.py /caminho/casa-presente-20260930-030000.tar.gz
+systemctl --user start camera-ai.service
+```
+
+O script confere a integridade do banco antes de trocar qualquer coisa e guarda os arquivos atuais em `data/before-restore-<data>/`.
+
+## Acesso de fora de casa (Tailscale)
+
+O Tailscale cria uma rede privada entre o computador da câmera e os celulares da família, com HTTPS e sem abrir portas no roteador.
+
+```bash
+./scripts/setup-tailscale.sh
+systemctl --user restart camera-ai.service
+```
+
+O script instala o `tailscale serve` com HTTPS, grava `PUBLIC_URL=https://<nome>.ts.net` no `.env` e oferece restringir o painel ao Tailscale (`HOST=127.0.0.1`). Nos celulares: instale o app Tailscale, entre na mesma rede (convite pelo painel do Tailscale) e abra o endereço `https://…ts.net`. Cada familiar entra com seu usuário. O painel só aceita cabeçalhos de proxy quando escuta apenas localmente.
+
+## Conversar ao vivo com o ambiente
+
+Na visão geral, **Conversar ao vivo** abre uma chamada com o computador da câmera selecionada: você ouve o microfone dele e ele toca a sua voz no alto-falante, ao mesmo tempo. **Silenciar meu microfone** continua ouvindo sem falar. Familiares também podem chamar.
+
+- O navegador só libera o microfone em HTTPS ou `localhost`. Pelo endereço `http://192.168.1.x:8000` o painel apenas ouve; para falar pelo celular, abra pelo endereço `https://…ts.net`.
+- O painel só repassa a negociação (WebRTC/WHIP/WHEP) e exige login; o áudio vai direto entre o navegador e o computador da câmera. Fora de casa, instale também o Tailscale no computador da câmera.
+- Só uma pessoa fala por vez; uma segunda chamada recebe o aviso de ambiente ocupado.
+
+O computador da câmera precisa do MediaMTX com os caminhos `mic` e `talk` e do cancelamento de eco do PipeWire. Os arquivos de referência ficam em `notebook/`; no computador da câmera (Linux com PipeWire):
+
+```bash
+install -Dm644 notebook/60-echo-cancel.conf ~/.config/pipewire/pipewire.conf.d/60-echo-cancel.conf
+install -Dm644 notebook/mediamtx.yml ~/.config/mediamtx/mediamtx.yml
+install -Dm644 notebook/mediamtx.service ~/.config/systemd/user/mediamtx.service
+systemctl --user restart pipewire pipewire-pulse wireplumber
+sudo loginctl enable-linger "$USER"
+systemctl --user daemon-reload && systemctl --user enable --now mediamtx
+```
+
+Em `mediamtx.yml`, troque `192.168.1.1` pelo IP do computador do painel: só ele e o próprio notebook podem publicar no alto-falante. O MediaMTX roda como usuário (não root) para acessar o áudio da sessão.
+
+## App no celular e notificações
+
+Pelo endereço `https://…ts.net`, o painel pode ser instalado como app: menu do navegador → **Instalar app** (Android/Chrome) ou **Compartilhar → Adicionar à Tela de Início** (iPhone, iOS 16.4+). Em **Minha conta → Este aparelho**, toque em **Ativar notificações** e em **Testar**.
+
+- Cada usuário ativa em cada aparelho. Queda, ausência e fora da rotina chegam como notificação urgente; resumo e câmera, como normais.
+- **Avisar quando alguém aparecer** (ligado por padrão, por aparelho): uma notificação no início de cada presença, no máximo uma por minuto por câmera, sem WhatsApp. Tocar abre a câmera ao vivo; dali dá para usar **Conversar ao vivo**.
+- Funciona como reserva do WhatsApp: as notificações usam o Web Push do navegador (chaves VAPID geradas em `data/vapid.json`), não o Baileys.
+- Notificações exigem HTTPS: pelo endereço `http://192.168…` o painel explica que é preciso usar o endereço do Tailscale.
+- Sem conexão com a casa, o app mostra uma página explicando o que verificar.
+
+## Docker
+
+Para reinstalar em outro computador sem preparar Python, Node e FFmpeg:
+
+```bash
+cp .env.example .env          # defina DASHBOARD_PASSWORD para o primeiro acesso
+docker compose up -d --build  # GPU NVIDIA: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+```
+
+- Tudo o que importa fica em `./data` (volume). Para migrar: restaure um backup nessa pasta antes de subir o container.
+- Por padrão a porta é publicada só em `127.0.0.1:8000` (use com Tailscale Serve no host). Para a rede local, troque para `"8000:8000"` no `docker-compose.yml`.
+- Webcam USB: descomente `devices` e use o endereço `0`. Câmeras RTSP funcionam sem ajustes.
+- Os modelos oficiais são baixados na construção da imagem, com verificação SHA-256.
+
 ### Espaço em disco e monitoramento
+
+**Liberar espaço manualmente:** em **Configurações → 08 · Armazenamento** o painel mostra o espaço livre e quanto ocupam vídeos, histórico e fotos de rostos. Escolha o período (tudo, ou mais antigos que 1, 3, 7 ou 30 dias) e veja antes quanto será apagado:
+
+- **Apagar vídeos:** remove os MP4 e miniaturas; registros, horários e identificações continuam no Histórico.
+- **Apagar histórico e vídeos:** remove também os registros e as fotos de rostos não confirmadas, e compacta o banco.
+
+Sempre preservados: gravações em andamento ou sendo enviadas, registros em análise e rostos que você ensinou ou aprovou (o registro de origem fica, sem o vídeo). Não dá para desfazer; faça um backup antes se quiser guardar.
 
 - Com menos espaço livre que o mínimo configurado (padrão 2 GB), os vídeos mais antigos de registros encerrados são apagados antes do prazo, para as gravações não pararem. O histórico permanece.
 - `GET /api/health` responde sem login, sem dados pessoais: `ok`, estado do WhatsApp, espaço livre e estado de cada câmera. Retorna 503 quando uma câmera ligada está sem imagem ou o disco está abaixo do mínimo. Útil para um monitor externo como Uptime Kuma.
@@ -272,6 +401,7 @@ PYTHONPATH=. .venv/bin/python tests/body_pipeline.py
 node tests/people-ui-smoke.mjs
 node tests/login-ui-smoke.mjs
 node tests/multi-recipient-gateway.mjs
+.venv/bin/python tests/fall_pipeline.py      # modelo pose real, sem câmera
 ```
 
 Os testes Python usam uma pasta temporária e um WhatsApp simulado; não enviam mensagens reais. Verificam duração e segmentação de vídeos, recuperação de interrupções, retenção, filtro do pai, timeout de envio, validação da API e proteção das rotas.

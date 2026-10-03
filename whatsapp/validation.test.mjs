@@ -17,7 +17,9 @@ test('accepts only local clip IDs and individual phone numbers', () => {
 
 test('accepts only short text alerts with a safe id', () => {
   const valid = { alert_id: 'inactive-1759000000', recipient: '5511999999999', text: 'Sem movimento há 4 horas.' };
-  assert.deepEqual(validateText(valid), valid);
+  assert.deepEqual(validateText(valid), { ...valid, image: false });
+  assert.equal(validateText({ ...valid, image: true }).image, true);
+  assert.throws(() => validateText({ ...valid, image: 'yes' }));
   for (const alert_id of ['../x', 'short', 'A'.repeat(20), 'a'.repeat(81)]) assert.throws(() => validateText({ ...valid, alert_id }));
   for (const text of ['', '   ', 'x'.repeat(1501), 42]) assert.throws(() => validateText({ ...valid, text }));
 });

@@ -7,6 +7,7 @@ from starlette.concurrency import run_in_threadpool
 
 from ..auth import COOKIE, ROLES
 from ..config import ROOT
+from ..proxy import is_https
 from ..services import call_service
 
 
@@ -59,7 +60,7 @@ def build(auth):
             raise HTTPException(401, 'Usuário ou senha incorretos.')
         response = JSONResponse({'ok': True})
         response.set_cookie(COOKIE, token, max_age=lifetime if body.remember else None, httponly=True,
-                            samesite='strict', secure=request.url.scheme == 'https', path='/')
+                            samesite='strict', secure=is_https(request), path='/')
         return response
 
     @router.post('/api/auth/logout')

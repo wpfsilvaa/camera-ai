@@ -113,6 +113,7 @@ class Auth:
             if row['role'] == 'admin' and self._admins(connection) == 1:
                 raise ValueError('Mantenha pelo menos um administrador.')
             connection.execute('DELETE FROM users WHERE id=?', (user_id,))
+            connection.execute('DELETE FROM push_subscriptions WHERE user_id=?', (user_id,))
 
     @staticmethod
     def _admins(connection):

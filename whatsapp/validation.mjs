@@ -19,5 +19,6 @@ export function validateText(body) {
   if (!/^[a-z0-9-]{8,80}$/.test(body?.alert_id ?? '')) throw new Error('Alerta inválido.');
   validateRecipient(body.recipient);
   if (typeof body.text !== 'string' || !body.text.trim() || body.text.length > 1500) throw new Error('Texto inválido.');
-  return { alert_id: body.alert_id, recipient: body.recipient, text: body.text };
+  if (body.image !== undefined && typeof body.image !== 'boolean') throw new Error('Imagem inválida.');
+  return { alert_id: body.alert_id, recipient: body.recipient, text: body.text, image: body.image === true };
 }

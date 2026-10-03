@@ -1,4 +1,10 @@
+import re
+import time
+
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
+
+from ..alerts import IMAGES
 
 
 def build(alerts, config):
@@ -14,5 +20,15 @@ def build(alerts, config):
         if not config.get().delivery_targets():
             raise HTTPException(409, 'Cadastre ao menos um número de WhatsApp nas configurações.')
         return {'id': alerts.send_test()}
+
+    @router.get('/api/routine')
+    def routine():
+        return alerts.routine.summary(time.time())
+
+    @router.get('/alert-media/{filename}')
+    def alert_image(filename: str):
+        if not re.fullmatch(r'[a-z0-9-]{8,80}\.jpg', filename) or not (IMAGES / filename).is_file():
+            raise HTTPException(404)
+        return FileResponse(IMAGES / filename, media_type='image/jpeg')
 
     return router

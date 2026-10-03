@@ -14,6 +14,7 @@ process.umask(0o077);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const data = path.resolve(process.env.CAMERA_DATA_DIR || path.join(root, 'data'));
 const clips = path.join(data, 'clips');
+const alertImages = path.join(data, 'alerts');
 await mkdir(clips, { recursive: true });
 const tokenPath = path.join(data, 'gateway.token');
 try { await writeFile(tokenPath, randomBytes(32).toString('hex'), { flag: 'wx', mode: 0o600 }); }
@@ -193,9 +194,16 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && req.url === '/text') {
       const body = validateText(await readBody(req));
       if (state !== 'connected' || !socket) return json(res, 503, { error: 'WhatsApp desconectado.' });
+      let content = { text: body.text };
+      if (body.image) {
+        // The id was validated as [a-z0-9-], so the path stays inside the alerts folder.
+        const file = path.join(alertImages, `${body.alert_id}.jpg`);
+        // Without the photo, the warning itself must still go out.
+        if (await stat(file).then(() => true, () => false)) content = { image: { url: file }, caption: body.text, mimetype: 'image/jpeg' };
+      }
       const target = await resolveTarget(res, body.recipient, jid => `alert:${body.alert_id}:${jid}`);
       if (!target) return;
-      return sendOnce(res, target, body.recipient, { text: body.text });
+      return sendOnce(res, target, body.recipient, content);
     }
     json(res, 404, { error: 'Rota não encontrada.' });
   } catch { json(res, 400, { error: 'Solicitação inválida ou arquivo indisponível.' }); }

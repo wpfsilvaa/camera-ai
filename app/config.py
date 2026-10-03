@@ -16,6 +16,8 @@ DATA.mkdir(parents=True, exist_ok=True)
 CLIPS = DATA / 'clips'
 CLIPS.mkdir(exist_ok=True)
 MODEL = os.environ.get('YOLO_MODEL', str(ROOT / 'yolo26n.pt'))
+# Same person detection plus body keypoints; used when fall detection is on.
+POSE_MODEL = os.environ.get('POSE_MODEL', str(ROOT / 'yolo26n-pose.pt'))
 FACE_DETECTOR = os.environ.get('FACE_DETECTOR', str(ROOT / 'face_detection_yunet_2023mar.onnx'))
 FACE_ENCODER = os.environ.get('FACE_ENCODER', str(ROOT / 'face_recognition_sface_2021dec.onnx'))
 BODY_ENCODER = os.environ.get('REID_MODEL', str(ROOT / 'yolo26n-reid.onnx'))
@@ -39,6 +41,8 @@ class CameraSettings(BaseModel):
     min_presence_seconds: float = Field(default=1, ge=0.25, le=10)
     segment_seconds: int = Field(default=60, ge=10, le=180)
     fps: int = Field(default=30, ge=5, le=30)
+    # Normalized [x1, y1, x2, y2] areas (bed, sofa) where lying down is expected.
+    fall_zones: list[list[float]] = Field(default_factory=list, max_length=10)
 
     @field_validator('camera_source')
     @classmethod
@@ -57,6 +61,14 @@ class CameraSettings(BaseModel):
         if not value:
             raise ValueError('Informe o nome da câmera.')
         return value
+
+    @field_validator('fall_zones')
+    @classmethod
+    def zones_valid(cls, zones):
+        for zone in zones:
+            if len(zone) != 4 or not all(0 <= v <= 1 for v in zone) or zone[0] >= zone[2] or zone[1] >= zone[3]:
+                raise ValueError('Área ignorada inválida.')
+        return [[round(v, 4) for v in zone] for zone in zones]
 
     @field_validator('device')
     @classmethod
@@ -92,16 +104,27 @@ class Settings(CameraSettings):
     body_margin: float = Field(default=.08, ge=.02, le=.30)
     face_hold_seconds: float = Field(default=15, ge=0, le=60)
     send_probable_father: bool = False
+    # Propose sharp, confidently recognized faces as new examples; a person approves each one.
+    learning_suggestions_enabled: bool = True
+    learning_threshold: float = Field(default=.65, ge=.5, le=.95)
     retention_days: int = Field(default=7, ge=1, le=90)
     cameras: list[ExtraCamera] = Field(default_factory=list, max_length=15)
+    fall_detection_enabled: bool = False
+    fall_seconds: int = Field(default=45, ge=10, le=300)
     # WhatsApp text alerts; zero turns each check off.
     alerts_enabled: bool = False
     inactivity_hours: float = Field(default=4, ge=0, le=24)
+    routine_alerts_enabled: bool = True
     quiet_start_hour: int = Field(default=22, ge=0, le=23)
     quiet_end_hour: int = Field(default=7, ge=0, le=23)
     camera_offline_minutes: int = Field(default=10, ge=0, le=240)
     daily_summary_hour: int = Field(default=21, ge=-1, le=23)
     min_free_gb: float = Field(default=2, ge=0.5, le=100)
+    # Daily copy of history, settings and faces to another disk or a synced folder.
+    backup_enabled: bool = False
+    backup_dir: str = Field(default='', max_length=1024)
+    backup_hour: int = Field(default=3, ge=0, le=23)
+    backup_keep: int = Field(default=14, ge=1, le=90)
 
     @field_validator('cameras')
     @classmethod
@@ -109,6 +132,14 @@ class Settings(CameraSettings):
         if len({c.id for c in cameras}) != len(cameras):
             raise ValueError('IDs de câmera duplicados.')
         return cameras
+
+    @field_validator('backup_dir')
+    @classmethod
+    def backup_dir_valid(cls, value):
+        value = value.strip()
+        if value and not value.startswith('/'):
+            raise ValueError('Informe o caminho completo da pasta de backup, começando com /.')
+        return value
 
     @field_validator('recipient')
     @classmethod

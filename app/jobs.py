@@ -13,6 +13,7 @@ from .recorder import cleanup, free_space, transcode
 log = logging.getLogger(__name__)
 
 HOURLY = 3600
+LEARNING_INTERVAL = 300
 # A face suggestion of the father that overlaps this clip; needs :threshold and aliases e (event), c (clip).
 PROBABLE_FATHER = """EXISTS (SELECT 1 FROM person_tracks t JOIN people p ON p.id=t.suggested_id
     WHERE t.event_id=e.id AND p.is_father=1 AND t.reviewed=0
@@ -37,9 +38,9 @@ def caption_for(clip, event, settings, probable):
 
 
 class Jobs:
-    def __init__(self, db, config, recognition=None, alerts=None, auth=None):
+    def __init__(self, db, config, recognition=None, alerts=None, auth=None, learning=None, backups=None):
         self.db, self.config = db, config
-        self.recognition, self.alerts, self.auth = recognition, alerts, auth
+        self.recognition, self.alerts, self.auth, self.learning, self.backups = recognition, alerts, auth, learning, backups
         self.stop_event = threading.Event()
         self.threads = []
         self.headers = {'Authorization': f'Bearer {gateway_token()}'}
@@ -64,6 +65,13 @@ class Jobs:
                 pending = self.db.rows("SELECT * FROM clips WHERE state='processing' ORDER BY started LIMIT 1")
                 if pending:
                     transcode(self.db, pending[0])
+                if self.learning and time.time() - self.learning.last_scan >= LEARNING_INTERVAL:
+                    self.learning.scan()
+                if self.backups and self.backups.due():
+                    try:
+                        self.backups.run()
+                    except ValueError:
+                        pass  # Recorded in the backup status and sent as an alert.
                 since = time.time() - last_cleanup
                 if since > HOURLY or (since > 60 and free_space() < self.config.get().min_free_gb):
                     self.housekeeping()
