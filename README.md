@@ -361,6 +361,8 @@ A configuração atual usa uma Logitech C922 em 1920×1080 a 30 qps com decodifi
     runOnInitRestart: yes
 ```
 
+O microfone da chamada também é o da C922: em `60-echo-cancel.conf`, `capture.props` aponta `target.object` para a fonte dela (`pactl list short sources`). O microfone embutido do notebook saturava (pico de 0 dB); com a C922 e o cancelamento de eco, o tom do alto-falante cai cerca de 16 dB no que é enviado. Ao trocar de webcam, troque esse nome ou remova `target.object` para usar o microfone padrão, e reinicie com `systemctl --user restart pipewire pipewire-pulse wireplumber mediamtx`.
+
 No `cam-lite`, troque da mesma forma os filtros VAAPI por `-vf scale=640:-2,fps=15 -c:v libx264 -preset ultrafast -tune zerolatency -profile:v baseline`.
 
 ### Vídeo leve no celular
