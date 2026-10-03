@@ -20,23 +20,30 @@ authInternalUsers:
 webrtcIPsFromInterfacesList: [wlan0, tailscale0]
 
 paths:
+  # Logitech C922 em 1080p30: MJPEG decodificado e H.264 codificado na GPU Intel (VAAPI), ≈10% de um núcleo.
+  # Caminhos por ID/PCI não mudam com a ordem dos dispositivos. Outra webcam: veja `ls /dev/v4l/by-id/`
+  # e `v4l2-ctl -d <dispositivo> --list-formats-ext`; sem VAAPI, use o bloco x264 do README.
   cam:
     runOnInit: >
-      ffmpeg -hide_banner -loglevel warning
-      -f v4l2 -input_format mjpeg -video_size 1920x1080 -framerate 24 -i /dev/video0
-      -an -c:v libx264 -preset ultrafast -pix_fmt yuv420p -crf 18 -g 60 -bf 0
-      -f rtsp rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH
+      env LIBVA_DRIVER_NAME=i965
+      ffmpeg -nostdin -hide_banner -loglevel warning
+      -hwaccel vaapi -hwaccel_device /dev/dri/by-path/pci-0000:00:02.0-render -hwaccel_output_format vaapi
+      -f v4l2 -input_format mjpeg -video_size 1920x1080 -framerate 30
+      -i /dev/v4l/by-id/usb-046d_C922_Pro_Stream_Webcam_C52DC7BF-video-index0
+      -an -vf scale_vaapi=format=nv12 -c:v h264_vaapi -b:v 6M -maxrate 6M -g 60 -bf 0
+      -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH
     runOnInitRestart: yes
 
-  # Vídeo leve para o celular (≈450 kbps, 640 px, 15 qps): o "cam" tem ≈10 Mbps.
-  # Só codifica enquanto alguém assiste (≈0,5 núcleo neste notebook).
+  # Vídeo leve para o celular (≈450 kbps, 640 px, 15 qps): o "cam" tem ≈6 Mbps.
+  # Só codifica enquanto alguém assiste; decodifica, reduz e codifica na GPU Intel (≈10% de um núcleo).
   cam-lite:
     runOnDemand: >
-      ffmpeg -hide_banner -loglevel warning
+      env LIBVA_DRIVER_NAME=i965
+      ffmpeg -nostdin -hide_banner -loglevel warning
+      -hwaccel vaapi -hwaccel_device /dev/dri/by-path/pci-0000:00:02.0-render -hwaccel_output_format vaapi
       -rtsp_transport tcp -i rtsp://127.0.0.1:$RTSP_PORT/cam
-      -an -vf scale=640:-2,fps=15
-      -c:v libx264 -preset ultrafast -tune zerolatency -profile:v baseline
-      -b:v 450k -maxrate 450k -bufsize 900k -g 30
+      -an -vf fps=15,scale_vaapi=w=640:h=360:format=nv12
+      -c:v h264_vaapi -profile:v constrained_baseline -b:v 450k -maxrate 450k -g 30 -bf 0
       -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH
     runOnDemandRestart: yes
     runOnDemandCloseAfter: 10s

@@ -341,9 +341,31 @@ Na visão geral, **Conversar ao vivo** abre uma chamada com o computador da câm
 - O painel só repassa a negociação (WebRTC/WHIP/WHEP) e exige login; o áudio vai direto entre o navegador e o computador da câmera. Fora de casa, instale também o Tailscale no computador da câmera.
 - Só uma pessoa fala por vez; uma segunda chamada recebe o aviso de ambiente ocupado.
 
+### Trocar a webcam do computador da câmera
+
+O painel lê sempre `rtsp://<notebook>:8554/cam`; trocar a webcam muda só o caminho `cam` em `~/.config/mediamtx/mediamtx.yml` no notebook (cópia em `notebook/mediamtx.yml`). O MediaMTX recarrega sozinho ao salvar, e o painel reconecta em segundos.
+
+1. Conecte a webcam e ache o caminho fixo dela: `ls /dev/v4l/by-id/` (use o `…-video-index0`).
+2. Veja as resoluções em MJPEG: `v4l2-ctl -d <caminho> --list-formats-ext`.
+3. Ajuste `-i`, `-video_size` e `-framerate` no bloco `cam`.
+
+A configuração atual usa uma Logitech C922 em 1920×1080 a 30 qps com decodificação e codificação na GPU Intel (VAAPI): cerca de 10% de um núcleo e 6 Mbps. A webcam embutida anterior, em 720p com x264, ocupava um núcleo inteiro. Em um computador sem VAAPI, use x264 e prefira 720p:
+
+```yaml
+  cam:
+    runOnInit: >
+      ffmpeg -nostdin -hide_banner -loglevel warning
+      -f v4l2 -input_format mjpeg -video_size 1280x720 -framerate 30 -i /dev/v4l/by-id/<webcam>-video-index0
+      -an -c:v libx264 -preset ultrafast -pix_fmt yuv420p -b:v 4M -maxrate 4M -bufsize 8M -g 60 -bf 0
+      -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH
+    runOnInitRestart: yes
+```
+
+No `cam-lite`, troque da mesma forma os filtros VAAPI por `-vf scale=640:-2,fps=15 -c:v libx264 -preset ultrafast -tune zerolatency -profile:v baseline`.
+
 ### Vídeo leve no celular
 
-Abaixo da imagem ao vivo, **Com detecções** mostra o vídeo processado pelo painel (caixas e nomes) e **Leve** recebe o vídeo direto do computador da câmera por WebRTC: 640 px, 15 quadros/s e cerca de 450 kbps, contra ≈10 Mbps do stream original. No celular o padrão é **Leve**; a escolha fica salva em cada aparelho. O vídeo leve não mostra as detecções e só é codificado enquanto alguém assiste (cerca de meio núcleo no notebook); a primeira imagem leva uns 4 s. Se falhar, o painel volta sozinho para o vídeo com detecções.
+Abaixo da imagem ao vivo, **Com detecções** mostra o vídeo processado pelo painel (caixas e nomes) e **Leve** recebe o vídeo direto do computador da câmera por WebRTC: 640 px, 15 quadros/s e cerca de 450 kbps, contra ≈6 Mbps do stream original em 1080p. No celular o padrão é **Leve**; a escolha fica salva em cada aparelho. O vídeo leve não mostra as detecções e só é codificado enquanto alguém assiste (cerca de 10% de um núcleo no notebook, pela GPU Intel); a primeira imagem leva uns 4 s. Se falhar, o painel volta sozinho para o vídeo com detecções.
 
 Teste com o notebook real: `node tests/live-video-ui-smoke.mjs` (servidor temporário, sem mexer no histórico).
 

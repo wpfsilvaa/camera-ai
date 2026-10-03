@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from ..services import call_service
 
 # MediaMTX on the camera computer: "mic" is its echo-cancelled microphone, "talk" plays on its speaker,
-# "cam-lite" is a ≈450 kbps copy of the camera for phones (the RTSP "cam" is ≈10 Mbps).
+# "cam-lite" is a ≈450 kbps copy of the camera for phones (the RTSP "cam" is ≈6 Mbps in 1080p).
 WEBRTC_PORT = 8889
 PATHS = {'listen': ('mic', 'whep'), 'talk': ('talk', 'whip'), 'video': ('cam-lite', 'whep')}
 SESSION = re.compile(r'^[0-9a-f-]{36}$')
