@@ -29,7 +29,10 @@ def resize_width(frame, limit):
     height,width=frame.shape[:2]
     if width<=limit:
         return frame
-    return cv2.resize(frame,(limit,round(height*limit/width)),interpolation=cv2.INTER_AREA)
+    # Up to 2x (1080p -> 720p preview) bilinear looks the same and costs ~4x less than INTER_AREA,
+    # which ran on every frame of the camera loop; larger reductions keep INTER_AREA against aliasing.
+    interpolation=cv2.INTER_AREA if width>2*limit else cv2.INTER_LINEAR
+    return cv2.resize(frame,(limit,round(height*limit/width)),interpolation=interpolation)
 
 
 class LiveFrames:

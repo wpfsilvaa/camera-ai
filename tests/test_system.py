@@ -1,5 +1,6 @@
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -86,6 +87,28 @@ class StorageTests(unittest.TestCase):
         cap=cv2.VideoCapture(str(self.directory/f"{row['id']}.mp4"))
         self.assertAlmostEqual(cap.get(cv2.CAP_PROP_FRAME_COUNT)/cap.get(cv2.CAP_PROP_FPS),4+1/30,places=2)
         cap.release()
+
+    def test_slow_encoding_does_not_hold_the_camera_loop(self):
+        # Writing (and repeating) frames runs on the recorder thread: the loop only queues them.
+        real_writer=cv2.VideoWriter
+        class SlowWriter:  # 10 ms per encode, like a 1080p MJPEG frame
+            def __init__(self,*args): self.real=real_writer(*args)
+            def isOpened(self): return self.real.isOpened()
+            def write(self,image): time.sleep(.01); self.real.write(image)
+            def release(self): self.real.release()
+        event=self.db.start_event(100,1)
+        recorder=Recorder(self.db,self.directory)
+        frame=np.full((120,160,3),90,dtype=np.uint8)
+        with patch('app.recorder.cv2.VideoWriter',SlowWriter):
+            recorder.start(event,frame,100,30)
+        began=time.perf_counter()
+        for n in range(1,31):
+            recorder.write(frame,100+n*.1)  # 10 qps of analysis: two repeats per frame at 30 fps
+        self.assertLess(time.perf_counter()-began,.05)
+        recorder.finish(103)
+        self.assertEqual(recorder.writer,None)
+        row=self.db.rows('SELECT * FROM clips')[0]
+        self.assertAlmostEqual(row['duration'],91/30,places=3)  # 3 s plus the first frame, nothing lost to the queue
 
     def test_restart_closes_visits_and_marks_uploads_uncertain(self):
         event = self.db.start_event(100, 1)
