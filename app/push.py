@@ -19,7 +19,8 @@ from .db import TZ
 log = logging.getLogger(__name__)
 
 KEYS = DATA / 'vapid.json'
-CONTACT = 'mailto:casa-presente@localhost'
+# Apple rejects VAPID contacts on made-up hosts such as @localhost (403 BadJwtToken).
+CONTACT = 'mailto:casa-presente@example.com'
 TITLES = {'fall': 'Possível queda', 'routine': 'Fora da rotina', 'inactivity': 'Ninguém apareceu',
           'camera_offline': 'Câmera sem imagem', 'camera_online': 'Câmera voltou', 'summary': 'Resumo do dia',
           'backup': 'Backup falhou', 'test': 'Teste de notificação', 'presence': 'Presença detectada',
