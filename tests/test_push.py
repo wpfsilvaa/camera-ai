@@ -55,6 +55,22 @@ class PushTests(unittest.TestCase):
         self.assertEqual([d['endpoint'] for d in self.push.devices('u2')], [])
         self.assertIsNotNone(self.push.devices('u1')[0]['last_ok'])
 
+    def test_topics_can_be_turned_off_per_device(self):
+        self.push.subscribe('u1', {'endpoint': 'https://push/a', 'keys': KEYS})
+        self.push.subscribe('u1', {'endpoint': 'https://push/b', 'keys': KEYS})
+        self.assertTrue(all(t['enabled'] for t in self.push.topic_settings('https://push/a')['topics']))
+        self.push.set_topics('https://push/a', ['emergency', 'restricted', 'camera', 'backup'])  # No daily summary.
+        self.assertEqual(self.push.send_all({'id': 's1', 'kind': 'summary', 'message': 'Resumo'}), 1)
+        self.assertEqual(self.sent[-1][0], 'https://push/b')
+        self.assertEqual(self.push.send_all({'id': 'f1', 'kind': 'fall', 'message': 'Queda'}), 2)
+        self.assertEqual(self.push.send_all({'id': 'push-test', 'kind': 'test', 'message': 'Teste'}), 2)
+        self.push.set_topics('https://push/a', [])
+        self.assertEqual(self.push.send_all({'id': 'test', 'kind': 'test', 'message': 'Teste'}), 2)  # The test is never muted.
+        with self.assertRaises(ValueError):
+            self.push.set_topics('https://push/a', ['nope'])
+        with self.assertRaises(KeyError):
+            self.push.set_topics('https://push/none', [])
+
     def test_summary_is_not_urgent(self):
         self.push.subscribe(None, {'endpoint': 'https://push/a', 'keys': KEYS})
         self.push.send_all({'id': 'summary-x', 'kind': 'summary', 'message': 'Resumo'})

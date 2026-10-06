@@ -37,6 +37,12 @@ PHOTOS.mkdir(exist_ok=True)
 # Per device: who triggers a presence notice. "father" and "unknown" wait for face recognition.
 AUDIENCES = ('all', 'father', 'unknown')
 IDENTIFY_SECONDS = 15
+# What a device can switch off, in the order shown. Each topic covers some alert kinds; the test is always sent.
+TOPICS = {'emergency': ('Quedas e ausência', {'fall', 'routine', 'inactivity'}),
+          'restricted': ('Área restrita', {'restricted'}),
+          'camera': ('Câmera sem imagem ou de volta', {'camera_offline', 'camera_online'}),
+          'summary': ('Resumo do dia', {'summary'}),
+          'backup': ('Falha no backup', {'backup'})}
 FATHER = 'father'  # Fixed id of the father's profile.
 
 
@@ -104,6 +110,21 @@ class Push:
         if not rows:
             return {'enabled': False, 'audience': 'all', 'quiet': False}
         return {'enabled': bool(rows[0]['presence']), 'audience': rows[0]['presence_filter'], 'quiet': bool(rows[0]['presence_quiet'])}
+
+    def topic_settings(self, endpoint):
+        rows = self.db.rows('SELECT muted FROM push_subscriptions WHERE endpoint=?', (endpoint,))
+        muted = set(json.loads(rows[0]['muted'])) if rows else set()
+        return {'topics': [{'id': key, 'label': label, 'enabled': key not in muted} for key, (label, _) in TOPICS.items()]}
+
+    def set_topics(self, endpoint, enabled):
+        unknown = set(enabled) - set(TOPICS)
+        if unknown:
+            raise ValueError('Tipo de notificação desconhecido.')
+        muted = [key for key in TOPICS if key not in enabled]
+        with self.db.connect() as db:
+            changed = db.execute('UPDATE push_subscriptions SET muted=? WHERE endpoint=?', (json.dumps(muted), endpoint)).rowcount
+        if not changed:
+            raise KeyError('Ative as notificações neste aparelho primeiro.')
 
     def presence_devices(self, audience, now):
         """Devices that want this kind of presence notice now (quiet hours honored per device)."""
@@ -189,7 +210,9 @@ class Push:
         if alert['kind'] == 'presence':
             rows = self.presence_devices(alert.get('audience', 'all'), alert.get('created') or time.time())
         else:
-            rows = self.db.rows('SELECT endpoint,keys FROM push_subscriptions')
+            kind = alert['kind']
+            rows = [row for row in self.db.rows('SELECT endpoint,keys,muted FROM push_subscriptions')
+                    if not any(kind in kinds and key in json.loads(row['muted']) for key, (_, kinds) in TOPICS.items())]
         sent = 0
         for row in rows:
             if self.send(row['endpoint'], json.loads(row['keys']), payload, urgent=alert['kind'] in IMMEDIATE):

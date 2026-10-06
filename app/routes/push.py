@@ -21,6 +21,10 @@ class Presence(Endpoint):
     quiet: bool = False
 
 
+class Topics(Endpoint):
+    enabled: list[str] = Field(max_length=10)
+
+
 def build(push):
     """Installable app files and the per-device notification subscription."""
     router = APIRouter()
@@ -57,6 +61,15 @@ def build(push):
     def presence(body: Presence):
         call_service(push.set_presence, body.endpoint, body.enabled, body.audience, body.quiet)
         return push.presence_settings(body.endpoint)
+
+    @router.post('/api/push/topics-status')
+    def topics_status(body: Endpoint):
+        return push.topic_settings(body.endpoint)
+
+    @router.post('/api/push/topics')
+    def topics(body: Topics):
+        call_service(push.set_topics, body.endpoint, body.enabled)
+        return push.topic_settings(body.endpoint)
 
     @router.post('/api/push/test', status_code=201)
     def test(request: Request):

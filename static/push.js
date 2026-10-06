@@ -29,6 +29,8 @@
     show('#presence-row', on);
     if (on) fillPresence(await api('/api/push/presence-status', {method: 'POST', body: JSON.stringify({endpoint: (await currentSubscription()).endpoint})}));
     else show('#presence-options', false);
+    show('#topics-options', on);
+    if (on) fillTopics(await api('/api/push/topics-status', {method: 'POST', body: JSON.stringify({endpoint: (await currentSubscription()).endpoint})}));
     show('#install-app', Boolean(installPrompt));
   }
 
@@ -48,6 +50,33 @@
     const hours = h => `${String(h).padStart(2, '0')}:00`;
     if (typeof settings !== 'undefined' && settings) $('#presence-quiet-hours').textContent = `Sem aviso de presença das ${hours(settings.quiet_start_hour)} às ${hours(settings.quiet_end_hour)} (horário de silêncio dos alertas).`;
   }
+
+  function fillTopics({topics}) {
+    const list = $('#topics-list');
+    list.replaceChildren(...topics.map(topic => {
+      const label = document.createElement('label');
+      label.className = 'switch-row';
+      const name = document.createElement('span');
+      name.textContent = topic.label;
+      const input = document.createElement('input');
+      Object.assign(input, {type: 'checkbox', checked: topic.enabled, value: topic.id});
+      input.setAttribute('role', 'switch');
+      label.append(name, input);
+      return label;
+    }));
+  }
+
+  $('#topics-list').addEventListener('change', event => action(event.target, async () => {
+    const input = event.target;
+    const enabled = [...$('#topics-list').querySelectorAll('input:checked')].map(box => box.value);
+    try {
+      fillTopics(await api('/api/push/topics', {method: 'POST', body: JSON.stringify({endpoint: (await currentSubscription()).endpoint, enabled})}));
+    } catch (error) {
+      input.checked = !input.checked;
+      throw error;
+    }
+    toast('Avisos deste aparelho atualizados.');
+  }));
 
   async function savePresence(input) {
     const subscription = await currentSubscription();

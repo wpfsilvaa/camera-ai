@@ -68,7 +68,8 @@ class Database:
                 CREATE TABLE IF NOT EXISTS push_subscriptions (
                     endpoint TEXT PRIMARY KEY, user_id TEXT, keys TEXT NOT NULL, agent TEXT NOT NULL DEFAULT '',
                     created REAL NOT NULL, last_ok REAL, presence INTEGER NOT NULL DEFAULT 1,
-                    presence_filter TEXT NOT NULL DEFAULT 'all', presence_quiet INTEGER NOT NULL DEFAULT 0
+                    presence_filter TEXT NOT NULL DEFAULT 'all', presence_quiet INTEGER NOT NULL DEFAULT 0,
+                    muted TEXT NOT NULL DEFAULT '[]'
                 );
                 CREATE TABLE IF NOT EXISTS learning_suggestions (
                     sample_id TEXT PRIMARY KEY REFERENCES person_samples(id) ON DELETE CASCADE,
@@ -120,7 +121,7 @@ class Database:
                 db.execute('ALTER TABLE clips ADD COLUMN analyzed INTEGER NOT NULL DEFAULT 0')
             push_columns = {r['name'] for r in db.execute('PRAGMA table_info(push_subscriptions)')}
             for name, definition in (('presence', 'INTEGER NOT NULL DEFAULT 1'), ('presence_filter', "TEXT NOT NULL DEFAULT 'all'"),
-                                     ('presence_quiet', 'INTEGER NOT NULL DEFAULT 0')):
+                                     ('presence_quiet', 'INTEGER NOT NULL DEFAULT 0'), ('muted', "TEXT NOT NULL DEFAULT '[]'")):
                 if name not in push_columns:
                     db.execute(f'ALTER TABLE push_subscriptions ADD COLUMN {name} {definition}')
             if 'image' not in {r['name'] for r in db.execute('PRAGMA table_info(alerts)')}:
