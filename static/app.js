@@ -23,7 +23,7 @@ function renderProfiles() {
   if (!recognition) return;
   profiles = recognition.profiles;
   $('#recognition-status').textContent = !settings.recognition_enabled ? 'Reconhecimento facial desativado nas configurações.' : recognition.error || (settings.body_reid_enabled && recognition.body_error) || (recognition.ready ? `Reconhecimento facial local ativo.${settings.body_reid_enabled ? ` Memória corporal: ${recognition.body_reference_people || 0} pessoa(s), por até ${settings.body_memory_minutes} minutos após reconhecer o rosto.` : ''} Cadastre fotos nítidas do rosto.` : 'O modelo facial será iniciado com a câmera ou ao cadastrar uma foto.');
-  $('#people-profiles').innerHTML = profiles.map(person => `<article class="panel profile-card"><div class="profile-avatar">${escapeHTML(person.name.slice(0,1).toUpperCase())}</div><h2>${escapeHTML(person.name)}</h2><span class="pill ${person.examples>=1?'green':'amber'}">${person.examples>=1?'Pode receber sugestões':'Precisa de exemplos'}</span><p>${person.examples} rosto(s) cadastrado(s)</p><p class="small muted">Presença confirmada em ${person.records} registro(s)${person.is_father ? ' · Perfil do pai' : ''}</p><button type="button" class="button primary compact upload-face" data-face-upload="${person.id}">Cadastrar foto do rosto</button><div class="enrollment-photos">${(person.enrollments||[]).map(face=>`<div><img src="/people-media/${face.id}.jpg" alt="Rosto cadastrado de ${escapeHTML(person.name)}"><button class="text-button" data-remove-face="${face.id}" data-person="${person.id}">Remover</button></div>`).join('')}</div><div class="profile-actions"><button class="text-button" data-review-examples="${person.id}">Revisar exemplos (${person.examples})</button><button class="text-button" data-rename-person="${person.id}">Renomear</button><button class="text-button" data-forget-person="${person.id}">Esquecer exemplos</button>${!person.is_father?`<button class="text-button" data-delete-person="${person.id}">Excluir perfil</button>`:''}</div></article>`).join('');
+  $('#people-profiles').innerHTML = profiles.map(person => `<article class="panel profile-card"><div class="profile-avatar">${escapeHTML(person.name.slice(0,1).toUpperCase())}</div><h2>${escapeHTML(person.name)}</h2><span class="pill ${person.examples>=1?'green':'amber'}">${person.examples>=1?'Pode receber sugestões':'Precisa de exemplos'}</span><p>${person.examples} rosto(s) cadastrado(s)</p><p class="small muted">Presença confirmada em ${person.records} registro(s)${person.is_father ? ' · Perfil do pai' : ''}</p><label class="small birthday-field">Aniversário<input type="date" data-birthday="${person.id}" value="${person.birthday||''}" max="${new Date().toISOString().slice(0,10)}" aria-label="Aniversário de ${escapeHTML(person.name)}"></label><button type="button" class="button primary compact upload-face" data-face-upload="${person.id}">Cadastrar foto do rosto</button><div class="enrollment-photos">${(person.enrollments||[]).map(face=>`<div><img src="/people-media/${face.id}.jpg" alt="Rosto cadastrado de ${escapeHTML(person.name)}"><button class="text-button" data-remove-face="${face.id}" data-person="${person.id}">Remover</button></div>`).join('')}</div><div class="profile-actions"><button class="text-button" data-review-examples="${person.id}">Revisar exemplos (${person.examples})</button><button class="text-button" data-rename-person="${person.id}">Renomear</button><button class="text-button" data-forget-person="${person.id}">Esquecer exemplos</button>${!person.is_father?`<button class="text-button" data-delete-person="${person.id}">Excluir perfil</button>`:''}</div></article>`).join('');
 }
 
 function diagnosticHTML(track) {
@@ -519,3 +519,13 @@ async function init() {
 }
 // users.js defines the account helpers; deferred scripts all run before this event.
 window.addEventListener('DOMContentLoaded', init);
+
+// Birthday of a registered person: used by the kitchen screen's calendar and birthday greeting.
+document.addEventListener('change', async event => {
+  const input = event.target.closest?.('[data-birthday]');
+  if (!input) return;
+  try {
+    await api(`/api/people/${input.dataset.birthday}/birthday`, {method: 'PUT', body: JSON.stringify({birthday: input.value || null})});
+    toast(input.value ? 'Aniversário salvo.' : 'Aniversário removido.');
+  } catch (error) { toast(error.message, true); }
+});

@@ -90,6 +90,11 @@ class Database:
                     id TEXT PRIMARY KEY, event_id INTEGER NOT NULL REFERENCES events(id), created REAL NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS idx_photos_event ON event_photos(event_id);
+                -- Notes left for the kitchen screen; each one disappears at its expiry.
+                CREATE TABLE IF NOT EXISTS reminders (
+                    id TEXT PRIMARY KEY, author TEXT NOT NULL, user_id TEXT, text TEXT NOT NULL,
+                    created REAL NOT NULL, expires REAL NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS face_enrollments (
                     id TEXT PRIMARY KEY, person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
                     created REAL NOT NULL, feature BLOB NOT NULL, model TEXT NOT NULL, quality REAL NOT NULL
@@ -127,6 +132,8 @@ class Database:
                     db.execute(f'ALTER TABLE push_subscriptions ADD COLUMN {name} {definition}')
             if 'image' not in {r['name'] for r in db.execute('PRAGMA table_info(alerts)')}:
                 db.execute('ALTER TABLE alerts ADD COLUMN image INTEGER NOT NULL DEFAULT 0')
+            if 'birthday' not in {r['name'] for r in db.execute('PRAGMA table_info(people)')}:
+                db.execute('ALTER TABLE people ADD COLUMN birthday TEXT')   # ISO date (YYYY-MM-DD), used for the kitchen screen's greeting.
             track_columns = {r['name'] for r in db.execute('PRAGMA table_info(person_tracks)')}
             if 'diagnostic' not in track_columns:
                 db.execute("ALTER TABLE person_tracks ADD COLUMN diagnostic TEXT NOT NULL DEFAULT '{}'")

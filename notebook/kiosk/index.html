@@ -3,22 +3,33 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="google" content="notranslate">
   <title>Casa Presente</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/kiosk.css">
   <script src="/kiosk.js" defer></script>
 </head>
 <body>
+  <div class="glow" aria-hidden="true"></div>
   <main id="screen" data-view="idle">
     <header>
       <div><time id="clock">--:--</time><span id="date"></span></div>
-      <span id="battery" class="hidden"></span>
+      <div class="status"><span id="vigia" class="vigia hidden" role="status"><svg class="vi vi-shield" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 4.5 5.5v6c0 4.6 3.1 8.4 7.5 10 4.4-1.6 7.5-5.4 7.5-10v-6L12 2.5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8.7 12.2 2.4 2.4 4.3-4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="vi vi-eye hidden" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg><span id="vigia-text"></span></span><span id="battery" class="hidden"></span></div>
     </header>
 
     <section id="view-idle" class="view">
-      <button id="btn-call" class="big call" type="button"><span class="icon" aria-hidden="true">📞</span>Chamar a família</button>
-      <button id="btn-panic" class="big panic" type="button"><span class="icon" aria-hidden="true">🆘</span>Preciso de ajuda</button>
-      <p id="note" class="note hidden"></p>
+      <p id="greeting" class="greeting hidden" role="status"></p>
+      <p id="greeting-sub" class="greeting-sub hidden"></p>
+      <div id="confetti" class="confetti hidden" aria-hidden="true"></div>
+      <section id="reminders" class="reminders hidden" aria-live="polite"><div class="rem-label">Lembrete</div><p id="rem-text"></p><small id="rem-meta"></small><div id="rem-dots" class="rem-dots"></div></section>
+      <div class="idle-row">
+        <div class="actions">
+          <button id="btn-call" class="big call" type="button"><span class="icon" aria-hidden="true">📞</span>Chamar a família</button>
+          <button id="btn-panic" class="big panic" type="button"><span class="icon" aria-hidden="true">🆘</span>Preciso de ajuda</button>
+          <p id="note" class="note hidden"></p>
+        </div>
+        <aside id="calendar" class="calendar" aria-label="Calendário"></aside>
+      </div>
     </section>
 
     <section id="view-confirm" class="view">

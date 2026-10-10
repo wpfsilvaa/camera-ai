@@ -166,6 +166,8 @@ class Settings(CameraSettings):
     # The big "call the family" button on the notebook screen (and, separately, the help request).
     notebook_call_enabled: bool = False
     notebook_panic_enabled: bool = True
+    # The kitchen screen greets recognised people by first name ("Bom dia, Waldemar").
+    notebook_greeting_enabled: bool = True
     notebook_battery_percent: int = Field(default=20, ge=5, le=60)
     notebook_unplugged_minutes: int = Field(default=15, ge=0, le=240)
     notebook_offline_minutes: int = Field(default=5, ge=0, le=240)

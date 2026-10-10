@@ -48,6 +48,7 @@ class NotebookMonitor:
     def __init__(self, alerts, config=default_config, token=notebook_token):
         self.alerts, self.config, self.token = alerts, config, token
         self.frame = None  # Callable returning the camera's current JPEG (attached to call alerts).
+        self.vigia = None  # Callable returning extra query parameters for the kitchen screen (watch mode, night, greeting).
         self.call = {'state': 'idle'}
         self.lock = threading.Lock()
         self.last_poll = 0
@@ -72,8 +73,13 @@ class NotebookMonitor:
         url = notebook_url(settings.camera_source)
         if url and token:
             try:
-                response = client.get(f'{url}/status', headers={'Authorization': f'Bearer {token}'}, timeout=5,
-                                      params={'call': int(settings.notebook_call_enabled), 'panic': int(settings.notebook_call_enabled and settings.notebook_panic_enabled)})
+                params = {'call': int(settings.notebook_call_enabled), 'panic': int(settings.notebook_call_enabled and settings.notebook_panic_enabled)}
+                if self.vigia:
+                    try:
+                        params.update(self.vigia())
+                    except Exception:
+                        log.exception('Falha ao montar o estado da tela do notebook')
+                response = client.get(f'{url}/status', headers={'Authorization': f'Bearer {token}'}, timeout=5, params=params)
                 if response.status_code == 200:
                     reading = response.json()
             except (httpx.HTTPError, ValueError):

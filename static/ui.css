@@ -125,3 +125,12 @@ input,select,textarea{background:var(--surface);color:var(--ink);border-color:va
 .vigia-badge.resting,.vigia-badge.analysing{animation:vigia-pulse 1.8s ease-in-out infinite}
 .vigia-badge.analysing{animation-duration:.9s}
 @keyframes vigia-pulse{0%,100%{box-shadow:0 0 0 0 currentColor}50%{box-shadow:0 0 0 4px transparent;opacity:.72}}
+
+/* Reminders for the kitchen screen */
+.reminder-form{display:flex;flex-direction:column;gap:10px}
+.reminder-form textarea{width:100%;resize:vertical;border:1px solid var(--border);background:var(--surface);color:var(--ink);border-radius:8px;padding:10px 12px;font:inherit;font-size:13px}
+.reminder-row{display:flex;gap:12px;align-items:end;justify-content:space-between;flex-wrap:wrap}
+.reminder-row label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:550}
+.reminders-list{list-style:none;margin:14px 0 0;padding:0}.reminders-list li{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--border);font-size:13px}
+.reminders-list small{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}

@@ -4,6 +4,7 @@ import threading
 import time
 import uuid
 from collections import Counter
+from datetime import date
 from pathlib import Path
 
 import cv2
@@ -181,6 +182,20 @@ class Recognition:
             db.execute('INSERT INTO people(id,name,created) VALUES(?,?,?)', (person_id, name, time.time()))
             self.invalidate(db)
         return person_id
+
+    def set_birthday(self, person_id, birthday):
+        """Birthday as YYYY-MM-DD, or None to clear it. Does not touch recognition, so no cache reset."""
+        if birthday is not None:
+            try:
+                day = date.fromisoformat(birthday)
+            except ValueError:
+                raise ValueError('Data de aniversário inválida.')
+            if not (1900 <= day.year <= date.today().year) or day > date.today():
+                raise ValueError('Data de aniversário fora do intervalo aceito.')
+            birthday = day.isoformat()
+        with self.lock, self.db.connect() as db:
+            if not db.execute('UPDATE people SET birthday=? WHERE id=?', (birthday, person_id)).rowcount:
+                raise KeyError('Pessoa não encontrada.')
 
     def rename_person(self, person_id, name):
         with self.lock, self.db.connect() as db:

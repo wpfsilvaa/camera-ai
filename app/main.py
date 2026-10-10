@@ -1,4 +1,5 @@
 import asyncio
+import json
 import re
 import shutil
 import time
@@ -22,9 +23,11 @@ from . import detectors, resources
 from .sources import usb_cameras
 from .config import CLIPS, DATA, ROOT, WA_URL, CameraSettings, ExtraCamera, Settings, config
 from .db import TZ, Database
+from .pacing import Greeter, first_name, is_night, vigia_state
 from .jobs import Jobs
 from .learning import LearningSuggestions
 from .notebook import NotebookMonitor
+from .reminders import Reminders
 from .offline import OfflineAnalysis
 from .proxy import allowed_origins, is_https
 from .push import Push
@@ -60,6 +63,35 @@ def latest_frame(camera_id):
 
 push.frame = latest_frame
 notebook.frame = lambda: latest_frame('main')
+
+
+greeter = Greeter()
+reminders = Reminders(db)
+
+
+def vigia_for_kitchen():
+    """What the kitchen screen shows besides the call buttons: watch-mode state, night tone and a greeting."""
+    settings, now = config.for_camera('main'), time.time()
+    hour = datetime.fromtimestamp(now, TZ).hour
+    camera = next((c for c in cameras.snapshots() if c['id'] == 'main'), {})
+    info = {'vigia': vigia_state(settings.sentinel_enabled, settings.sentinel_start_hour, settings.sentinel_end_hour, hour, bool(camera.get('sentinel'))),
+            'night': int(is_night(settings, hour))}
+    notes = reminders.active(now)
+    if notes:
+        info['reminders'] = json.dumps([{'i': n['id'][:8], 'a': first_name(n['author']), 't': n['text'], 'e': round(n['expires'])} for n in notes[:10]], ensure_ascii=False)
+    people = {r['id']: r for r in db.rows("SELECT id,name,birthday FROM people WHERE birthday IS NOT NULL")}
+    if people:   # Names and month-day only: the screen marks them on its calendar.
+        info['bdays'] = json.dumps([{'n': first_name(p['name']), 'd': p['birthday'][5:]} for p in people.values()][:20], ensure_ascii=False)
+    if config.get().notebook_greeting_enabled:
+        greeting = greeter.update(camera.get('tracks') or [], now, {i: p['birthday'] for i, p in people.items()}, datetime.fromtimestamp(now, TZ).date())
+        if greeting:
+            info.update(greet=greeting['name'], greet_id=greeting['id'])
+            if greeting.get('birthday'):
+                info.update(greet_kind='birthday', age=greeting['age'])
+    return info
+
+
+notebook.vigia = vigia_for_kitchen
 push.people = lambda camera_id: cameras.get(camera_id).snapshot()['tracks']
 
 
@@ -113,7 +145,7 @@ async def protect(request: Request, call_next):
             return JSONResponse({'detail': 'Entre novamente para continuar.'}, status_code=401)
         user = request.state.user
         if user and user['role'] != 'admin':
-            if request.method not in ('GET', 'HEAD', 'OPTIONS') and path not in FAMILY_WRITES or path.startswith(('/api/users', '/api/backup', '/api/learning', '/api/storage')):
+            if request.method not in ('GET', 'HEAD', 'OPTIONS') and path not in FAMILY_WRITES and not path.startswith('/api/reminders') or path.startswith(('/api/users', '/api/backup', '/api/learning', '/api/storage')):
                 return JSONResponse({'detail': 'Seu acesso é somente para visualização. Peça a um administrador.'}, status_code=403)
     # Prevent other sites from changing local settings through the browser.
     if request.method not in ('GET', 'HEAD', 'OPTIONS'):
@@ -164,6 +196,40 @@ def save_settings(settings: Settings, camera_id: str = 'main'):
     # Start fetching/converting the chosen detector now, even if the camera is stopped.
     detectors.prepare(settings.detector_model, settings.detector_engine, settings.fall_detection_enabled, settings.detection_size, retry=True)
     return config.for_camera(camera_id)
+
+
+class ReminderIn(BaseModel):
+    text: str = Field(min_length=1, max_length=200)
+    hours: int = Field(ge=1, le=24 * 14)
+
+
+def reminder_view(row, user):
+    return {'id': row['id'], 'author': row['author'], 'text': row['text'], 'created': row['created'], 'expires': row['expires'],
+            'mine': bool(user) and (user['role'] == 'admin' or user['id'] == row['user_id'])}
+
+
+@app.get('/api/reminders')
+def list_reminders(request: Request):
+    return {'reminders': [reminder_view(r, request.state.user) for r in reminders.active()]}
+
+
+@app.post('/api/reminders')
+def add_reminder(body: ReminderIn, request: Request):
+    user = request.state.user
+    call_service(reminders.add, user['name'] if user else 'Casa', user['id'] if user else None, body.text, body.hours)
+    return {'reminders': [reminder_view(r, user) for r in reminders.active()]}
+
+
+@app.delete('/api/reminders/{reminder_id}')
+def delete_reminder(reminder_id: str, request: Request):
+    user = request.state.user
+    try:
+        reminders.delete(reminder_id, user['id'] if user else None, bool(user) and user['role'] == 'admin' or not user)
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc))
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
+    return {'ok': True}
 
 
 @app.get('/api/resources')

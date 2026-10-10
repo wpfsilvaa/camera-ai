@@ -21,6 +21,10 @@ class PersonName(BaseModel):
     name: str = Field(min_length=1, max_length=60)
 
 
+class PersonBirthday(BaseModel):
+    birthday: str | None = Field(default=None, max_length=10)
+
+
 class PersonConfirmation(BaseModel):
     person_id: str | None = None
     sample_id: str | None = None
@@ -67,6 +71,11 @@ def build(recognition, learning):
         if not body.name.strip():
             raise HTTPException(422, 'Informe um nome.')
         call_service(recognition.rename_person, person_id, body.name.strip())
+        return {'ok': True}
+
+    @router.put('/api/people/{person_id}/birthday')
+    def set_birthday(person_id: str, body: PersonBirthday):
+        call_service(recognition.set_birthday, person_id, body.birthday or None)
         return {'ok': True}
 
     @router.delete('/api/people/{person_id}')

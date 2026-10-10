@@ -84,3 +84,78 @@ def in_window(hour, start, end):
     if start == end:
         return False
     return start <= hour < end if start < end else hour >= start or hour < end
+
+
+def vigia_state(enabled, start, end, hour, resting):
+    """Watch-mode state shown on the dashboard and the kitchen screen.
+
+    off: switched off; resting: reading at the low rate; analysing: inside its hours but someone/something
+    moved so the detector is running; scheduled: switched on, waiting for its hours.
+    """
+    if not enabled:
+        return 'off'
+    if resting:
+        return 'resting'
+    return 'analysing' if in_window(hour, start, end) else 'scheduled'
+
+
+def is_night(settings, hour):
+    """Night for the kitchen screen: the watch-mode hours when it is on, else the quiet hours of the alerts."""
+    if settings.sentinel_enabled:
+        return in_window(hour, settings.sentinel_start_hour, settings.sentinel_end_hour)
+    return in_window(hour, settings.quiet_start_hour, settings.quiet_end_hour)
+
+
+GREET_SECONDS = 10      # How long the kitchen screen greets someone.
+BIRTHDAY_SECONDS = 25   # ... and on their birthday.
+GREET_COOLDOWN = 1800   # The same person is greeted again only after this long.
+
+
+def first_name(name):
+    """What the screen says: the first name, without "Meu"/"Minha" from profiles like "Meu pai"."""
+    words = [w for w in str(name).split() if w]
+    if len(words) > 1 and words[0].lower() in ('meu', 'minha'):
+        words = words[1:]
+    return (words[0] if words else '')[:30]
+
+
+def birthday_today(birthday, today):
+    """Age turning today (0 when the year is unknown) if `birthday` (YYYY-MM-DD) falls on `today`, else None."""
+    try:
+        year, month, day = (int(part) for part in str(birthday).split('-'))
+    except ValueError:
+        return None
+    if (month, day) == (today.month, today.day) or (month, day) == (2, 29) and (today.month, today.day) == (3, 1) and not _leap(today.year):
+        return max(today.year - year, 0)
+    return None
+
+
+def _leap(year):
+    return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+
+
+class Greeter:
+    """Picks who the kitchen screen should greet: a recognised person not greeted recently."""
+
+    def __init__(self, seconds=GREET_SECONDS, cooldown=GREET_COOLDOWN):
+        self.seconds, self.cooldown = seconds, cooldown
+        self.last = {}
+        self.current = None
+
+    def update(self, tracks, now, birthdays=None, today=None):
+        """tracks: [{'person_id', 'name'}] visible now; birthdays: {person_id: 'YYYY-MM-DD'}.
+
+        Returns {'name', 'id'} (plus 'birthday' and 'age' on their birthday) while a greeting is due.
+        """
+        for track in tracks:
+            person, name = track.get('person_id'), first_name(track.get('name') or '')
+            if person and name and now - self.last.get(person, -self.cooldown) >= self.cooldown:
+                self.last[person] = now
+                age = birthday_today((birthdays or {}).get(person), today) if today and birthdays else None
+                self.current = {'name': name, 'id': int(now), 'until': now + (BIRTHDAY_SECONDS if age is not None else self.seconds)}
+                if age is not None:
+                    self.current.update(birthday=True, age=age)
+                break
+        if self.current and now < self.current['until']:
+            return {k: v for k, v in self.current.items() if k != 'until'}
+        return None

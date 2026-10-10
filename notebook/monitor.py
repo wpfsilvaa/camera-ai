@@ -53,8 +53,48 @@ def reading():
 # A call nobody answered stops ringing after this long ("panic" keeps ringing until someone answers or he cancels).
 MISSED_AFTER = 300
 RESULT_SECONDS = 10  # How long "call ended / missed" stays on the kiosk screen.
+VIGIA_STATES = ('off', 'resting', 'analysing', 'scheduled')
+GREET_SECONDS = 10
+BIRTHDAY_SECONDS = 25
 LINK_SECONDS = 30  # The panel polls every few seconds; silence longer than this means calls would go nowhere.
 KINDS = ('call', 'panic')
+
+
+def parse_birthdays(text):
+    """[{'n', 'd'}] from the dashboard's JSON, keeping only well-formed entries."""
+    try:
+        items = json.loads(text) if text else []
+    except ValueError:
+        return []
+    found = []
+    for item in items[:20] if isinstance(items, list) else []:
+        name, day = (str(item.get('n', '')) if isinstance(item, dict) else ''), (str(item.get('d', '')) if isinstance(item, dict) else '')
+        name = ''.join(ch for ch in name if ch.isprintable())[:30].strip()
+        if name and len(day) == 5 and day[2] == '-' and day[:2].isdigit() and day[3:].isdigit():
+            found.append({'n': name, 'd': day})
+    return found
+
+
+def parse_reminders(text):
+    """[{'i', 'a', 't', 'e'}] from the dashboard's JSON: id, author, text, expiry (epoch seconds)."""
+    try:
+        items = json.loads(text) if text else []
+    except ValueError:
+        return []
+    found = []
+    for item in items[:10] if isinstance(items, list) else []:
+        if not isinstance(item, dict) or not isinstance(item.get('e'), (int, float)):
+            continue
+        body = ''.join(ch for ch in str(item.get('t', '')) if ch.isprintable())[:200].strip()
+        if body:
+            found.append({'i': str(item.get('i', ''))[:12], 'a': ''.join(ch for ch in str(item.get('a', '')) if ch.isprintable())[:30], 't': body, 'e': float(item['e'])})
+    return found
+
+
+def build():
+    """Changes whenever a kiosk file changes, so an open screen reloads itself after an update."""
+    times = [int((KIOSK / name).stat().st_mtime) for name in ('index.html', 'kiosk.css', 'kiosk.js') if (KIOSK / name).is_file()]
+    return str(max(times, default=0))
 
 
 class Desk:
@@ -65,11 +105,34 @@ class Desk:
         self.call = None
         self.last_poll = 0
         self.enabled = {'call': False, 'panic': False}
+        self.vigia = None   # (state, night, received_at) from the dashboard's last poll.
+        self.greet = None   # {'name', 'id', 'until', 'birthday', 'age'}: shown once per id.
+        self.bdays = []     # [{'n': first name, 'd': 'MM-DD'}] for the calendar.
+        self.reminders = []  # [{'i', 'a', 't', 'e'}]: notes cycled on the screen until their expiry.
 
-    def configure(self, call, panic):
+    def configure(self, call, panic, vigia=None, night=False, greet='', greet_id='', kind='', age='', bdays='', reminders=''):
         with self.lock:
-            self.last_poll = self.clock()
+            now = self.last_poll = self.clock()
             self.enabled = {'call': call, 'panic': panic}
+            self.vigia = (vigia, night, now) if vigia in VIGIA_STATES else None
+            name = ''.join(ch for ch in greet if ch.isprintable())[:30].strip()
+            if name and (not self.greet or self.greet['id'] != greet_id):
+                birthday = kind == 'birthday'
+                self.greet = {'name': name, 'id': greet_id, 'until': now + (BIRTHDAY_SECONDS if birthday else GREET_SECONDS),
+                              'birthday': birthday, 'age': int(age) if age.isdigit() and 0 < int(age) < 130 else 0}
+            self.bdays = parse_birthdays(bdays)
+            self.reminders = parse_reminders(reminders)
+
+    def display(self):
+        """Watch-mode state, night tone and greeting for the kitchen screen; stale data is dropped."""
+        with self.lock:
+            now, vigia = self.clock(), self.vigia
+            fresh = vigia is not None and now - vigia[2] < LINK_SECONDS
+            greet = self.greet if self.greet and now < self.greet['until'] else None
+            return {'vigia': vigia[0] if fresh else None, 'night': bool(vigia[1]) if fresh else False,
+                    'greet': {k: greet[k] for k in ('name', 'id', 'birthday', 'age')} if greet else None,
+                    'bdays': self.bdays if fresh else [],
+                    'reminders': [r for r in self.reminders if r['e'] > now] if fresh else []}
 
     def linked(self):
         return self.clock() - self.last_poll < LINK_SECONDS
@@ -142,14 +205,17 @@ class Handler(BaseHTTPRequestHandler):
         url = urlsplit(self.path)
         if url.path == '/status' and self.authorized():
             query = parse_qs(url.query)
-            self.desk.configure(query.get('call') == ['1'], query.get('panic') == ['1'])
+            self.desk.configure(query.get('call') == ['1'], query.get('panic') == ['1'], (query.get('vigia') or [None])[0],
+                                query.get('night') == ['1'], (query.get('greet') or [''])[0], (query.get('greet_id') or [''])[0],
+                                (query.get('greet_kind') or [''])[0], (query.get('age') or [''])[0], (query.get('bdays') or [''])[0], (query.get('reminders') or [''])[0])
             return self.reply(200, {**reading(), 'call': self.desk.snapshot()})
         if not self.local():
             return self.send_error(404)
         if url.path == '/state':
             info = reading()
             return self.reply(200, {'call': self.desk.snapshot(), 'linked': self.desk.linked(), 'enabled': self.desk.enabled,
-                                    'battery': info['battery'], 'plugged': info['plugged'], 'now': time.time()})
+                                    'battery': info['battery'], 'plugged': info['plugged'], 'now': time.time(), **self.desk.display(),
+                                    'build': build()})
         entry = self.kiosk_files.get(url.path)
         if entry and (KIOSK / entry[0]).is_file():
             return self.reply(200, body=(KIOSK / entry[0]).read_bytes(), kind=entry[1])
