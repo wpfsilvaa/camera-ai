@@ -1,4 +1,4 @@
-// Resource monitor in Settings > Sistema: tiles, a 3-line chart and the busiest processes.
+// Resource monitor beside "Rotina aprendida" on the overview: tiles, a 3-line chart and the busiest processes.
 const resNumber = (value, digits = 0) => value === null || value === undefined ? '–' : Number(value).toFixed(digits).replace('.', ',');
 const resBytes = bytes => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1).replace('.', ',')} GB` : `${Math.round(bytes / 1024 ** 2)} MB`;
 let resTimer = null;
@@ -39,7 +39,7 @@ function renderResourceTop(data) {
   const top = data.now?.top || [];
   $('#resources-top').innerHTML = top.length ? top.map(p => `<li><span>${p.name}</span><span>${resNumber(p.cpu)}% de um núcleo · ${resBytes(p.rss)}</span></li>`).join('') : '<li><span>Nenhum processo relevante agora.</span></li>';
   const camera = typeof status !== 'undefined' && status?.camera;
-  $('#resources-camera').textContent = camera && camera.detector ? `Detecção: ${camera.detector} · inferência ${resNumber(camera.inference_ms, 1)} ms · ${resNumber(camera.detection_fps, 1)} análises/s · vídeo ${resNumber(camera.fps, 1)} qps` : '';
+  $('#resources-camera').textContent = camera && camera.detector ? `${camera.sentinel ? 'Modo vigia ativo · ' : ''}Detecção: ${camera.detector} · inferência ${resNumber(camera.inference_ms, 1)} ms · ${resNumber(camera.detection_fps, 1)} análises/s · vídeo ${resNumber(camera.fps, 1)} qps` : '';
 }
 
 async function loadResources() {
@@ -50,11 +50,13 @@ async function loadResources() {
 
 function resourcesVisible() {
   const panel = $('#resources-panel');
-  return activePage === 'settings' && panel && !panel.classList.contains('hidden') && panel.offsetParent !== null && !document.hidden;
+  if (!panel) return false;
+  panel.classList.toggle('hidden', !isAdmin());   // Server numbers are for administrators.
+  return activePage === 'overview' && !panel.classList.contains('hidden') && !document.hidden;
 }
 
 $('#resources-minutes')?.addEventListener('change', () => loadResources().catch(() => {}));
 clearInterval(resTimer);
 resTimer = setInterval(() => { if (resourcesVisible()) loadResources().catch(() => {}); }, 5000);
-document.addEventListener('click', event => { if (event.target.closest('.settings-tab')) setTimeout(() => { if (resourcesVisible()) loadResources().catch(() => {}); }, 150); });
+setTimeout(() => { if (resourcesVisible()) loadResources().catch(() => {}); }, 2500);
 window.addEventListener('hashchange', () => setTimeout(() => { if (resourcesVisible()) loadResources().catch(() => {}); }, 300));

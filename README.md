@@ -45,6 +45,10 @@ Em **Configurações → Câmera**, **Modelo de detecção** (n, s, m, l: mais p
 
 Em **Endereço da câmera**, além de RTSP, aceita uma câmera USB ligada ao próprio servidor: escolha na lista (por exemplo `usb:/dev/v4l/by-id/...-video-index0`) ou digite `usb:/dev/video0`. Opcionalmente peça tamanho e taxa com `?1280x720@30` (padrão 1920x1080 a 30; usa MJPEG). Lendo direto do USB o servidor evita decodificar o H.264 do RTSP: no notebook da cozinha, 1080p custou cerca de 32% de um núcleo e 720p cerca de 16%. O dispositivo abre em um programa por vez: se o MediaMTX capturar a mesma câmera (caminho `cam`), ele precisa ser desligado, e o vídeo ao vivo do celular sem caixas, que vem dele, deixa de existir. Com câmera local, o monitor do notebook e o interfone passam a usar `127.0.0.1`.
 
+## Modo vigia (noite)
+
+Em **Configurações → Câmera → Modo vigia (noite)**, no horário escolhido (padrão 22h às 6h, Brasília) e enquanto não houver ninguém, a câmera é lida em ritmo baixo (padrão 5 quadros por segundo) e só o movimento acorda a análise; uma análise completa ainda roda a cada 30 s. No horário do modo a análise fica armada mesmo que tenha sido pausada na mão. O aviso de presença só sai depois que o detector confirma uma pessoa, pelos aparelhos que ativaram **Avisar quando alguém aparecer**. Com câmera USB o vídeo entre um quadro e outro nem é decodificado; em RTSP o ganho é menor. No notebook da cozinha, parado, o app foi de ~70% para ~40% de um núcleo.
+
 ## O que é contado
 
 - Um registro é um **período contínuo com alguma pessoa na imagem**, não uma pessoa única, identidade ou visitante.

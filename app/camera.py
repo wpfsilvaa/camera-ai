@@ -5,9 +5,12 @@ import threading
 import time
 import uuid
 from collections import deque
+from datetime import datetime
 from pathlib import Path
 
 from . import detectors
+from .db import TZ
+from .pacing import FORCE_SECONDS, SENTINEL_FORCE_SECONDS, in_window
 from .sources import local_device
 from .config import CLIPS, DATA, CAMERA_FIELDS
 os.environ.setdefault('YOLO_CONFIG_DIR', str(DATA / 'ultralytics'))
@@ -56,12 +59,24 @@ class LiveFrames:
         self.arrivals=deque(maxlen=90)
         self.consumed=0
         self.failed=False
+        # Seconds between decoded frames (0 = all). Frames in between are only grabbed: USB cameras skip
+        # the MJPEG decode, RTSP still decodes inside grab() but the rest of the pipeline sees fewer frames.
+        self.interval=0
         self.thread=threading.Thread(target=self.run,daemon=True,name='rtsp-reader')
         self.thread.start()
 
     def run(self):
+        last=0
         while not self.stopping.is_set():
+            if self.interval and time.monotonic()-last<self.interval:
+                if not self.capture.grab():
+                    with self.condition:
+                        self.failed=True
+                        self.condition.notify_all()
+                    return
+                continue
             ok,frame=self.capture.read()
+            last=time.monotonic()
             with self.condition:
                 if not ok:
                     self.failed=True
@@ -112,7 +127,7 @@ class CameraWorker:
         self.jpeg=None
         self.sequence=0
         self.status={'state':'paused','people':0,'last_frame':None,'event_id':None,'error':None,
-                     'inference_ms':None,'detection_fps':0,'fps':0,'frame_age_ms':None,'detector':None,'device':None,'gpu':None,'half':False,
+                     'inference_ms':None,'detection_fps':0,'fps':0,'frame_age_ms':None,'sentinel':False,'detector':None,'device':None,'gpu':None,'half':False,
                      'analysis_active':False,'manual_recording':False,'manual_requested':False,'manual_event_id':None,
                      'source_width':None,'source_height':None,'source_fps':None,'input_fps':None,'tracks':[],
                      'restricted_recording':False}
@@ -220,7 +235,7 @@ class CameraWorker:
             import sys
             torch=sys.modules.get('torch')
             if torch is not None and torch.cuda.is_initialized():torch.cuda.empty_cache()
-            self.update(detector=None,device=None,gpu=None,half=False,analysis_active=False)
+            self.update(sentinel=False,detector=None,device=None,gpu=None,half=False,analysis_active=False)
         cv2.setNumThreads(2)
         while not self.stop_event.is_set():
             settings=self.config.get()
@@ -274,6 +289,7 @@ class CameraWorker:
                 next_frame=next_detection=0
                 detected_boxes=[];detected_ids=[];last_inference_ms=None;detected_lying={}
                 detections=deque(maxlen=90)
+                sentinel_on=False
                 file_start=time.time()
                 file_frames=0
                 if not is_file:
@@ -284,6 +300,15 @@ class CameraWorker:
                     if not current.enabled or any(getattr(current,k)!=getattr(settings,k) for k in restart):
                         reason='settings_changed'
                         break
+                    # Watch mode keeps the analysis armed during its hours even when it was paused by hand.
+                    night=current.sentinel_enabled and in_window(datetime.now(TZ).hour,current.sentinel_start_hour,current.sentinel_end_hour)
+                    sentinel=bool(live and analysis_active and night and event_id is None and manual_event is None
+                        and not presence.active and presence.candidate is None and not detected_boxes and pacing.idle(time.time()))
+                    if sentinel!=sentinel_on:
+                        sentinel_on=sentinel
+                        if live:live.interval=1/current.sentinel_fps if sentinel else 0
+                        gate.force_seconds=SENTINEL_FORCE_SECONDS if sentinel else FORCE_SECONDS
+                        self.update(sentinel=sentinel)
                     lap_start=time.perf_counter()
                     if live:
                         ok,original,now=live.read()
@@ -305,7 +330,8 @@ class CameraWorker:
                     # Tolerance avoids accidentally reducing a 30 fps source to 15 fps.
                     next_frame=now+1/settings.fps-.003
                     lap=[lap_start,time.perf_counter()]  # Stage times, logged when the loop stalls.
-                    if analysis_active != current.analysis_enabled:
+                    wanted=current.analysis_enabled or night
+                    if analysis_active != wanted:
                         if event_id is not None:
                             recorder.finish(latest_time)
                             self.db.end_event(event_id,latest_time,'analysis_paused')
@@ -313,7 +339,7 @@ class CameraWorker:
                         presence=Presence(settings.min_presence_seconds,settings.absence_seconds)
                         self.recognition.stop()
                         self.recognition.reset_tracks()
-                        if not current.analysis_enabled:
+                        if not wanted:
                             release_model()
                         tracker=None
                         detected_boxes=[];detected_ids=[];last_inference_ms=None;detected_lying={}
@@ -321,7 +347,7 @@ class CameraWorker:
                         self.falls.reset()
                         zone=Presence(settings.min_presence_seconds,settings.absence_seconds)
                         self.restricted.reset()
-                        analysis_active=current.analysis_enabled
+                        analysis_active=wanted
                         self.update(analysis_active=analysis_active)
                     with self.lock:
                         manual_wanted=self.manual_requested

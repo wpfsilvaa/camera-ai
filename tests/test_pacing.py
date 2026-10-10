@@ -120,5 +120,50 @@ class MotionGateTests(unittest.TestCase):
         self.assertFalse(pacing.idle(102))
         self.assertTrue(pacing.idle(103.5))
 
+
+
+class SentinelTests(unittest.TestCase):
+    def test_window_wraps_past_midnight(self):
+        from app.pacing import in_window
+        self.assertTrue(in_window(23, 22, 6) and in_window(2, 22, 6) and in_window(22, 22, 6))
+        self.assertFalse(in_window(6, 22, 6) or in_window(12, 22, 6))
+        self.assertTrue(in_window(10, 8, 18) and not in_window(18, 8, 18))
+        self.assertFalse(in_window(3, 5, 5))   # Same hour: never.
+
+    def test_reader_only_grabs_between_decoded_frames(self):
+        import threading
+        import time as clock
+        from app.camera import LiveFrames
+
+        class Capture:
+            def __init__(self):
+                self.reads = self.grabs = 0
+                self.done = threading.Event()
+
+            def read(self):
+                self.reads += 1
+                clock.sleep(.002)
+                return True, object()
+
+            def grab(self):
+                self.grabs += 1
+                clock.sleep(.002)
+                if self.grabs > 150:
+                    self.done.set()
+                    return False
+                return True
+
+        capture = Capture()
+        live = LiveFrames.__new__(LiveFrames)
+        live.capture, live.condition, live.stopping = capture, threading.Condition(), threading.Event()
+        live.frame, live.timestamp, live.sequence, live.consumed, live.failed = None, 0, 0, 0, False
+        from collections import deque
+        live.arrivals, live.interval = deque(maxlen=90), .05
+        live.run()   # Runs until grab() reports a failure.
+        self.assertTrue(live.failed)
+        self.assertLess(capture.reads, 12)       # About one decoded frame per 50 ms, not one per frame.
+        self.assertGreater(capture.grabs, 100)
+
+
 if __name__ == '__main__':
     unittest.main()

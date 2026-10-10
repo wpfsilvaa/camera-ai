@@ -108,3 +108,9 @@ input,select,textarea{background:var(--surface);color:var(--ink);border-color:va
 .res-subtitle{font-size:12px!important;margin:16px 0 6px!important}
 .res-top{list-style:none;margin:0;padding:0}.res-top li{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--border);font-size:12px}
 .res-top li span:last-child{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+.routine-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px;margin-top:23px;align-items:start}
+.routine-grid .routine-panel{margin-top:0}
+.routine-grid .resources-panel:not(.hidden){display:block}
+@media(max-width:900px){.routine-grid{grid-template-columns:1fr}}
+.routine-grid:has(.resources-panel.hidden){grid-template-columns:1fr}

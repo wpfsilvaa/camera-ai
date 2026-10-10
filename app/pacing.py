@@ -46,6 +46,8 @@ class TouchThrottle:
 
 # Even a still room is fully analysed this often, so a person who sits or lies motionless is not missed.
 FORCE_SECONDS = 2.0
+# Watch mode (night): the room is checked for motion at a low frame rate; a full analysis still runs this often.
+SENTINEL_FORCE_SECONDS = 30.0
 MOTION_SIZE = (160, 90)
 PIXEL_DELTA = 20
 CHANGED_SHARE = .002  # share of pixels that must change to count as motion
@@ -75,3 +77,10 @@ class MotionGate:
             self.last_full = now
             return False
         return True
+
+
+def in_window(hour, start, end):
+    """True when the hour falls in [start, end), wrapping past midnight (22 to 6); start == end means never."""
+    if start == end:
+        return False
+    return start <= hour < end if start < end else hour >= start or hour < end

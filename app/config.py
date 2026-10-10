@@ -41,6 +41,12 @@ class CameraSettings(BaseModel):
     detection_fps: int = Field(default=30, ge=1, le=30)
     # Analysis rate while nobody is around; goes back to detection_fps when someone appears.
     idle_detection_fps: int = Field(default=15, ge=1, le=30)
+    # Watch mode: within the hours below, and while nobody is around, the camera is read at a low frame
+    # rate and only motion wakes the analysis. People are still confirmed by the detector before any notice.
+    sentinel_enabled: bool = False
+    sentinel_start_hour: int = Field(default=22, ge=0, le=23)
+    sentinel_end_hour: int = Field(default=6, ge=0, le=23)
+    sentinel_fps: int = Field(default=5, ge=1, le=15)
     # Skip the YOLO model on an empty, motionless room (a full analysis still runs every couple of seconds).
     motion_gate: bool = True
     preview_width: int = Field(default=1280, ge=640, le=1920)
