@@ -42,4 +42,4 @@ document.addEventListener('click', event => {
   if (remove && confirm('Remover esta foto da tela do notebook?')) action(remove, async () => { await api(`/api/photos/${remove.dataset.removePhoto}`, {method: 'DELETE'}); await loadPhotos(); });
 });
 setTimeout(() => loadPhotos().catch(() => {}), 1800);
-setInterval(() => { if (activePage === 'overview' && !document.hidden) loadPhotos().catch(() => {}); }, 30000);
+setInterval(() => { if (activePage === 'settings' && !document.hidden) loadPhotos().catch(() => {}); }, 30000);

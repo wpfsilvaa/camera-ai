@@ -23,7 +23,7 @@ from . import detectors, resources
 from .sources import usb_cameras
 from .config import CLIPS, DATA, ROOT, WA_URL, CameraSettings, ExtraCamera, Settings, config
 from .db import TZ, Database
-from .pacing import Greeter, first_name, is_night, vigia_state
+from .pacing import Greeter, first_name, kiosk_night, vigia_state
 from .jobs import Jobs
 from .learning import LearningSuggestions
 from .notebook import NotebookMonitor
@@ -77,7 +77,9 @@ def vigia_for_kitchen():
     hour = datetime.fromtimestamp(now, TZ).hour
     camera = next((c for c in cameras.snapshots() if c['id'] == 'main'), {})
     info = {'vigia': vigia_state(settings.sentinel_enabled, settings.sentinel_start_hour, settings.sentinel_end_hour, hour, bool(camera.get('sentinel'))),
-            'night': int(is_night(settings, hour))}
+            'night': int(kiosk_night(settings, hour)),
+            'cfg': json.dumps({'slide': settings.kiosk_slide_seconds, 'awake': settings.kiosk_awake_seconds, 'sounds': settings.kiosk_sounds,
+                               'calendar': settings.kiosk_calendar_enabled, 'hints': settings.kiosk_hints, 'black': settings.kiosk_night_mode == 'black'}, ensure_ascii=False)}
     notes = reminders.active(now)
     if notes:
         info['reminders'] = json.dumps([{'i': n['id'][:8], 'a': first_name(n['author']), 't': n['text'], 'e': round(n['expires'])} for n in notes[:10]], ensure_ascii=False)
@@ -85,7 +87,7 @@ def vigia_for_kitchen():
     if people:   # Names and month-day only: the screen marks them on its calendar.
         info['bdays'] = json.dumps([{'n': first_name(p['name']), 'd': p['birthday'][5:]} for p in people.values()][:20], ensure_ascii=False)
     if config.get().notebook_greeting_enabled:
-        greeting = greeter.update(camera.get('tracks') or [], now, {i: p['birthday'] for i, p in people.items()}, datetime.fromtimestamp(now, TZ).date())
+        greeting = greeter.update(camera.get('tracks') or [], now, {i: p['birthday'] for i, p in people.items()} if settings.kiosk_birthdays_enabled else None, datetime.fromtimestamp(now, TZ).date())
         if greeting:
             info.update(greet=greeting['name'], greet_id=greeting['id'])
             if greeting.get('birthday'):

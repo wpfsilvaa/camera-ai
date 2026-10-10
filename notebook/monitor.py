@@ -57,6 +57,7 @@ def reading():
 # A call nobody answered stops ringing after this long ("panic" keeps ringing until someone answers or he cancels).
 MISSED_AFTER = 300
 RESULT_SECONDS = 10  # How long "call ended / missed" stays on the kiosk screen.
+DEFAULT_CFG = {'slide': 15, 'awake': 30, 'sounds': 'normal', 'calendar': True, 'hints': [], 'black': True}
 VIGIA_STATES = ('off', 'resting', 'analysing', 'scheduled')
 GREET_SECONDS = 10
 BIRTHDAY_SECONDS = 25
@@ -95,6 +96,28 @@ def parse_reminders(text):
     return found
 
 
+def parse_cfg(text):
+    """Screen settings from the dashboard's JSON, each value checked and clamped; defaults for anything odd."""
+    cfg = dict(DEFAULT_CFG)
+    try:
+        data = json.loads(text) if text else {}
+    except ValueError:
+        return cfg
+    if not isinstance(data, dict):
+        return cfg
+    for key, low, high in (('slide', 5, 120), ('awake', 10, 300)):
+        if isinstance(data.get(key), int) and not isinstance(data.get(key), bool):
+            cfg[key] = min(max(data[key], low), high)
+    if data.get('sounds') in ('off', 'low', 'normal', 'high'):
+        cfg['sounds'] = data['sounds']
+    for key in ('calendar', 'black'):
+        if isinstance(data.get(key), bool):
+            cfg[key] = data[key]
+    if isinstance(data.get('hints'), list):
+        cfg['hints'] = [''.join(ch for ch in str(h) if ch.isprintable())[:120].strip() for h in data['hints'][:10] if str(h).strip()]
+    return cfg
+
+
 def photo_ids():
     """Photo ids on this screen, oldest upload first."""
     try:
@@ -121,10 +144,11 @@ class Desk:
         self.vigia = None   # (state, night, received_at) from the dashboard's last poll.
         self.greet = None   # {'name', 'id', 'until', 'birthday', 'age'}: shown once per id.
         self.bdays = []     # [{'n': first name, 'd': 'MM-DD'}] for the calendar.
+        self.cfg = dict(DEFAULT_CFG)   # Screen settings from the dashboard.
         self.frame = False   # Photo frame switched on in the dashboard's settings.
         self.reminders = []  # [{'i', 'a', 't', 'e'}]: notes cycled on the screen until their expiry.
 
-    def configure(self, call, panic, vigia=None, night=False, greet='', greet_id='', kind='', age='', bdays='', reminders='', frame=False):
+    def configure(self, call, panic, vigia=None, night=False, greet='', greet_id='', kind='', age='', bdays='', reminders='', frame=False, cfg=''):
         with self.lock:
             now = self.last_poll = self.clock()
             self.enabled = {'call': call, 'panic': panic}
@@ -137,6 +161,7 @@ class Desk:
             self.bdays = parse_birthdays(bdays)
             self.reminders = parse_reminders(reminders)
             self.frame = bool(frame)
+            self.cfg = parse_cfg(cfg)
 
     def display(self):
         """Watch-mode state, night tone and greeting for the kitchen screen; stale data is dropped."""
@@ -148,7 +173,7 @@ class Desk:
                     'greet': {k: greet[k] for k in ('name', 'id', 'birthday', 'age')} if greet else None,
                     'bdays': self.bdays if fresh else [],
                     'reminders': [r for r in self.reminders if r['e'] > now] if fresh else [],
-                    'frame': self.frame if fresh else False, 'photos': photo_ids() if fresh and self.frame else []}
+                    'cfg': self.cfg if fresh else dict(DEFAULT_CFG), 'frame': self.frame if fresh else False, 'photos': photo_ids() if fresh and self.frame else []}
 
     def linked(self):
         return self.clock() - self.last_poll < LINK_SECONDS
@@ -223,7 +248,7 @@ class Handler(BaseHTTPRequestHandler):
             query = parse_qs(url.query)
             self.desk.configure(query.get('call') == ['1'], query.get('panic') == ['1'], (query.get('vigia') or [None])[0],
                                 query.get('night') == ['1'], (query.get('greet') or [''])[0], (query.get('greet_id') or [''])[0],
-                                (query.get('greet_kind') or [''])[0], (query.get('age') or [''])[0], (query.get('bdays') or [''])[0], (query.get('reminders') or [''])[0], query.get('frame') == ['1'])
+                                (query.get('greet_kind') or [''])[0], (query.get('age') or [''])[0], (query.get('bdays') or [''])[0], (query.get('reminders') or [''])[0], query.get('frame') == ['1'], (query.get('cfg') or [''])[0])
             return self.reply(200, {**reading(), 'call': self.desk.snapshot()})
         if url.path == '/photos' and self.authorized():
             return self.reply(200, {'ids': photo_ids()})

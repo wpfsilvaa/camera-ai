@@ -4,9 +4,14 @@
   const screen = $('screen');
   let last = {call: {state: 'idle'}}, confirming = false, face = null, faceTimer = null;
   let build = null, greetedId = null, greetTimer = null;
+  const DEFAULT_CFG = {slide: 15, awake: 30, sounds: 'normal', calendar: true, hints: [], black: true};
+  const cfg = () => ({...DEFAULT_CFG, ...(last.cfg || {})});
+
   // Sounds generated here (no files): confirm beep, ringback while calling, chimes when answered or over.
   let audio = null, ringTimer = null, shownView = 'idle';
   function tone(freq, at, length, volume = 0.22) {
+    volume *= {off: 0, low: 0.4, normal: 1, high: 1.8}[cfg().sounds] ?? 1;
+    if (volume <= 0) return;
     audio = audio || new (window.AudioContext || window.webkitAudioContext)();
     if (audio.state === 'suspended') audio.resume().catch(() => {});
     const osc = audio.createOscillator(), gain = audio.createGain(), start = audio.currentTime + at;
@@ -155,10 +160,10 @@
 
   // Photo frame --------------------------------------------------------------
   // By day an idle screen shows the family photos; at night it is black. Touch, mouse or key brings the buttons back.
-  const AWAKE_MS = 30000, SLIDE_MS = 15000;
+  let slideMs = 0;
   let awakeUntil = 0, swallowClick = false, order = [], active = 'a', slideTimer = null, hintTimer = null, hintIndex = 0, lastMove = 0;
 
-  function wake() { awakeUntil = Date.now() + AWAKE_MS; render(); }
+  function wake() { awakeUntil = Date.now() + cfg().awake * 1000; render(); }
   document.addEventListener('pointerdown', event => {
     if (screen.dataset.mode !== 'ui') { swallowClick = true; event.preventDefault(); event.stopPropagation(); }
     wake();
@@ -194,13 +199,15 @@
       if (m - 1 === today.getMonth() && d === today.getDate()) list.push(`🎂 Hoje é aniversário de ${b.n}!`);
       else if (same(new Date(today.getFullYear(), m - 1, d), addDays(today, 1))) list.push(`🎂 Amanhã é aniversário de ${b.n}`);
     }
+    list.push(...cfg().hints);
     list.push(now.toLocaleDateString('pt-BR', {weekday: 'long', day: 'numeric', month: 'long'}));
     return list;
   }
 
   function startFrame(on) {
     if (on && !slideTimer) {
-      nextSlide(); slideTimer = setInterval(nextSlide, SLIDE_MS);
+      slideMs = cfg().slide * 1000;
+      nextSlide(); slideTimer = setInterval(nextSlide, slideMs);
       const showHint = () => {
         const list = hints(), box = $('frame-hint');
         box.style.opacity = 0;
@@ -215,7 +222,8 @@
   function applyMode(view) {
     const awake = Date.now() < awakeUntil, photos = last.photos || [];
     let mode = 'ui';
-    if (view === 'idle' && last.frame && !awake) mode = last.night ? 'black' : photos.length ? 'frame' : 'ui';
+    if (view === 'idle' && last.frame && !awake) mode = last.night && cfg().black ? 'black' : photos.length ? 'frame' : 'ui';
+    if (slideTimer && slideMs !== cfg().slide * 1000) startFrame(false);   // The interval changed in the settings.
     screen.dataset.mode = mode;
     $('frame').classList.toggle('hidden', mode !== 'frame');
     startFrame(mode === 'frame');
@@ -243,7 +251,8 @@
   let calendarKey = '';
   function renderCalendar() {
     const box = $('calendar'), now = new Date(), bdays = last.bdays || [];
-    const key = `${now.toDateString()}|${JSON.stringify(bdays)}`;
+    box.classList.toggle('hidden', !cfg().calendar);
+    const key = `${now.toDateString()}|${JSON.stringify(bdays)}|${cfg().calendar}`;
     if (key === calendarKey) return;
     calendarKey = key;
     const year = now.getFullYear(), month = now.getMonth();

@@ -99,11 +99,9 @@ def vigia_state(enabled, start, end, hour, resting):
     return 'analysing' if in_window(hour, start, end) else 'scheduled'
 
 
-def is_night(settings, hour):
-    """Night for the kitchen screen: the watch-mode hours when it is on, else the quiet hours of the alerts."""
-    if settings.sentinel_enabled:
-        return in_window(hour, settings.sentinel_start_hour, settings.sentinel_end_hour)
-    return in_window(hour, settings.quiet_start_hour, settings.quiet_end_hour)
+def kiosk_night(settings, hour):
+    """Whether the kitchen screen is in its night look: inside the totem's night hours and not set to "normal"."""
+    return settings.kiosk_night_mode != 'normal' and in_window(hour, settings.kiosk_night_start_hour, settings.kiosk_night_end_hour)
 
 
 GREET_SECONDS = 10      # How long the kitchen screen greets someone.

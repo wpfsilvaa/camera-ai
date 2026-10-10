@@ -9,7 +9,7 @@ TEMP = tempfile.TemporaryDirectory()
 os.environ['CAMERA_DATA_DIR'] = TEMP.name
 
 from app.db import Database
-from app.pacing import Greeter, birthday_today, first_name, is_night, vigia_state
+from app.pacing import Greeter, birthday_today, first_name, kiosk_night, vigia_state
 from app.config import Settings
 from app.recognition import Recognition
 from app.reminders import Reminders
@@ -25,11 +25,11 @@ class VigiaTests(unittest.TestCase):
         self.assertEqual(vigia_state(True, 22, 6, 23, False), 'analysing')
         self.assertEqual(vigia_state(True, 22, 6, 12, False), 'scheduled')
 
-    def test_night_follows_watch_mode_then_quiet_hours(self):
-        settings = Settings(sentinel_enabled=True, sentinel_start_hour=20, sentinel_end_hour=5)
-        self.assertTrue(is_night(settings, 21) and not is_night(settings, 12))
-        plain = Settings()   # Watch mode off: the default quiet hours (22h to 7h) apply.
-        self.assertTrue(is_night(plain, 23) and not is_night(plain, 15))
+    def test_kiosk_night_uses_its_own_hours_and_mode(self):
+        settings = Settings(kiosk_night_start_hour=21, kiosk_night_end_hour=6)
+        self.assertTrue(kiosk_night(settings, 23) and kiosk_night(settings, 3) and not kiosk_night(settings, 12))
+        self.assertFalse(kiosk_night(Settings(kiosk_night_mode='normal'), 23))   # "Same as day": never night.
+        self.assertTrue(kiosk_night(Settings(kiosk_night_mode='red'), 23))
 
 
 class GreetingTests(unittest.TestCase):
@@ -122,6 +122,12 @@ class MonitorDisplayTests(unittest.TestCase):
         clock[0] += 10
         self.assertEqual(desk.display()['vigia'], None)                              # No poll for over 30 s: stale.
         self.assertEqual(desk.display()['reminders'], [])
+
+    def test_screen_settings_are_validated_and_clamped(self):
+        self.assertEqual(monitor.parse_cfg(''), monitor.DEFAULT_CFG)
+        cfg = monitor.parse_cfg('{"slide":9999,"awake":1,"sounds":"loud","calendar":false,"black":"yes","hints":["Oi","","x"]}')
+        self.assertEqual((cfg['slide'], cfg['awake'], cfg['sounds'], cfg['calendar'], cfg['black'], cfg['hints']), (120, 10, 'normal', False, True, ['Oi', 'x']))
+        self.assertEqual(monitor.parse_cfg('[1]'), monitor.DEFAULT_CFG)
 
     def test_rejects_unknown_states_and_bad_json(self):
         desk = monitor.Desk()

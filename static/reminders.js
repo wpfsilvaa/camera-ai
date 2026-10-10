@@ -12,9 +12,9 @@ async function loadReminders() {
   list.innerHTML = data.reminders.length ? data.reminders.map(item => `<li><div><strong>${escapeHTML(item.text)}</strong><small>${escapeHTML(item.author)} · some em ${reminderLeft(item.expires)}</small></div>${item.mine ? `<button type="button" class="text-button" data-remove-reminder="${item.id}">Remover</button>` : ''}</li>`).join('') : '<li class="muted small">Nenhum lembrete ativo.</li>';
 }
 
-$('#reminder-form')?.addEventListener('submit', event => {
-  event.preventDefault();
-  action(event.submitter || event.currentTarget.querySelector('button'), async () => {
+$('#reminder-add')?.addEventListener('click', event => {
+  if (!$('#reminder-text').value.trim()) { toast('Escreva o lembrete antes de deixar.', true); return; }
+  action(event.currentTarget, async () => {
     await api('/api/reminders', {method: 'POST', body: JSON.stringify({text: $('#reminder-text').value.trim(), hours: Number($('#reminder-hours').value)})});
     $('#reminder-text').value = '';
     toast('Lembrete deixado. Ele aparece na tela do notebook em instantes.');
@@ -26,4 +26,4 @@ document.addEventListener('click', event => {
   if (remove) action(remove, async () => { await api(`/api/reminders/${remove.dataset.removeReminder}`, {method: 'DELETE'}); await loadReminders(); });
 });
 setTimeout(() => loadReminders().catch(() => {}), 1500);
-setInterval(() => { if (activePage === 'overview' && !document.hidden) loadReminders().catch(() => {}); }, 15000);
+setInterval(() => { if (activePage === 'settings' && !document.hidden) loadReminders().catch(() => {}); }, 15000);

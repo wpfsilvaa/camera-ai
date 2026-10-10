@@ -172,6 +172,35 @@ class Settings(CameraSettings):
     notebook_greeting_enabled: bool = True
     # Idle kitchen screen: family photos by day (buttons appear on touch), black at night.
     notebook_photo_frame_enabled: bool = True
+    kiosk_slide_seconds: int = Field(default=15, ge=5, le=120)       # Seconds each photo stays on screen.
+    kiosk_awake_seconds: int = Field(default=30, ge=10, le=300)      # Buttons stay this long after a touch.
+    kiosk_night_start_hour: int = Field(default=22, ge=0, le=23)
+    kiosk_night_end_hour: int = Field(default=6, ge=0, le=23)
+    kiosk_night_mode: str = 'black'                                  # black screen, red tones, or no night look.
+    kiosk_sounds: str = 'normal'                                     # off, low, normal or high.
+    kiosk_calendar_enabled: bool = True
+    kiosk_birthdays_enabled: bool = True
+    kiosk_hints: list[str] = Field(default_factory=list, max_length=10)   # Extra messages cycled on the photo frame.
+
+    @field_validator('kiosk_night_mode')
+    @classmethod
+    def kiosk_night_valid(cls, value):
+        if value not in ('black', 'red', 'normal'):
+            raise ValueError('Escolha como a tela fica à noite.')
+        return value
+
+    @field_validator('kiosk_sounds')
+    @classmethod
+    def kiosk_sounds_valid(cls, value):
+        if value not in ('off', 'low', 'normal', 'high'):
+            raise ValueError('Escolha o volume dos sons da tela.')
+        return value
+
+    @field_validator('kiosk_hints')
+    @classmethod
+    def kiosk_hints_valid(cls, lines):
+        cleaned = [' '.join(str(line).split())[:120] for line in lines]
+        return [line for line in cleaned if line]
     notebook_battery_percent: int = Field(default=20, ge=5, le=60)
     notebook_unplugged_minutes: int = Field(default=15, ge=0, le=240)
     notebook_offline_minutes: int = Field(default=5, ge=0, le=240)
