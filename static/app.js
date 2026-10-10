@@ -107,16 +107,23 @@ function route() {
 $$('[data-go]').forEach(button => button.addEventListener('click', () => { location.hash = button.dataset.go; }));
 window.addEventListener('hashchange', route);
 
-// Watch mode badge above the camera: green when it is on, red when off.
+// Watch mode badge next to "Ao vivo": red = off, pulsing green = armed and resting, pulsing amber = motion, analysing.
 function renderVigia(camera) {
-  const label = $('#vigia-label');
-  if (!label || !settings) return;
+  const badge = $('#vigia-badge');
+  if (!badge || !settings) return;
   const on = !!settings.sentinel_enabled, hour = Number(new Date().toLocaleString('en-GB', {timeZone: 'America/Sao_Paulo', hour: '2-digit', hourCycle: 'h23'}));
   const start = settings.sentinel_start_hour, end = settings.sentinel_end_hour;
   const inside = start === end ? false : start < end ? hour >= start && hour < end : hour >= start || hour < end;
   const hours = `${String(start).padStart(2, '0')}h às ${String(end).padStart(2, '0')}h`;
-  label.classList.toggle('on', on); label.classList.toggle('off', !on);
-  $('#vigia-text').textContent = !on ? 'Modo vigia desativado' : camera.sentinel ? `Modo vigia ativo · ${hours} · vigiando agora, poupando energia` : inside ? `Modo vigia ativo · ${hours} · há movimento, analisando` : `Modo vigia ativo · ${hours} · começa mais tarde`;
+  const state = !on ? 'off' : camera.sentinel ? 'resting' : inside ? 'analysing' : 'scheduled';
+  badge.className = `vigia-badge ${state}`;
+  badge.querySelector('.vigia-shield').classList.toggle('hidden', state === 'analysing');
+  badge.querySelector('.vigia-eye').classList.toggle('hidden', state !== 'analysing');
+  $('#vigia-text').textContent = {off: 'Vigia desativado', resting: 'Vigia ativo', analysing: 'Vigia analisando', scheduled: 'Vigia agendado'}[state];
+  badge.title = {off: 'Modo vigia desligado. Ative em Configurações → Câmera.',
+    resting: `Modo vigia ativo (${hours}): lendo a câmera em ritmo baixo, poupando energia.`,
+    analysing: `Modo vigia ativo (${hours}): há movimento, o detector está analisando.`,
+    scheduled: `Modo vigia ativo, começa às ${String(start).padStart(2, '0')}h (termina às ${String(end).padStart(2, '0')}h).`}[state];
 }
 function renderStatus() {
   const {camera, whatsapp, stats} = status;

@@ -115,8 +115,13 @@ input,select,textarea{background:var(--surface);color:var(--ink);border-color:va
 @media(max-width:900px){.routine-grid{grid-template-columns:1fr}}
 .routine-grid:has(.resources-panel.hidden){grid-template-columns:1fr}
 
-/* Watch mode badge above the camera */
-.vigia-label{display:flex;align-items:center;gap:8px;margin:0 10px 10px;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;border:1px solid transparent}
-.vigia-label.on{background:var(--green-bg);color:var(--green-ink);border-color:var(--green-ink)}
-.vigia-label.off{background:var(--red-bg);color:var(--red-ink);border-color:var(--red-ink)}
-.vigia-dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex-shrink:0}
+/* Watch mode badge next to "Ao vivo" */
+.heading-pills{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.vigia-badge{display:inline-flex;align-items:center;gap:6px;border-radius:5px;padding:4px 8px;font-size:11px;font-weight:600;white-space:nowrap;border:1px solid transparent}
+.vigia-icon{width:14px;height:14px;flex-shrink:0}
+.vigia-badge.off{background:var(--red-bg);color:var(--red-ink);border-color:var(--red-ink)}
+.vigia-badge.resting,.vigia-badge.scheduled{background:var(--green-bg);color:var(--green-ink);border-color:var(--green-ink)}
+.vigia-badge.analysing{background:var(--amber-bg);color:var(--amber-ink);border-color:var(--amber)}
+.vigia-badge.resting,.vigia-badge.analysing{animation:vigia-pulse 1.8s ease-in-out infinite}
+.vigia-badge.analysing{animation-duration:.9s}
+@keyframes vigia-pulse{0%,100%{box-shadow:0 0 0 0 currentColor}50%{box-shadow:0 0 0 4px transparent;opacity:.72}}
