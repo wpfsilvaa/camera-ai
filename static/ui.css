@@ -90,3 +90,21 @@ input,select,textarea{background:var(--surface);color:var(--ink);border-color:va
 .call-actions{display:flex;gap:8px}
 @keyframes ring{0%,100%{transform:none}50%{transform:scale(1.008)}}
 @media(max-width:500px){.call-banner{top:4px}.call-actions,.call-actions .button{width:100%}}
+
+/* Resource monitor (Settings > Sistema) */
+.res-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.res-tile{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--surface-2)}
+.res-tile span{display:block;font-size:11px;color:var(--muted)}
+.res-tile strong{display:block;font-size:22px;font-weight:550;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+.res-tile small{display:block;font-size:11px;color:var(--muted)}
+.res-tile.warn{background:var(--amber-bg);border-color:var(--amber)}.res-tile.hot{background:var(--red-bg);border-color:var(--red-ink)}
+.res-chart{height:150px;margin-top:14px}.res-chart svg{width:100%;height:100%;overflow:visible}
+.res-chart .grid{stroke:var(--border);stroke-dasharray:3 4}.res-chart text{font-size:10px;fill:var(--muted)}
+.res-chart polyline{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.res-chart .l-cpu{stroke:var(--accent-line)}.res-chart .l-mem{stroke:var(--amber)}.res-chart .l-temp{stroke:var(--red-ink)}
+.res-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:6px}
+.res-legend i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.res-cpu{background:var(--accent-line)}.res-mem{background:var(--amber)}.res-temp{background:var(--red-ink)}
+.res-subtitle{font-size:12px!important;margin:16px 0 6px!important}
+.res-top{list-style:none;margin:0;padding:0}.res-top li{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--border);font-size:12px}
+.res-top li span:last-child{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}

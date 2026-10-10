@@ -18,7 +18,7 @@ from .alerts import Alerts, in_quiet_hours
 from .auth import COOKIE, SAME_SITE, Auth
 from .backup import Backups
 from .cameras import CameraManager
-from . import detectors
+from . import detectors, resources
 from .sources import usb_cameras
 from .config import CLIPS, DATA, ROOT, WA_URL, CameraSettings, ExtraCamera, Settings, config
 from .db import TZ, Database
@@ -77,7 +77,9 @@ async def lifespan(app):
     db.execute("UPDATE events SET camera_name=? WHERE camera_name='' AND camera_id='main'", (config.get().camera_name,))
     cameras.start()
     jobs.start()
+    resources.monitor.start()
     yield
+    resources.monitor.stop()
     offline.cancel()
     cameras.stop()
     jobs.stop()
@@ -162,6 +164,11 @@ def save_settings(settings: Settings, camera_id: str = 'main'):
     # Start fetching/converting the chosen detector now, even if the camera is stopped.
     detectors.prepare(settings.detector_model, settings.detector_engine, settings.fall_detection_enabled, settings.detection_size, retry=True)
     return config.for_camera(camera_id)
+
+
+@app.get('/api/resources')
+def resource_usage(minutes: int = Query(30, ge=5, le=60)):
+    return resources.monitor.snapshot(minutes)
 
 
 @app.get('/api/cameras/usb')
