@@ -74,7 +74,8 @@ def analyze(event_id):
     import numpy as np
     import torch
     from ultralytics import YOLO
-    from .config import MODEL,config
+    from . import detectors
+    from .config import config
     from .db import Database
     from .recognition import Recognition
     from .overlay import annotate
@@ -89,7 +90,9 @@ def analyze(event_id):
     cv2.setNumThreads(2);torch.set_num_threads(2)
     cuda=settings.device!='cpu' and torch.cuda.is_available()
     if settings.device=='cuda' and not cuda:raise RuntimeError('GPU CUDA indisponível.')
-    model=YOLO(MODEL)
+    weights,task,engine=detectors.ensure(settings.detector_model,settings.detector_engine,False,settings.detection_size)
+    cuda=cuda and engine=='pytorch'
+    model=YOLO(weights,task=task)
     if model.names.get(0)!='person':raise RuntimeError('O modelo precisa detectar pessoas na classe 0.')
     recognition.ensure_encoder()
     if settings.body_reid_enabled:

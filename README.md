@@ -37,6 +37,14 @@ Os modelos locais são usados diretamente; a aplicação não baixa pesos ao ini
 
 Se desabilitar **Somente meu pai**, todos os registros de pessoas poderão ser enviados automaticamente. Essa opção também libera os registros antigos ainda na fila e dentro do prazo de armazenamento.
 
+## Modelo de detecção (YOLO26 e motor)
+
+Em **Configurações → Câmera**, **Modelo de detecção** (n, s, m, l: mais preciso e mais pesado) e **Motor de detecção** (PyTorch, ONNX, OpenVINO, OpenVINO INT8) são por câmera. Nada é baixado antes de ser escolhido: ao salvar, o servidor baixa os pesos oficiais (SHA-256 verificado) e converte uma vez para `data/models/`; a câmera segue com o modelo atual até terminar. ONNX e OpenVINO rodam só na CPU (indicados para notebook ou VPS sem GPU); PyTorch usa a GPU NVIDIA. Converter para INT8 reduz o custo com leve perda de precisão. O modelo exportado vale para um tamanho de detecção; mudar a resolução converte de novo.
+
+## Câmera USB deste computador
+
+Em **Endereço da câmera**, além de RTSP, aceita uma câmera USB ligada ao próprio servidor: escolha na lista (por exemplo `usb:/dev/v4l/by-id/...-video-index0`) ou digite `usb:/dev/video0`. Opcionalmente peça tamanho e taxa com `?1280x720@30` (padrão 1920x1080 a 30; usa MJPEG). Lendo direto do USB o servidor evita decodificar o H.264 do RTSP: no notebook da cozinha, 1080p custou cerca de 32% de um núcleo e 720p cerca de 16%. O dispositivo abre em um programa por vez: se o MediaMTX capturar a mesma câmera (caminho `cam`), ele precisa ser desligado, e o vídeo ao vivo do celular sem caixas, que vem dele, deixa de existir. Com câmera local, o monitor do notebook e o interfone passam a usar `127.0.0.1`.
+
 ## O que é contado
 
 - Um registro é um **período contínuo com alguma pessoa na imagem**, não uma pessoa única, identidade ou visitante.

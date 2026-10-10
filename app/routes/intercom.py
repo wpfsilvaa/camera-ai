@@ -5,6 +5,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from ..sources import local_device
 from ..services import call_service
 
 # MediaMTX on the camera computer: "mic" is its echo-cancelled microphone, "talk" plays on its speaker,
@@ -31,6 +32,8 @@ def http_client(timeout):
 
 def camera_host(source):
     """The intercom lives on the same computer that serves the RTSP camera."""
+    if local_device(source):
+        return '127.0.0.1'
     parts = urlsplit(source)
     if parts.scheme not in ('rtsp', 'rtsps') or not parts.hostname:
         raise ValueError('A conversa ao vivo só funciona com câmeras RTSP de um computador com o MediaMTX.')

@@ -125,7 +125,7 @@ class NotebookTests(unittest.TestCase):
 
     def test_url_comes_from_the_camera_host(self):
         self.assertEqual(notebook_url('rtsp://192.168.1.103:8554/cam'), 'http://192.168.1.103:8765')
-        self.assertEqual(notebook_url('0'), '')
+        self.assertEqual(notebook_url('0'), 'http://127.0.0.1:8765')  # A local camera: the monitor runs on this computer.
 
 
 if __name__ == '__main__':

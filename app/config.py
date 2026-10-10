@@ -9,6 +9,8 @@ from uuid import uuid4
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator
 
+from .sources import local_device
+
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / '.env')
 DATA = Path(os.environ.get('CAMERA_DATA_DIR', ROOT / 'data')).resolve()
@@ -32,6 +34,9 @@ class CameraSettings(BaseModel):
     enabled: bool = False
     analysis_enabled: bool = True
     device: str = 'auto'
+    # Person detector: YOLO26 size (n/s/m/l) and the engine that runs it; see app/detectors.py.
+    detector_model: str = 'n'
+    detector_engine: str = 'pytorch'
     detection_size: int = Field(default=640, ge=320, le=1280, multiple_of=32)
     detection_fps: int = Field(default=30, ge=1, le=30)
     # Analysis rate while nobody is around; goes back to detection_fps when someone appears.
@@ -59,6 +64,7 @@ class CameraSettings(BaseModel):
         value = value.strip()
         if not value or len(value) > 2048:
             raise ValueError('Informe um nome e endereço válidos para a câmera.')
+        local_device(value)  # Validates the optional ?WxH@fps of a USB camera.
         if '://' in value and not value.startswith(('rtsp://', 'rtsps://', 'http://', 'https://')):
             raise ValueError('Protocolo de câmera inválido.')
         return value
@@ -84,6 +90,20 @@ class CameraSettings(BaseModel):
     def who_valid(cls, value):
         if value not in ('father', 'father_or_unknown', 'anyone'):
             raise ValueError('Escolha quem ativa a área restrita.')
+        return value
+
+    @field_validator('detector_model')
+    @classmethod
+    def detector_model_valid(cls, value):
+        if value not in ('n', 's', 'm', 'l'):
+            raise ValueError('Escolha um modelo de detecção da lista.')
+        return value
+
+    @field_validator('detector_engine')
+    @classmethod
+    def detector_engine_valid(cls, value):
+        if value not in ('pytorch', 'onnx', 'openvino', 'openvino-int8'):
+            raise ValueError('Escolha um motor de detecção da lista.')
         return value
 
     @field_validator('device')

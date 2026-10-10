@@ -58,7 +58,7 @@ class StorageTests(unittest.TestCase):
         preview = self.storage.preview(7, self.now)
         self.assertEqual(preview['videos'], 2)          # old + taught; not the open or sending ones.
         self.assertEqual(preview['videos_bytes'], 2200)
-        self.assertEqual(preview['events'], 1)          # Only old: taught and sending stay.
+        self.assertEqual(preview['events'], 2)          # old goes; taught is emptied and hidden. Open and sending stay.
 
     def test_delete_videos_keeps_every_record(self):
         result = self.storage.delete_videos(7, self.now)
@@ -73,7 +73,11 @@ class StorageTests(unittest.TestCase):
         result = self.storage.delete_history(7, self.now)
         remaining = {r['id'] for r in self.db.rows('SELECT id FROM events')}
         self.assertEqual(remaining, {self.recent, self.open, self.taught, self.sending})
-        self.assertEqual(result['events'], 1)
+        self.assertEqual(result['events'], 2)
+        # The taught record leaves the history but keeps the row its example hangs from.
+        shown = {e['id'] for e in self.db.history(100)['events']}
+        self.assertEqual(shown, {self.recent, self.open, self.sending})
+        self.assertEqual(self.db.rows('SELECT hidden FROM events WHERE id=?', (self.taught,))[0]['hidden'], 1)
         self.assertFalse((PEOPLE / ('a' * 31 + 'f.jpg')).exists())
         self.assertTrue((PEOPLE / ('d' * 31 + 'f.jpg')).exists())   # The taught face.
         self.assertEqual(self.db.rows("SELECT person_id FROM person_samples WHERE id=?", ('d' * 31 + 'f',))[0]['person_id'], 'father')
@@ -104,8 +108,20 @@ class StorageTests(unittest.TestCase):
     def test_a_video_still_going_to_one_recipient_is_kept(self):
         self.db.execute("INSERT INTO clip_deliveries(clip_id,recipient,delivery) VALUES(?,?,'sending')", ('a' * 32, '5511999999999'))
         self.assertEqual(self.storage.delete_videos(7, self.now)['videos'], 1)  # Only the taught record's video.
-        self.assertEqual(self.storage.delete_history(7, self.now)['events'], 0)
+        self.assertEqual(self.storage.delete_history(7, self.now)['events'], 1)  # Only the taught record is emptied.
         self.assertTrue((CLIPS / ('a' * 32 + '.mp4')).exists())
+
+    def test_delete_history_also_clears_settled_alerts_and_keeps_pending_ones(self):
+        from app.storage import ALERT_IMAGES
+        ALERT_IMAGES.mkdir(exist_ok=True)
+        for alert, created, state in (('old1', self.now - 10 * DAY, 'sent'), ('new1', self.now - DAY, 'sent'), ('wait', self.now - 10 * DAY, 'pending')):
+            self.db.execute('INSERT INTO alerts(id,kind,created,message,image) VALUES(?,?,?,?,1)', (alert, 'test', created, 'm'))
+            self.db.execute('INSERT INTO alert_deliveries(alert_id,recipient,state) VALUES(?,?,?)', (alert, 'x', state))
+            (ALERT_IMAGES / f'{alert}.jpg').write_bytes(b'a' * 10)
+        self.assertEqual(self.storage.delete_history(7, self.now)['alerts'], 1)
+        self.assertEqual({r['id'] for r in self.db.rows('SELECT id FROM alerts')}, {'new1', 'wait'})
+        self.assertFalse((ALERT_IMAGES / 'old1.jpg').exists())
+        self.assertTrue((ALERT_IMAGES / 'wait.jpg').exists())
 
     def test_all_including_today(self):
         self.assertEqual(self.storage.delete_videos(0, self.now)['videos'], 3)  # old, recent, taught.

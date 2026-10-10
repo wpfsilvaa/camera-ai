@@ -1,8 +1,9 @@
 """Free disk space on request: delete old videos, or old records together with their videos.
 
-Never touched: records still open or being analyzed, clips being recorded, converted or sent,
-and faces you confirmed or approved (their records stay, only the videos go). SQLite is
-compacted afterwards so deleted history actually returns space to the disk.
+Never touched: records still open or being analyzed, and clips being recorded, converted or sent.
+Faces you confirmed or approved are never lost: their records lose videos, photos and unconfirmed
+samples and are hidden from the history, staying only as the source of the examples. The alert
+log goes too. SQLite is compacted afterwards so deleted history actually returns space to the disk.
 """
 import json
 import shutil
@@ -22,10 +23,17 @@ OLD_CLIPS = f"""SELECT id FROM clips WHERE event_id IN ({OLD_EVENTS})
     AND NOT EXISTS (SELECT 1 FROM clip_deliveries d WHERE d.clip_id=clips.id AND d.delivery='sending')"""
 # Records holding a confirmed face example keep their row, so the example keeps its source.
 TAUGHT = """SELECT DISTINCT t.event_id FROM person_tracks t JOIN person_samples s ON s.track_id=t.id WHERE s.person_id IS NOT NULL"""
-# Old records that may go: no taught face and no clip still recording, converting or sending.
-REMOVABLE_EVENTS = f"""{OLD_EVENTS} AND id NOT IN ({TAUGHT}) AND NOT EXISTS
-    (SELECT 1 FROM clips c WHERE c.event_id=events.id AND (c.state NOT IN ('expired','ready','failed')
+# Not recording, converting or sending any clip.
+IDLE = """NOT EXISTS (SELECT 1 FROM clips c WHERE c.event_id=events.id AND (c.state NOT IN ('expired','ready','failed')
     OR c.delivery='sending' OR EXISTS (SELECT 1 FROM clip_deliveries d WHERE d.clip_id=c.id AND d.delivery='sending')))"""
+# Old records that may go: no taught face.
+REMOVABLE_EVENTS = f"""{OLD_EVENTS} AND id NOT IN ({TAUGHT}) AND {IDLE}"""
+# Old records holding a taught face: emptied and hidden, never deleted.
+HIDEABLE_EVENTS = f"""{OLD_EVENTS} AND hidden=0 AND id IN ({TAUGHT}) AND {IDLE}"""
+# Alerts already settled: none still waiting to be delivered.
+OLD_ALERTS = """SELECT id FROM alerts WHERE created<:cutoff
+    AND NOT EXISTS (SELECT 1 FROM alert_deliveries d WHERE d.alert_id=alerts.id AND d.state='pending')"""
+ALERT_IMAGES = DATA / 'alerts'
 
 
 def size(paths):
@@ -47,7 +55,7 @@ class Storage:
         return {'videos_bytes': size(CLIPS.iterdir()), 'faces_bytes': size(PEOPLE.iterdir()), 'database_bytes': database,
                 'disk_free_bytes': disk.free, 'disk_total_bytes': disk.total,
                 'videos': self.db.rows("SELECT COUNT(*) AS n FROM clips WHERE state IN ('ready','failed')")[0]['n'],
-                'events': self.db.rows('SELECT COUNT(*) AS n FROM events')[0]['n']}
+                'events': self.db.rows('SELECT COUNT(*) AS n FROM events WHERE hidden=0')[0]['n']}
 
     @staticmethod
     def cutoff(days, now=None):
@@ -59,7 +67,7 @@ class Storage:
         """What each cleanup would remove, for the confirmation question."""
         cutoff = {'cutoff': self.cutoff(days, now)}
         clips = [r['id'] for r in self.db.rows(OLD_CLIPS, cutoff)]
-        events = self.db.rows(f'SELECT COUNT(*) AS n FROM ({REMOVABLE_EVENTS})', cutoff)[0]['n']
+        events = sum(self.db.rows(f'SELECT COUNT(*) AS n FROM ({query})', cutoff)[0]['n'] for query in (REMOVABLE_EVENTS, HIDEABLE_EVENTS))
         return {'videos': len(clips), 'videos_bytes': clip_bytes(clips), 'events': events}
 
     def delete_videos(self, days, now=None):
@@ -71,7 +79,7 @@ class Storage:
             return {'videos': len(clips), 'freed_bytes': freed}
 
     def delete_history(self, days, now=None):
-        """Videos of all old records, then the records themselves except those with taught faces."""
+        """Videos, records and alerts older than :days. Records with a taught face are emptied and hidden, not deleted."""
         with self.lock:
             cutoff = {'cutoff': self.cutoff(days, now)}
             clips = [r['id'] for r in self.db.rows(OLD_CLIPS, cutoff)]
@@ -80,21 +88,35 @@ class Storage:
                 expire(self.db, clip_id)
             database_before = self.database_bytes()
             with self.db.connect() as db:
-                events = ids_param(r[0] for r in db.execute(REMOVABLE_EVENTS, cutoff))
+                gone = ids_param(r[0] for r in db.execute(REMOVABLE_EVENTS, cutoff))
+                emptied = ids_param(r[0] for r in db.execute(HIDEABLE_EVENTS, cutoff))
+                alerts = [r[0] for r in db.execute(OLD_ALERTS, cutoff)]
                 tracks = 'SELECT id FROM person_tracks WHERE event_id IN (SELECT value FROM json_each(:events))'
-                samples = [r[0] for r in db.execute(f'SELECT id FROM person_samples WHERE track_id IN ({tracks})', {'events': events})]
-                photos = [CLIPS / f'{r[0]}.jpg' for r in db.execute(
-                    'SELECT id FROM event_photos WHERE event_id IN (SELECT value FROM json_each(:events))', {'events': events})]
-                db.execute(f'DELETE FROM person_samples WHERE track_id IN ({tracks})', {'events': events})
-                for table, column in (('person_tracks', 'event_id'), ('clips', 'event_id'), ('event_photos', 'event_id'), ('events', 'id')):
-                    db.execute(f'DELETE FROM {table} WHERE {column} IN (SELECT value FROM json_each(:events))', {'events': events})
-            photos += [PEOPLE / f'{sample_id}.jpg' for sample_id in samples]
+                photos_of = 'SELECT id FROM event_photos WHERE event_id IN (SELECT value FROM json_each(:events))'
+                every = ids_param(json.loads(gone) + json.loads(emptied))
+                # Every example of a deleted record goes; emptied records keep only their taught examples.
+                samples = [r[0] for r in db.execute(f'SELECT id FROM person_samples WHERE track_id IN ({tracks})', {'events': gone})]
+                samples += [r[0] for r in db.execute(f'SELECT id FROM person_samples WHERE person_id IS NULL AND track_id IN ({tracks})', {'events': emptied})]
+                photos = [CLIPS / f'{r[0]}.jpg' for r in db.execute(photos_of, {'events': every})]
+                db.execute(f'DELETE FROM person_samples WHERE track_id IN ({tracks}) AND (person_id IS NULL OR track_id IN (SELECT id FROM person_tracks WHERE event_id IN (SELECT value FROM json_each(:gone))))',
+                           {'events': every, 'gone': gone})
+                db.execute(f'DELETE FROM person_tracks WHERE event_id IN (SELECT value FROM json_each(:events)) AND id NOT IN (SELECT track_id FROM person_samples)', {'events': every})
+                db.execute(f'DELETE FROM event_photos WHERE event_id IN (SELECT value FROM json_each(:events))', {'events': every})
+                for table, column in (('clips', 'event_id'), ('events', 'id')):
+                    db.execute(f'DELETE FROM {table} WHERE {column} IN (SELECT value FROM json_each(:events))', {'events': gone})
+                db.execute('UPDATE events SET hidden=1 WHERE id IN (SELECT value FROM json_each(:events))', {'events': emptied})
+                images = [ALERT_IMAGES / f'{alert_id}.jpg' for alert_id in alerts]
+                for alert_id in alerts:
+                    db.execute('DELETE FROM alert_deliveries WHERE alert_id=?', (alert_id,))
+                    db.execute('DELETE FROM alerts WHERE id=?', (alert_id,))
+            events = gone
+            photos += images + [PEOPLE / f'{sample_id}.jpg' for sample_id in samples]
             freed += size(photos)
             for photo in photos:
                 photo.unlink(missing_ok=True)
             self.compact()
             freed += max(0, database_before - self.database_bytes())
-            return {'videos': len(clips), 'events': len(json.loads(events)), 'freed_bytes': freed}
+            return {'videos': len(clips), 'events': len(json.loads(gone)) + len(json.loads(emptied)), 'alerts': len(alerts), 'freed_bytes': freed}
 
     def database_bytes(self):
         return size(DATA / f'history.sqlite3{suffix}' for suffix in ('', '-wal', '-shm'))

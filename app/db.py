@@ -112,7 +112,8 @@ class Database:
                                     ('analysis_error','TEXT'),
                                     ('camera_id',"TEXT NOT NULL DEFAULT 'main'"),
                                     ('camera_name',"TEXT NOT NULL DEFAULT ''"),
-                                    ('camera_settings',"TEXT NOT NULL DEFAULT '{}'")]:
+                                    ('camera_settings',"TEXT NOT NULL DEFAULT '{}'"),
+                                    ('hidden','INTEGER NOT NULL DEFAULT 0')]:
                 if name not in columns:
                     db.execute(f'ALTER TABLE events ADD COLUMN {name} {definition}')
             db.execute('CREATE INDEX IF NOT EXISTS idx_events_camera_started ON events(camera_id,started)')
@@ -195,7 +196,8 @@ class Database:
         self.execute("UPDATE clips SET delivery='uncertain',error='Envio interrompido; confira o WhatsApp antes de reenviar.' WHERE delivery='sending'")
 
     def history(self, limit=30, offset=0, identity='all', camera_id=None):
-        conditions, params = [], []
+        # Records emptied by "clear history" stay only as the source of taught faces.
+        conditions, params = ['hidden=0'], []
         if identity != 'all':
             conditions.append('identity=?'); params.append(identity)
         if camera_id:

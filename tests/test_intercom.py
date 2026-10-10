@@ -34,9 +34,13 @@ class IntercomTests(unittest.TestCase):
     def test_camera_host_comes_from_the_rtsp_address_without_credentials(self):
         self.assertEqual(intercom.camera_host('rtsp://user:secret@192.168.1.103:8554/cam'), '192.168.1.103')
         self.assertEqual(intercom.camera_host('rtsp://[fd00::5]:8554/cam'), '[fd00::5]')
-        for source in ('0', '/videos/teste.mp4', 'http://192.168.1.103/cam'):
+        for source in ('/videos/teste.mp4', 'http://192.168.1.103/cam'):
             with self.assertRaises(ValueError):
                 intercom.camera_host(source)
+
+    def test_a_usb_camera_means_the_intercom_is_on_this_computer(self):
+        for source in ('0', 'usb:/dev/video0?1280x720@30', '/dev/v4l/by-id/usb-cam-video-index0'):
+            self.assertEqual(intercom.camera_host(source), '127.0.0.1')
 
     def test_listen_forwards_the_offer_to_the_microphone(self):
         seen = []
@@ -81,8 +85,8 @@ class IntercomTests(unittest.TestCase):
         self.addCleanup(patcher.stop)
         self.assertEqual(client.post('/api/intercom/listen', json={'sdp': 'v=0'}).status_code, 502)
 
-    def test_webcam_and_unknown_camera_are_rejected(self):
-        client, patcher = client_for(lambda request: httpx.Response(201), source='0')
+    def test_video_file_and_unknown_camera_are_rejected(self):
+        client, patcher = client_for(lambda request: httpx.Response(201), source='/videos/teste.mp4')
         self.addCleanup(patcher.stop)
         self.assertEqual(client.post('/api/intercom/listen', json={'sdp': 'v=0'}).status_code, 409)
         self.assertEqual(client.post('/api/intercom/listen', json={'sdp': 'v=0', 'camera_id': 'sala'}).status_code, 404)

@@ -18,6 +18,8 @@ from .alerts import Alerts, in_quiet_hours
 from .auth import COOKIE, SAME_SITE, Auth
 from .backup import Backups
 from .cameras import CameraManager
+from . import detectors
+from .sources import usb_cameras
 from .config import CLIPS, DATA, ROOT, WA_URL, CameraSettings, ExtraCamera, Settings, config
 from .db import TZ, Database
 from .jobs import Jobs
@@ -157,7 +159,25 @@ def save_settings(settings: Settings, camera_id: str = 'main'):
         with recognition.lock, db.connect() as connection:
             recognition.invalidate(connection)
     call_service(config.save_for_camera, settings, camera_id)
+    # Start fetching/converting the chosen detector now, even if the camera is stopped.
+    detectors.prepare(settings.detector_model, settings.detector_engine, settings.fall_detection_enabled, settings.detection_size, retry=True)
     return config.for_camera(camera_id)
+
+
+@app.get('/api/cameras/usb')
+def usb_camera_list():
+    return {'cameras': usb_cameras()}
+
+
+@app.get('/api/detectors')
+def detector_catalog():
+    return detectors.catalog()
+
+
+@app.get('/api/detectors/state')
+def detector_state(model: str = Query('n', pattern='^[nsml]$'), engine: str = Query('pytorch', pattern='^(pytorch|onnx|openvino|openvino-int8)$'),
+                   size: int = Query(640, ge=320, le=1280, multiple_of=32), pose: bool = False):
+    return detectors.state(model, engine, pose, size)
 
 
 @app.get('/api/cameras')

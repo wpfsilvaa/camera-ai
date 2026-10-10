@@ -7,7 +7,9 @@ import uuid
 from collections import deque
 from pathlib import Path
 
-from .config import CLIPS, DATA, MODEL, POSE_MODEL, CAMERA_FIELDS
+from . import detectors
+from .sources import local_device
+from .config import CLIPS, DATA, CAMERA_FIELDS
 os.environ.setdefault('YOLO_CONFIG_DIR', str(DATA / 'ultralytics'))
 os.environ.setdefault('OPENCV_FFMPEG_CAPTURE_OPTIONS', 'rtsp_transport;tcp')
 
@@ -110,7 +112,7 @@ class CameraWorker:
         self.jpeg=None
         self.sequence=0
         self.status={'state':'paused','people':0,'last_frame':None,'event_id':None,'error':None,
-                     'inference_ms':None,'detection_fps':0,'fps':0,'frame_age_ms':None,'device':None,'gpu':None,'half':False,
+                     'inference_ms':None,'detection_fps':0,'fps':0,'frame_age_ms':None,'detector':None,'device':None,'gpu':None,'half':False,
                      'analysis_active':False,'manual_recording':False,'manual_requested':False,'manual_event_id':None,
                      'source_width':None,'source_height':None,'source_fps':None,'input_fps':None,'tracks':[],
                      'restricted_recording':False}
@@ -218,7 +220,7 @@ class CameraWorker:
             import sys
             torch=sys.modules.get('torch')
             if torch is not None and torch.cuda.is_initialized():torch.cuda.empty_cache()
-            self.update(device=None,gpu=None,half=False,analysis_active=False)
+            self.update(detector=None,device=None,gpu=None,half=False,analysis_active=False)
         cv2.setNumThreads(2)
         while not self.stop_event.is_set():
             settings=self.config.get()
@@ -251,11 +253,19 @@ class CameraWorker:
             try:
                 self.update(state='connecting',error=None,people=0)
                 source=settings.camera_source
-                is_file=not source.isdigit() and '://' not in source
-                cap=cv2.VideoCapture(int(source)) if source.isdigit() else cv2.VideoCapture(source,cv2.CAP_FFMPEG,
-                    [cv2.CAP_PROP_OPEN_TIMEOUT_MSEC,5000,cv2.CAP_PROP_READ_TIMEOUT_MSEC,5000])
+                local=local_device(source)
+                is_file=local is None and '://' not in source
+                if local:
+                    device,(width,height,rate)=local
+                    # MJPEG keeps 1080p30 within what a USB 2 camera can send.
+                    cap=cv2.VideoCapture(device,cv2.CAP_V4L2)
+                    cap.set(cv2.CAP_PROP_FOURCC,cv2.VideoWriter_fourcc(*'MJPG'))
+                    cap.set(cv2.CAP_PROP_FRAME_WIDTH,width);cap.set(cv2.CAP_PROP_FRAME_HEIGHT,height);cap.set(cv2.CAP_PROP_FPS,rate)
+                else:
+                    cap=cv2.VideoCapture(source,cv2.CAP_FFMPEG,[cv2.CAP_PROP_OPEN_TIMEOUT_MSEC,5000,cv2.CAP_PROP_READ_TIMEOUT_MSEC,5000])
                 if not cap.isOpened():
-                    raise RuntimeError('Não foi possível abrir a câmera. Confira endereço, rede e transmissão.')
+                    raise RuntimeError('Não foi possível abrir a câmera USB. Ela pode estar ausente ou em uso por outro programa (como o MediaMTX).' if local
+                                       else 'Não foi possível abrir a câmera. Confira endereço, rede e transmissão.')
                 cap.set(cv2.CAP_PROP_BUFFERSIZE,1)
                 source_fps=cap.get(cv2.CAP_PROP_FPS)
                 if not np.isfinite(source_fps) or source_fps<1 or source_fps>120:
@@ -340,23 +350,26 @@ class CameraWorker:
                     if analysis_active and now>=next_detection:
                         setup_started=time.time()
                         import torch
-                        cuda=settings.device!='cpu' and torch.cuda.is_available()
-                        if settings.device=='cuda' and not cuda:
+                        want_cuda=settings.device!='cpu' and torch.cuda.is_available()
+                        if settings.device=='cuda' and not want_cuda:
                             raise RuntimeError('CUDA solicitado, mas a GPU não está acessível. Verifique o driver ou selecione Auto.')
+                        pose=current.fall_detection_enabled
+                        weights,task,engine,detector_ready=detectors.resolve(current.detector_model,current.detector_engine,pose,settings.detection_size)
+                        # ONNX/OpenVINO run on the CPU; only the PyTorch engine uses CUDA.
+                        cuda=want_cuda and engine=='pytorch'
                         device=0 if cuda else 'cpu'
                         half=cuda
                         torch.set_num_threads(2)
                         if cuda:
                             torch.backends.cudnn.benchmark=True
-                        weights=POSE_MODEL if current.fall_detection_enabled else MODEL
                         options=(device,half,settings.detection_size,weights)
                         if model is None or model_options!=options:
                             load_started=setup_started
-                            if not Path(weights).is_file():
+                            if not Path(weights).exists():
                                 raise RuntimeError('Modelo YOLO não encontrado. Verifique YOLO_MODEL/POSE_MODEL ou execute scripts/download_models.py.')
                             with MODEL_LOAD_LOCK:
                                 from ultralytics import YOLO
-                                model=YOLO(weights)
+                                model=YOLO(weights,task=task)
                                 self.falls.reset()
                                 if model.names.get(0)!='person':
                                     raise RuntimeError('O modelo precisa detectar a classe person (0).')
@@ -375,7 +388,7 @@ class CameraWorker:
                             else:
                                 # RTSP reader kept draining: use its latest frame next.
                                 continue
-                        self.update(device='cuda:0' if cuda else 'cpu',gpu=torch.cuda.get_device_name(0) if cuda else None,half=bool(model.predictor.model.fp16))
+                        self.update(detector=detectors.label(current.detector_model,current.detector_engine) if detector_ready else 'preparando',device='cuda:0' if cuda else 'cpu',gpu=torch.cuda.get_device_name(0) if cuda else None,half=cuda and bool(model.predictor.model.fp16))
                         if settings.recognition_enabled:
                             self.recognition.start()
                         begin=time.perf_counter()

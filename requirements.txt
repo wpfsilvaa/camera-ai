@@ -7,3 +7,7 @@ httpx==0.28.1
 onnxruntime==1.30.0
 lap==0.5.13
 pywebpush==2.5.0
+openvino==2026.4.1
+onnx==1.23.2
+onnxslim==0.1.98
+nncf==3.4.0

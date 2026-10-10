@@ -14,6 +14,7 @@ import httpx
 
 from .alerts import clock, elapsed
 from .config import DATA, config as default_config
+from .sources import local_device
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +32,8 @@ def notebook_url(camera_source):
     explicit = os.environ.get('NOTEBOOK_URL')
     if explicit:
         return explicit.rstrip('/')
-    host = urlsplit(camera_source).hostname
+    # A USB camera is plugged into this very computer.
+    host = '127.0.0.1' if local_device(camera_source) else urlsplit(camera_source).hostname
     return f'http://{host}:{PORT}' if host else ''
 
 

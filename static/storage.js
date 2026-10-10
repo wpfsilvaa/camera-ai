@@ -26,11 +26,11 @@ async function clean(what, button) {
   const period = days ? `com mais de ${days} dia(s)` : 'de todos os períodos, inclusive de hoje';
   const question = what === 'videos'
     ? `Apagar ${storagePreview.videos} vídeo(s) ${period}? Libera cerca de ${bytesText(storagePreview.videos_bytes)}. Os registros continuam no histórico.`
-    : `Apagar ${storagePreview.events} registro(s) ${period}, com vídeos e fotos não confirmadas? Rostos ensinados são mantidos. Não dá para desfazer.`;
+    : `Apagar ${storagePreview.events} registro(s) ${period}, com vídeos, fotos e avisos? Rostos cadastrados e exemplos confirmados são mantidos. Não dá para desfazer.`;
   if (!confirm(question)) return;
   await action(button, async () => {
     const result = await api('/api/storage/clean', {method: 'POST', body: JSON.stringify({what, older_than_days: days}), signal: AbortSignal.timeout(300000)});
-    toast(`Espaço liberado: ${bytesText(result.freed_bytes)} (${result.videos} vídeo(s)${result.events !== undefined ? `, ${result.events} registro(s)` : ''}).`);
+    toast(`Espaço liberado: ${bytesText(result.freed_bytes)} (${result.videos} vídeo(s)${result.events !== undefined ? `, ${result.events} registro(s), ${result.alerts} aviso(s)` : ''}).`);
     await Promise.all([loadStorage(), refresh()]);
   });
 }
