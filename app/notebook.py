@@ -1,4 +1,4 @@
-"""Kitchen notebook watch: low battery, mains unplugged for too long, or no signal at all.
+"""Kitchen notebook: watch (low battery, unplugged too long, no signal) and the "call the family" button.
 
 The notebook runs notebook/monitor.py; this side asks it for a reading every POLL_INTERVAL
 seconds and raises alerts (WhatsApp and push) through Alerts. The notebook powers the camera
@@ -17,10 +17,13 @@ from .config import DATA, config as default_config
 
 log = logging.getLogger(__name__)
 
-POLL_INTERVAL = 30
+POLL_INTERVAL = 5
 TOKEN = DATA / 'notebook.token'
 PORT = 8765
 KINDS = ('notebook_battery', 'notebook_unplugged', 'notebook_power_back', 'notebook_offline', 'notebook_online')
+# An unanswered call is announced again this often; a help request keeps going longer.
+REMINDER_SECONDS = 120
+REMINDERS = {'call': 1, 'panic': 5}
 
 
 def notebook_url(camera_source):
@@ -42,6 +45,8 @@ def notebook_token():
 class NotebookMonitor:
     def __init__(self, alerts, config=default_config, token=notebook_token):
         self.alerts, self.config, self.token = alerts, config, token
+        self.frame = None  # Callable returning the camera's current JPEG (attached to call alerts).
+        self.call = {'state': 'idle'}
         self.lock = threading.Lock()
         self.last_poll = 0
         self.last_ok = None  # Last moment a reading arrived.
@@ -57,7 +62,7 @@ class NotebookMonitor:
         now = now or time.time()
         self.last_poll = now
         settings = self.config.get()
-        if not settings.notebook_alerts_enabled:
+        if not (settings.notebook_alerts_enabled or settings.notebook_call_enabled):
             self.reset()
             return
         reading = None
@@ -65,7 +70,8 @@ class NotebookMonitor:
         url = notebook_url(settings.camera_source)
         if url and token:
             try:
-                response = client.get(f'{url}/status', headers={'Authorization': f'Bearer {token}'}, timeout=5)
+                response = client.get(f'{url}/status', headers={'Authorization': f'Bearer {token}'}, timeout=5,
+                                      params={'call': int(settings.notebook_call_enabled), 'panic': int(settings.notebook_call_enabled and settings.notebook_panic_enabled)})
                 if response.status_code == 200:
                     reading = response.json()
             except (httpx.HTTPError, ValueError):
@@ -75,6 +81,7 @@ class NotebookMonitor:
     def reset(self):
         with self.lock:
             self.reading = self.last_ok = self.silent_since = self.battery_since = None
+            self.call = {'state': 'idle'}
             self.silent_alerted = self.unplugged_alerted = False
 
     def due(self, now=None):
@@ -85,18 +92,38 @@ class NotebookMonitor:
     def check(self, settings, reading, now):
         with self.lock:
             if reading is None:
-                self.check_silence(settings, now)
+                self.call = {'state': 'idle'}
+                if settings.notebook_alerts_enabled:
+                    self.check_silence(settings, now)
+                elif self.silent_since is None:
+                    self.silent_since = now
                 return
             self.last_ok, self.reading = now, reading
+            self.call = reading.get('call') or {'state': 'idle'}
+            if settings.notebook_call_enabled:
+                self.check_call(settings, now)
             if self.silent_since is not None:
                 if self.silent_alerted:
                     self.alerts.raise_alert(f'notebook-online-{int(self.silent_since)}', 'notebook_online',
                                             f'✅ O notebook da câmera voltou a responder após {elapsed(now - self.silent_since)} sem sinal.', now)
                 self.silent_since, self.silent_alerted = None, False
+            if not settings.notebook_alerts_enabled:
+                return
             if reading.get('plugged', True):
                 self.check_power_back(now)
             else:
                 self.check_unplugged(settings, reading, now)
+
+    def check_call(self, settings, now):
+        call = self.call
+        if call.get('state') != 'ringing':
+            return
+        kind, since = call['kind'], call['since']
+        if not self.alerts.exists(f'{kind}-{call["id"]}'):
+            jpeg = self.frame() if self.frame else None
+            self.alerts.notebook_call(call['id'], kind, jpeg, since, now)
+        for number in range(1, min(int((now - since) // REMINDER_SECONDS), REMINDERS[kind]) + 1):
+            self.alerts.notebook_call(call['id'], kind, None, since, now, reminder=number)
 
     def check_silence(self, settings, now):
         if self.silent_since is None:
@@ -133,6 +160,31 @@ class NotebookMonitor:
                                     f'🔌 O notebook da câmera está sem energia na tomada desde as {clock(self.battery_since)} '
                                     f'({elapsed(now - self.battery_since)}).{suffix} Reconecte o carregador.', now)
 
+    # Answering ---------------------------------------------------------------
+
+    def command(self, path, payload=None):
+        """Tell the notebook agent (answer or end the call); returns its call state."""
+        url, token = notebook_url(self.config.get().camera_source), self.token()
+        if not (url and token):
+            raise RuntimeError('O notebook não está configurado.')
+        try:
+            response = httpx.post(f'{url}/call/{path}', json=payload or {}, headers={'Authorization': f'Bearer {token}'}, timeout=5)
+        except httpx.HTTPError:
+            raise RuntimeError('O notebook não respondeu. Ele pode estar desligado ou sem Wi-Fi.')
+        if response.status_code == 409:
+            raise ValueError(response.json().get('error', 'Esta chamada já foi atendida ou terminou.'))
+        if response.status_code != 200:
+            raise RuntimeError('O notebook recusou o comando.')
+        with self.lock:
+            self.call = response.json()
+        return self.call
+
+    def answer(self, name):
+        return self.command('answer', {'name': name})
+
+    def end(self):
+        return self.command('end')
+
     # Status ------------------------------------------------------------------
 
     def status(self, now=None):
@@ -140,9 +192,9 @@ class NotebookMonitor:
         settings = self.config.get()
         with self.lock:
             reading = self.reading
-            state = ('disabled' if not settings.notebook_alerts_enabled else 'unknown' if self.last_ok is None and self.silent_since is None
+            state = ('disabled' if not (settings.notebook_alerts_enabled or settings.notebook_call_enabled) else 'unknown' if self.last_ok is None and self.silent_since is None
                      else 'offline' if self.silent_since is not None else 'battery' if self.battery_since is not None else 'ok')
-            return {'enabled': settings.notebook_alerts_enabled, 'state': state,
+            return {'enabled': settings.notebook_alerts_enabled, 'call_enabled': settings.notebook_call_enabled, 'call': self.call, 'state': state,
                     'battery': reading and reading.get('battery'), 'plugged': reading and reading.get('plugged'),
                     'status': reading and reading.get('status'), 'host': reading and reading.get('host'),
                     'last_ok': self.last_ok, 'silent_since': self.silent_since, 'battery_since': self.battery_since,

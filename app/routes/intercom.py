@@ -10,7 +10,7 @@ from ..services import call_service
 # MediaMTX on the camera computer: "mic" is its echo-cancelled microphone, "talk" plays on its speaker,
 # "cam-lite" is a ≈450 kbps copy of the camera for phones (the RTSP "cam" is ≈6 Mbps in 1080p).
 WEBRTC_PORT = 8889
-PATHS = {'listen': ('mic', 'whep'), 'talk': ('talk', 'whip'), 'video': ('cam-lite', 'whep')}
+PATHS = {'listen': ('mic', 'whep'), 'talk': ('talk', 'whip'), 'video': ('cam-lite', 'whep'), 'face': ('face', 'whip')}
 SESSION = re.compile(r'^[0-9a-f-]{36}$')
 
 
@@ -21,7 +21,7 @@ class Offer(BaseModel):
 
 class Hangup(BaseModel):
     camera_id: str = Field('main', max_length=40)
-    kind: str = Field(pattern='^(listen|talk|video)$')
+    kind: str = Field(pattern='^(listen|talk|video|face)$')
     session: str = Field(pattern=SESSION.pattern)
 
 
@@ -54,10 +54,10 @@ def build(config):
                 response = await client.post(url, content=body.sdp, headers={'Content-Type': 'application/sdp'})
         except httpx.HTTPError:
             raise HTTPException(502, 'O computador da câmera não respondeu. Confira se ele está ligado e com o MediaMTX ativo.')
-        if response.status_code == 400 and kind == 'talk':
+        if response.status_code == 400 and kind in ('talk', 'face'):
             raise HTTPException(409, 'Outra pessoa já está falando com este ambiente. Tente de novo em instantes.')
         if response.status_code == 404:
-            what = 'O vídeo leve' if kind == 'video' else 'O microfone'
+            what = 'O vídeo leve' if kind == 'video' else 'A tela do notebook' if kind == 'face' else 'O microfone'
             raise HTTPException(502, f'{what} deste ambiente não está configurado no MediaMTX.')
         if response.status_code != 201:
             raise HTTPException(502, f'O computador da câmera recusou a chamada (código {response.status_code}).')
@@ -71,6 +71,10 @@ def build(config):
     @router.post('/api/intercom/talk', status_code=201)
     async def talk(body: Offer):
         return await negotiate('talk', body)
+
+    @router.post('/api/intercom/face', status_code=201)
+    async def face(body: Offer):
+        return await negotiate('face', body)
 
     @router.post('/api/intercom/video', status_code=201)
     async def video(body: Offer):

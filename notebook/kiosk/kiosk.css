@@ -1,0 +1,27 @@
+:root{--bg:#0f1713;--ink:#f1f6f2;--muted:#a9bbb0;--green:#2f8f66;--red:#d6453a;--grey:#33433b}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:Inter,"Segoe UI",Arial,sans-serif;cursor:default;user-select:none;overflow:hidden}
+.hidden{display:none!important}
+#screen{height:100%;display:flex;flex-direction:column;padding:2.5vh 3vw}
+header{display:flex;justify-content:space-between;align-items:baseline;color:var(--muted);font-size:clamp(18px,2.6vw,32px)}
+time{font-size:clamp(40px,7vw,96px);font-weight:700;color:var(--ink);margin-right:.4em;font-variant-numeric:tabular-nums}
+.view{display:none;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:3vh;text-align:center}
+#screen[data-view=idle] #view-idle,#screen[data-view=confirm] #view-confirm,#screen[data-view=ringing] #view-ringing,
+#screen[data-view=answered] #view-answered,#screen[data-view=over] #view-over{display:flex}
+h1{font-size:clamp(34px,6vw,84px);margin:0;line-height:1.1}
+p{font-size:clamp(22px,3.4vw,46px);margin:0;color:var(--muted)}
+.big{width:min(90%,1000px);border:0;border-radius:28px;color:#fff;font:inherit;font-weight:700;font-size:clamp(34px,5.5vw,76px);padding:3.2vh 2vw;display:flex;gap:.5em;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation}
+.big:active{transform:scale(.98)}
+.big .icon{font-size:1.2em}
+.call{background:var(--green)}
+.panic{background:var(--red)}
+.neutral{background:var(--grey)}
+.note{font-size:clamp(20px,2.6vw,36px)}
+button:disabled{opacity:.35;cursor:not-allowed}
+.pulse{font-size:clamp(80px,14vw,200px);animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.18)}}
+.face-box{width:min(60vh,70vw);aspect-ratio:1;border-radius:50%;overflow:hidden;background:var(--grey);display:grid;place-items:center;border:6px solid var(--green)}
+.face-box video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.avatar{font-size:clamp(100px,22vw,320px);font-weight:700;color:#fff}
+#screen[data-view=answered] header{display:none}

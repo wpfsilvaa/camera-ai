@@ -26,8 +26,8 @@ TITLES = {'fall': 'Possível queda', 'routine': 'Fora da rotina', 'inactivity': 
           'backup': 'Backup falhou', 'test': 'Teste de notificação', 'presence': 'Presença detectada',
           'restricted': 'Área restrita', 'notebook_battery': 'Bateria do notebook baixa',
           'notebook_unplugged': 'Notebook sem energia', 'notebook_power_back': 'Energia do notebook voltou',
-          'notebook_offline': 'Notebook sem sinal', 'notebook_online': 'Notebook voltou'}
-URGENT = {'fall', 'routine', 'inactivity'}
+          'notebook_offline': 'Notebook sem sinal', 'call': 'Chamada do notebook', 'panic': 'Pedido de ajuda', 'notebook_online': 'Notebook voltou'}
+URGENT = {'fall', 'routine', 'inactivity', 'call', 'panic'}
 # Delivered right away even with the phone asleep (high push priority), without the urgent alert style.
 IMMEDIATE = URGENT | {'presence', 'restricted', 'notebook_battery', 'notebook_unplugged', 'notebook_offline'}
 # A person walking in and out restarts the record; one notification per camera in this window is enough.
@@ -40,7 +40,7 @@ PHOTOS.mkdir(exist_ok=True)
 AUDIENCES = ('all', 'father', 'unknown')
 IDENTIFY_SECONDS = 15
 # What a device can switch off, in the order shown. Each topic covers some alert kinds; the test is always sent.
-TOPICS = {'emergency': ('Quedas e ausência', {'fall', 'routine', 'inactivity'}),
+TOPICS = {'emergency': ('Quedas, ausência e chamadas do notebook', {'fall', 'routine', 'inactivity', 'call', 'panic'}),
           'restricted': ('Área restrita', {'restricted'}),
           'camera': ('Câmera sem imagem ou de volta', {'camera_offline', 'camera_online'}),
           'notebook': ('Notebook da câmera (bateria, energia, sinal)', {'notebook_battery', 'notebook_unplugged', 'notebook_power_back', 'notebook_offline', 'notebook_online'}),
@@ -209,7 +209,7 @@ class Push:
                               'tag': alert['id'], 'urgent': alert['kind'] in URGENT, 'image': photo,
                               # Alerts tied to a camera get "Ver ao vivo" and "Conversar" buttons.
                               'camera': camera,
-                              'url': f'/?camera={quote(camera)}#overview' if camera else '/#overview'}, ensure_ascii=False)
+                              'url': f'/?camera={quote(camera)}#overview' if camera else '/?answer=1#overview' if alert['kind'] in ('call', 'panic') else '/#overview'}, ensure_ascii=False)
         if alert['kind'] == 'presence':
             rows = self.presence_devices(alert.get('audience', 'all'), alert.get('created') or time.time())
         else:

@@ -29,7 +29,7 @@
     if (active) note.textContent = call.muted ? 'Toque em qualquer lugar da tela para ouvir o ambiente.' : call.microphone ? 'Em conversa: você ouve o ambiente e ele ouve você.' : 'Ouvindo o ambiente. Para falar, abra o painel pelo endereço https do Tailscale (…ts.net).';
   }
 
-  async function start() {
+  async function start(withFace = false) {
     const cameraId = selectedCamera;
     call = {cameraId, peers: [], sessions: []};
     try {
@@ -40,15 +40,29 @@
       listen.addEventListener('track', event => { speaker.srcObject = event.streams[0] || new MediaStream([event.track]); playOrAsk(); });
       call.sessions.push(['listen', await rtcNegotiate('listen', listen, cameraId)]);
 
-      // Browsers only release the microphone on HTTPS or localhost.
+      // Browsers only release the microphone (and camera) on HTTPS or localhost.
       if (window.isSecureContext && navigator.mediaDevices?.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}});
+        const audio = {echoCancellation: true, noiseSuppression: true, autoGainControl: true};
+        let stream;
+        if (withFace) {
+          // Whoever answers the notebook's call shows their face on its screen, when they have a camera.
+          stream = await navigator.mediaDevices.getUserMedia({audio, video: {width: {ideal: 640}, height: {ideal: 480}, facingMode: 'user'}}).catch(() => null);
+        }
+        stream = stream || await navigator.mediaDevices.getUserMedia({audio});
         call.microphone = stream.getAudioTracks()[0];
         const talk = new RTCPeerConnection();
         call.peers.push(talk);
         watch(talk);
         talk.addTransceiver(call.microphone, {direction: 'sendonly'});
         call.sessions.push(['talk', await rtcNegotiate('talk', talk, cameraId)]);
+        const picture = stream.getVideoTracks()[0];
+        if (picture) {
+          call.picture = picture;
+          const face = new RTCPeerConnection();
+          call.peers.push(face);
+          face.addTransceiver(picture, {direction: 'sendonly'});
+          call.sessions.push(['face', await rtcNegotiate('face', face, cameraId)]);
+        }
       }
       render();
     } catch (error) {
@@ -62,6 +76,7 @@
     const ended = call;
     call = null;
     ended.microphone?.stop();
+    ended.picture?.stop();
     ended.peers.forEach(pc => pc.close());
     speaker.srcObject = null;
     render();
@@ -78,4 +93,5 @@
   $('#camera-select').addEventListener('change', () => hangup());
   addEventListener('pagehide', () => hangup());
   render();
+  window.intercom = {start, hangup, active: () => Boolean(call)};
 })();

@@ -80,3 +80,13 @@ input,select,textarea{background:var(--surface);color:var(--ink);border-color:va
 .history-row:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
 .row-chevron{width:1%;font-size:22px;color:var(--muted);text-align:right}
 .history-row:hover .row-chevron{color:var(--green-ink)}
+
+/* Call from the kitchen notebook */
+.call-banner{position:sticky;top:8px;z-index:40;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px;padding:16px 18px;border-radius:14px;background:var(--amber-bg);border:2px solid var(--amber);color:var(--amber-ink);box-shadow:0 8px 28px var(--shadow);animation:ring 1.4s ease-in-out infinite}
+.call-banner.panic{background:var(--red-bg);border-color:var(--red-ink);color:var(--red-ink)}
+.call-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.call-text strong{font-size:17px}
+.call-text span{font-size:13px}
+.call-actions{display:flex;gap:8px}
+@keyframes ring{0%,100%{transform:none}50%{transform:scale(1.008)}}
+@media(max-width:500px){.call-banner{top:4px}.call-actions,.call-actions .button{width:100%}}

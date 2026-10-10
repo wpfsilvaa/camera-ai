@@ -137,6 +137,9 @@ class Settings(CameraSettings):
     daily_summary_hour: int = Field(default=21, ge=-1, le=23)
     # Kitchen notebook: low battery, unplugged for too long, no signal (zero turns a rule off).
     notebook_alerts_enabled: bool = False
+    # The big "call the family" button on the notebook screen (and, separately, the help request).
+    notebook_call_enabled: bool = False
+    notebook_panic_enabled: bool = True
     notebook_battery_percent: int = Field(default=20, ge=5, le=60)
     notebook_unplugged_minutes: int = Field(default=15, ge=0, le=240)
     notebook_offline_minutes: int = Field(default=5, ge=0, le=240)

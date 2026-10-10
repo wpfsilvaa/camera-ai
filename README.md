@@ -665,3 +665,7 @@ simulado; não enviam mensagens reais a familiares.
 ## Monitor do notebook
 
 `notebook/monitor.py` roda no notebook da cozinha (serviço `casa-monitor`, porta 8765, só leitura de `/sys/class/power_supply`). O painel consulta a cada 30 s com o token de `data/notebook.token` (copiado para `~/.config/casa-monitor/token` no notebook) e avisa por WhatsApp e notificação: bateria baixa, carregador fora da tomada por muito tempo e notebook sem sinal. Ative em Configurações → Avisos → Notebook da câmera.
+
+### Botão de chamar na tela do notebook
+
+O agente também serve a tela do quiosque em `http://127.0.0.1:8765/` (só para o próprio notebook): botão verde "Chamar a família" e, opcionalmente, o vermelho "Preciso de ajuda" (com confirmação). Ao apertar, o painel avisa por notificação (urgente) e WhatsApp e repete se ninguém atender. Quem toca em **Atender** no painel fala com ele e, se tiver câmera, o rosto aparece na tela (caminho `face` do MediaMTX). Ative em Configurações → Avisos → Notebook da câmera. Para abrir em tela cheia: `notebook/start-kiosk.sh` (por exemplo no `exec-once` do Hyprland); desative o desligamento de tela (hypridle/DPMS).

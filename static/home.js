@@ -1,5 +1,5 @@
 // Overview: the "everything OK?" strip and the kitchen notebook card.
-function renderHome() {
+window.renderHome = function renderHome() {
   if (!status || !settings) return;
   const nb = status.notebook || {}, camera = status.camera, now = status.now;
   const ago = since => { const m = Math.max(0, Math.round((now - since) / 60)); return m < 1 ? 'menos de 1 min' : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`; };

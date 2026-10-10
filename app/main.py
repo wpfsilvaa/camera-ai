@@ -57,6 +57,7 @@ def latest_frame(camera_id):
 
 
 push.frame = latest_frame
+notebook.frame = lambda: latest_frame('main')
 push.people = lambda camera_id: cameras.get(camera_id).snapshot()['tracks']
 
 
@@ -91,8 +92,8 @@ PUBLIC = {
 }
 # Family accounts are read-only; these (their own password and devices) are the only changes they may make.
 FAMILY_WRITES = {'/api/auth/logout', '/api/auth/password', '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/test',
-                 '/api/push/presence-status', '/api/push/presence', '/api/push/topics-status', '/api/push/topics',
-                 '/api/intercom/listen', '/api/intercom/talk', '/api/intercom/video', '/api/intercom/hangup'}
+                 '/api/push/presence-status', '/api/push/presence', '/api/push/topics-status', '/api/push/topics', '/api/notebook/call/answer', '/api/notebook/call/end',
+                 '/api/intercom/listen', '/api/intercom/talk', '/api/intercom/video', '/api/intercom/face', '/api/intercom/hangup'}
 
 
 @app.middleware('http')

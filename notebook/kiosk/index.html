@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Casa Presente</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/kiosk.css">
+  <script src="/kiosk.js" defer></script>
+</head>
+<body>
+  <main id="screen" data-view="idle">
+    <header>
+      <div><time id="clock">--:--</time><span id="date"></span></div>
+      <span id="battery" class="hidden"></span>
+    </header>
+
+    <section id="view-idle" class="view">
+      <button id="btn-call" class="big call" type="button"><span class="icon" aria-hidden="true">📞</span>Chamar a família</button>
+      <button id="btn-panic" class="big panic" type="button"><span class="icon" aria-hidden="true">🆘</span>Preciso de ajuda</button>
+      <p id="note" class="note hidden"></p>
+    </section>
+
+    <section id="view-confirm" class="view">
+      <h1>Pedir ajuda agora?</h1>
+      <p>A família será avisada na hora.</p>
+      <button id="confirm-yes" class="big panic" type="button">Sim, pedir ajuda</button>
+      <button id="confirm-no" class="big neutral" type="button">Não, voltar</button>
+    </section>
+
+    <section id="view-ringing" class="view">
+      <div class="pulse" aria-hidden="true">📞</div>
+      <h1 id="ringing-title">Chamando a família…</h1>
+      <p>Aguarde, alguém já vai atender.</p>
+      <button id="btn-cancel" class="big neutral" type="button">Cancelar</button>
+    </section>
+
+    <section id="view-answered" class="view">
+      <div class="face-box">
+        <video id="face" autoplay muted playsinline class="hidden"></video>
+        <div id="avatar" class="avatar" aria-hidden="true"></div>
+      </div>
+      <h1 id="answered-title"></h1>
+      <p>Pode falar, a pessoa está ouvindo.</p>
+      <button id="btn-end" class="big neutral" type="button">Encerrar</button>
+    </section>
+
+    <section id="view-over" class="view">
+      <h1 id="over-title"></h1>
+      <p id="over-text"></p>
+    </section>
+  </main>
+</body>
+</html>

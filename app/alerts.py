@@ -1,5 +1,6 @@
 """WhatsApp text alerts: nobody seen for hours, a camera without image, the daily summary."""
 import logging
+import os
 import time
 from datetime import datetime
 
@@ -138,7 +139,7 @@ class Alerts:
                  f'• A identificar: {today["unknown"]}',
                  f'• Última presença: {last}',
                  f'• Tempo gravado: {elapsed(stats["recorded_seconds_today"])}']
-        problems = self.db.rows("SELECT COUNT(*) AS n FROM alerts WHERE kind IN ('camera_offline','inactivity','routine','fall','notebook_battery','notebook_unplugged','notebook_offline') AND created>=?",
+        problems = self.db.rows("SELECT COUNT(*) AS n FROM alerts WHERE kind IN ('camera_offline','inactivity','routine','fall','notebook_battery','notebook_unplugged','notebook_offline','panic') AND created>=?",
                                 (local.replace(hour=0, minute=0, second=0, microsecond=0).timestamp(),))[0]['n']
         if problems:
             lines.append(f'• Alertas enviados hoje: {problems}')
@@ -162,6 +163,27 @@ class Alerts:
         return self.raise_alert(alert_id, 'restricted',
                                 f'⚠️ {name or "Uma pessoa"} entrou na área restrita da câmera {camera_name} ({clock(now)}). '
                                 f'O vídeo fica no histórico.', now, image=True, camera_id=camera_id)
+
+    def notebook_call(self, call_id, kind, jpeg, since, now=None, reminder=0):
+        """The kitchen notebook's button was pressed (kind "call" or "panic"): alert at once, then remind while nobody answers."""
+        now = now or time.time()
+        alert_id = f'{kind}-{call_id}' + (f'-r{reminder}' if reminder else '')
+        if reminder and self.exists(alert_id):
+            return alert_id
+        image = bool(jpeg)
+        if jpeg:
+            (IMAGES / f'{alert_id}.jpg').write_bytes(jpeg)
+        if kind == 'panic':
+            text = f'🚨 PEDIDO DE AJUDA: seu pai apertou o botão de ajuda no notebook da cozinha às {clock(since)}.'
+        else:
+            text = f'📞 Seu pai está chamando a família pelo notebook da cozinha ({clock(since)}).'
+        if reminder:
+            text = f'⏰ Ainda sem resposta há {elapsed(now - since)}. ' + text
+        link = os.environ.get('PUBLIC_URL', '').rstrip('/')
+        text += ' Abra o painel e toque em Atender.' if kind == 'call' else ' Ligue para ele agora ou abra o painel e toque em Atender.'
+        if link:
+            text += f'\n{link}'
+        return self.raise_alert(alert_id, kind, text, now, image=image)
 
     def send_test(self, now=None):
         now = now or time.time()

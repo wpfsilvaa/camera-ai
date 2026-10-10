@@ -66,3 +66,6 @@ paths:
       -i rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH
       -vn -ac 1 -f pulse -buffer_duration 60 -device cozinha-falante Chamada
     runOnAvailableRestart: yes
+
+  # Rosto de quem atendeu a chamada do botão: o painel publica (WHIP) e a tela do quiosque no notebook lê (WHEP).
+  face: {}

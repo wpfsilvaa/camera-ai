@@ -1,10 +1,11 @@
 import re
 import time
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from ..alerts import IMAGES
+from ..services import call_service
 
 
 def build(alerts, config):
@@ -41,5 +42,14 @@ def build_notebook(notebook):
     @router.get('/api/notebook')
     def status():
         return notebook.status()
+
+    @router.post('/api/notebook/call/answer')
+    def answer(request: Request):
+        user = request.state.user
+        return call_service(notebook.answer, (user and user['name']) or 'Alguém da família')
+
+    @router.post('/api/notebook/call/end')
+    def end():
+        return call_service(notebook.end)
 
     return router
