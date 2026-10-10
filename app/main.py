@@ -22,6 +22,7 @@ from .config import CLIPS, DATA, ROOT, WA_URL, CameraSettings, ExtraCamera, Sett
 from .db import TZ, Database
 from .jobs import Jobs
 from .learning import LearningSuggestions
+from .notebook import NotebookMonitor
 from .offline import OfflineAnalysis
 from .proxy import allowed_origins, is_https
 from .push import Push
@@ -42,7 +43,8 @@ backups = Backups(db, config, alerts)
 push = Push(db)
 storage = Storage(db)
 alerts.listeners.append(push.notify)
-jobs = Jobs(db, config, recognition, alerts, auth, learning, backups)
+notebook = NotebookMonitor(alerts)
+jobs = Jobs(db, config, recognition, alerts, auth, learning, backups, notebook)
 cameras.fall_handler = alerts.fall
 cameras.presence_handler = push.presence
 cameras.restricted_handler = alerts.restricted
@@ -83,13 +85,13 @@ app = FastAPI(title='Casa Presente', lifespan=lifespan, docs_url=None, redoc_url
 
 PUBLIC = {
     '/login', '/api/auth/me', '/api/auth/login', '/api/health',
-    '/static/login.css', '/static/login.js', '/static/favicon.svg', '/static/offline.html',
+    '/static/login.css', '/static/login.js', '/static/theme.js', '/static/favicon.svg', '/static/offline.html',
     # Installable app files carry no personal data and are fetched without cookies.
     '/sw.js', '/manifest.webmanifest', '/static/icon-192.png', '/static/icon-512.png', '/static/icon-maskable.png',
 }
 # Family accounts are read-only; these (their own password and devices) are the only changes they may make.
 FAMILY_WRITES = {'/api/auth/logout', '/api/auth/password', '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/test',
-                 '/api/push/presence-status', '/api/push/presence',
+                 '/api/push/presence-status', '/api/push/presence', '/api/push/topics-status', '/api/push/topics',
                  '/api/intercom/listen', '/api/intercom/talk', '/api/intercom/video', '/api/intercom/hangup'}
 
 
@@ -248,7 +250,7 @@ async def status(request: Request, camera_id: str = 'main'):
         whatsapp = {**whatsapp, 'qr': None}  # Scanning the QR code would link another phone.
     return {'camera': worker.snapshot(), 'cameras': cameras.snapshots(), 'whatsapp': whatsapp,
             'recognition': worker.recognition.status(), 'offline': offline.status(),
-            'stats': db.stats(), 'camera_stats': db.stats(camera_id), 'alerts': alerts.recent(5), 'storage_free_gb': round(storage.free / 1024**3, 1), 'now': time.time()}
+            'stats': db.stats(), 'camera_stats': db.stats(camera_id), 'alerts': alerts.recent(5), 'notebook': notebook.status(), 'storage_free_gb': round(storage.free / 1024**3, 1), 'now': time.time()}
 
 
 @app.get('/api/health')
@@ -381,5 +383,6 @@ app.include_router(alert_routes.build(alerts, config))
 app.include_router(backup_routes.build(backups))
 app.include_router(intercom_routes.build(config))
 app.include_router(push_routes.build(push))
+app.include_router(alert_routes.build_notebook(notebook))
 app.include_router(storage_routes.build(storage))
 app.mount('/static', StaticFiles(directory=ROOT / 'static'), name='static')

@@ -24,10 +24,12 @@ CONTACT = 'mailto:casa-presente@example.com'
 TITLES = {'fall': 'Possível queda', 'routine': 'Fora da rotina', 'inactivity': 'Ninguém apareceu',
           'camera_offline': 'Câmera sem imagem', 'camera_online': 'Câmera voltou', 'summary': 'Resumo do dia',
           'backup': 'Backup falhou', 'test': 'Teste de notificação', 'presence': 'Presença detectada',
-          'restricted': 'Área restrita'}
+          'restricted': 'Área restrita', 'notebook_battery': 'Bateria do notebook baixa',
+          'notebook_unplugged': 'Notebook sem energia', 'notebook_power_back': 'Energia do notebook voltou',
+          'notebook_offline': 'Notebook sem sinal', 'notebook_online': 'Notebook voltou'}
 URGENT = {'fall', 'routine', 'inactivity'}
 # Delivered right away even with the phone asleep (high push priority), without the urgent alert style.
-IMMEDIATE = URGENT | {'presence', 'restricted'}
+IMMEDIATE = URGENT | {'presence', 'restricted', 'notebook_battery', 'notebook_unplugged', 'notebook_offline'}
 # A person walking in and out restarts the record; one notification per camera in this window is enough.
 PRESENCE_COOLDOWN = 60
 # Presence photos live next to the alert photos (served, behind login, by /alert-media/) for a day.
@@ -41,6 +43,7 @@ IDENTIFY_SECONDS = 15
 TOPICS = {'emergency': ('Quedas e ausência', {'fall', 'routine', 'inactivity'}),
           'restricted': ('Área restrita', {'restricted'}),
           'camera': ('Câmera sem imagem ou de volta', {'camera_offline', 'camera_online'}),
+          'notebook': ('Notebook da câmera (bateria, energia, sinal)', {'notebook_battery', 'notebook_unplugged', 'notebook_power_back', 'notebook_offline', 'notebook_online'}),
           'summary': ('Resumo do dia', {'summary'}),
           'backup': ('Falha no backup', {'backup'})}
 FATHER = 'father'  # Fixed id of the father's profile.

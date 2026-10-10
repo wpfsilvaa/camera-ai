@@ -138,7 +138,7 @@ class Alerts:
                  f'• A identificar: {today["unknown"]}',
                  f'• Última presença: {last}',
                  f'• Tempo gravado: {elapsed(stats["recorded_seconds_today"])}']
-        problems = self.db.rows("SELECT COUNT(*) AS n FROM alerts WHERE kind IN ('camera_offline','inactivity','routine','fall') AND created>=?",
+        problems = self.db.rows("SELECT COUNT(*) AS n FROM alerts WHERE kind IN ('camera_offline','inactivity','routine','fall','notebook_battery','notebook_unplugged','notebook_offline') AND created>=?",
                                 (local.replace(hour=0, minute=0, second=0, microsecond=0).timestamp(),))[0]['n']
         if problems:
             lines.append(f'• Alertas enviados hoje: {problems}')

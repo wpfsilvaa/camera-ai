@@ -1,0 +1,75 @@
+/* Design layer: appearance toggle, status strip, grouped settings, phone navigation, touch targets.
+   Colors come from the tokens in style.css, so everything here follows the light and dark themes. */
+
+:root{--nav-height:64px;--ease:cubic-bezier(.2,.7,.2,1)}
+body{transition:background-color .2s,color .2s}
+.panel,.stat-card,.camera-tile,.sidebar,.button,input,select,textarea{transition:background-color .2s,border-color .2s,color .2s}
+.panel,.stat-card{box-shadow:0 1px 2px var(--shadow)}
+dialog{background:var(--surface);color:var(--ink);border:1px solid var(--border)}
+dialog::backdrop{background:#0a120e99}
+input,select,textarea{background:var(--surface);color:var(--ink);border-color:var(--border)}
+::placeholder{color:var(--muted);opacity:.8}
+.page:not(.hidden){animation:page-in .22s var(--ease)}
+@keyframes page-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.muted,.small{color:var(--muted)}
+.dot.warn{background:var(--amber)}
+
+/* Appearance toggle */
+.theme-toggle{width:34px;height:34px;font-size:16px;display:grid;place-items:center;border:1px solid var(--border);background:var(--surface);color:var(--ink)}
+.theme-toggle:hover{background:var(--surface-2)}
+
+/* "Everything OK?" strip */
+.attention{display:flex;flex-direction:column;gap:6px;padding:12px 16px;margin-bottom:18px;border:1px solid var(--border);border-left:4px solid var(--accent-line);border-radius:12px;background:var(--green-bg);color:var(--green-ink);font-size:13px;font-weight:550}
+.attention p{margin:0;display:flex;align-items:center;gap:10px}
+.attention.has-problems{background:var(--amber-bg);border-left-color:var(--amber);color:var(--amber-ink)}
+.attention.is-red{background:var(--red-bg);border-left-color:var(--red-ink);color:var(--red-ink)}
+
+/* Notebook card */
+.notebook-symbol{display:inline-grid;place-items:center;width:22px;color:var(--green-ink);font-size:18px}
+.battery-row{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+.battery-row strong{font-size:22px;font-variant-numeric:tabular-nums;min-width:4.2ch}
+.battery-row meter{flex:1;height:14px;min-width:0}
+.battery-row meter.hidden{display:none}
+#notebook-text{margin:0 0 8px;line-height:1.5}
+
+/* Settings: three groups instead of one long page */
+.settings-tabs{display:flex;gap:4px;padding:4px;margin-bottom:20px;border-radius:12px;background:var(--surface-2);width:fit-content;max-width:100%;overflow-x:auto}
+.settings-tab{border:0;background:none;color:var(--muted);font-size:13px;font-weight:600;padding:9px 18px;border-radius:9px;white-space:nowrap}
+.settings-tab[aria-selected=true]{background:var(--surface);color:var(--green-ink);box-shadow:0 1px 4px var(--shadow)}
+.settings-tab:hover:not([aria-selected=true]){color:var(--ink)}
+.settings-actions{position:sticky;bottom:0;z-index:5;margin-top:20px;padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--surface);box-shadow:0 -6px 18px var(--shadow)}
+.settings-actions.dirty{border-color:var(--amber)}
+.settings-actions.dirty .muted{color:var(--amber-ink);font-weight:600}
+
+/* Readability: nothing below 11px, calmer small print */
+.panel-body small,.form-fields small{line-height:1.5}
+.footnote{font-size:12px;color:var(--muted)}
+
+/* Touch screens: finger-sized targets */
+@media(pointer:coarse){
+  .button,.filter,.settings-tab,select,input:not([type=checkbox]):not([type=radio]){min-height:44px}
+  .icon-button,.theme-toggle{min-width:40px;min-height:40px}
+  input[type=checkbox]{width:44px;height:26px}
+  input[type=checkbox]:before{width:20px;height:20px}
+  input[type=checkbox]:checked:before{transform:translateX(18px)}
+}
+
+/* Phones: navigation at the thumb, not at the top */
+@media(max-width:500px){
+  .sidebar{position:fixed;inset:auto 0 0 0;top:auto;width:100%;height:calc(var(--nav-height) + env(safe-area-inset-bottom));padding:6px 8px env(safe-area-inset-bottom);border-right:0;border-bottom:0;border-top:1px solid var(--border);background:var(--surface);justify-content:center;z-index:20}
+  .sidebar .brand{display:none}
+  .sidebar nav{flex:1;justify-content:space-around;gap:0}
+  .nav-link,.sidebar .nav-link{flex:1;flex-direction:column;gap:2px;justify-content:center;font-size:11px;padding:6px 2px;min-width:0;border-radius:10px}
+  .nav-link>span:first-child{font-size:20px;line-height:1}
+  .nav-count{position:absolute;margin:-30px 0 0 22px}
+  .nav-link{position:relative}
+  main{padding-bottom:calc(var(--nav-height) + env(safe-area-inset-bottom) + 12px)}
+  .toast{bottom:calc(var(--nav-height) + env(safe-area-inset-bottom) + 14px)}
+  .topbar{position:sticky;top:0;z-index:10;background:var(--bg)}
+  .side-panels{display:grid}
+  .side-panels .whatsapp-panel,.side-panels .identity-note{display:none}
+  .settings-actions{bottom:calc(var(--nav-height) + env(safe-area-inset-bottom) + 8px)}
+  .settings-tabs{width:100%}
+  .settings-tab{flex:1;padding:9px 8px}
+}
+@media(max-width:960px) and (min-width:501px){.nav-link .nav-count{display:none}}

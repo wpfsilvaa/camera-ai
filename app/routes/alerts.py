@@ -32,3 +32,14 @@ def build(alerts, config):
         return FileResponse(IMAGES / filename, media_type='image/jpeg')
 
     return router
+
+
+def build_notebook(notebook):
+    """Live state of the kitchen notebook (battery, mains power, signal)."""
+    router = APIRouter()
+
+    @router.get('/api/notebook')
+    def status():
+        return notebook.status()
+
+    return router

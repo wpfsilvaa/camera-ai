@@ -38,9 +38,10 @@ def caption_for(clip, event, settings, probable):
 
 
 class Jobs:
-    def __init__(self, db, config, recognition=None, alerts=None, auth=None, learning=None, backups=None):
+    def __init__(self, db, config, recognition=None, alerts=None, auth=None, learning=None, backups=None, notebook=None):
         self.db, self.config = db, config
         self.recognition, self.alerts, self.auth, self.learning, self.backups = recognition, alerts, auth, learning, backups
+        self.notebook = notebook
         self.stop_event = threading.Event()
         self.threads = []
         self.headers = {'Authorization': f'Bearer {gateway_token()}'}
@@ -208,4 +209,6 @@ class Jobs:
             return
         if time.time() - self.alerts.last_check >= CHECK_INTERVAL:
             self.alerts.check()
+        if self.notebook and self.notebook.due():
+            self.notebook.poll(client)
         self.alerts.deliver_one(client)

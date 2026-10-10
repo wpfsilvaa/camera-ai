@@ -1,0 +1,11 @@
+[Unit]
+Description=Monitor de energia do notebook da cozinha (Casa Presente)
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 %h/.config/casa-monitor/monitor.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

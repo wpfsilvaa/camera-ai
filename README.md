@@ -661,3 +661,7 @@ acionar `/retry` no gateway com vários destinatários, informe `clip_id` e `rec
 Validação: `tests/test_deliveries.py`, `tests/recipients-ui-smoke.mjs` e
 `tests/multi-recipient-gateway.mjs`. Os testes usam números fictícios e um socket
 simulado; não enviam mensagens reais a familiares.
+
+## Monitor do notebook
+
+`notebook/monitor.py` roda no notebook da cozinha (serviço `casa-monitor`, porta 8765, só leitura de `/sys/class/power_supply`). O painel consulta a cada 30 s com o token de `data/notebook.token` (copiado para `~/.config/casa-monitor/token` no notebook) e avisa por WhatsApp e notificação: bateria baixa, carregador fora da tomada por muito tempo e notebook sem sinal. Ative em Configurações → Avisos → Notebook da câmera.

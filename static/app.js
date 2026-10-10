@@ -110,6 +110,7 @@ window.addEventListener('hashchange', route);
 function renderStatus() {
   const {camera, whatsapp, stats} = status;
   renderAlerts(status.alerts || []);
+  renderHome();
   loadRoutine().catch(() => {});
   $('#father-count').textContent = stats.today.father;
   $('#unknown-count').textContent = stats.today.unknown;
@@ -295,7 +296,7 @@ $('#settings-form').addEventListener('submit', event => {
       next[name] = name==='additional_recipients' ? input.value.split(/\r?\n/).map(v=>v.trim()).filter(Boolean) : input.type === 'checkbox' ? input.checked : typeof value === 'number' ? Number(input.value) : input.value;
     }
     settings = await api(cameraPath('/api/settings'),{method:'PUT',body:JSON.stringify(next)});
-    fillSettings(); toast('Configurações salvas.'); await refresh();
+    fillSettings(); window.settingsSaved?.(); toast('Configurações salvas.'); await refresh();
   });
 });
 $('#toggle-analysis').addEventListener('click',event=>action(event.currentTarget,async()=>{

@@ -135,6 +135,11 @@ class Settings(CameraSettings):
     quiet_end_hour: int = Field(default=7, ge=0, le=23)
     camera_offline_minutes: int = Field(default=10, ge=0, le=240)
     daily_summary_hour: int = Field(default=21, ge=-1, le=23)
+    # Kitchen notebook: low battery, unplugged for too long, no signal (zero turns a rule off).
+    notebook_alerts_enabled: bool = False
+    notebook_battery_percent: int = Field(default=20, ge=5, le=60)
+    notebook_unplugged_minutes: int = Field(default=15, ge=0, le=240)
+    notebook_offline_minutes: int = Field(default=5, ge=0, le=240)
     min_free_gb: float = Field(default=2, ge=0.5, le=100)
     # Daily copy of history, settings and faces to another disk or a synced folder.
     backup_enabled: bool = False
