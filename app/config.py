@@ -34,6 +34,10 @@ class CameraSettings(BaseModel):
     device: str = 'auto'
     detection_size: int = Field(default=640, ge=320, le=1280, multiple_of=32)
     detection_fps: int = Field(default=30, ge=1, le=30)
+    # Analysis rate while nobody is around; goes back to detection_fps when someone appears.
+    idle_detection_fps: int = Field(default=15, ge=1, le=30)
+    # Skip the YOLO model on an empty, motionless room (a full analysis still runs every couple of seconds).
+    motion_gate: bool = True
     preview_width: int = Field(default=1280, ge=640, le=1920)
     recording_width: int = Field(default=1920, ge=640, le=1920)
     confidence: float = Field(default=0.5, ge=0.2, le=0.95)

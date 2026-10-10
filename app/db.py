@@ -139,6 +139,7 @@ class Database:
         db = sqlite3.connect(self.path, timeout=15)
         db.row_factory = sqlite3.Row
         db.execute('PRAGMA foreign_keys=ON')
+        db.execute('PRAGMA synchronous=NORMAL')  # safe with WAL; avoids an fsync per commit
         try:
             with db:
                 yield db

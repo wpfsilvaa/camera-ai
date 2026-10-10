@@ -16,6 +16,7 @@ import numpy as np
 
 from .falls import FallDetector
 from .overlay import annotate, draw_zones
+from .pacing import DetectionPacing, MotionGate, TouchThrottle
 from .presence import Presence
 from .restricted import PhotoSchedule, RestrictedWatch
 from .tracking import PersonTracker
@@ -242,7 +243,10 @@ class CameraWorker:
             zone=Presence(settings.min_presence_seconds,settings.absence_seconds)
             self.restricted.reset()
             self.recognition.reset_tracks()
-            last_recognition=last_db_touch=0
+            last_recognition=0
+            touch=TouchThrottle()
+            pacing=DetectionPacing()
+            gate=MotionGate()
             rates=deque(maxlen=90)
             try:
                 self.update(state='connecting',error=None,people=0)
@@ -303,7 +307,7 @@ class CameraWorker:
                             release_model()
                         tracker=None
                         detected_boxes=[];detected_ids=[];last_inference_ms=None;detected_lying={}
-                        detections.clear();next_detection=0
+                        detections.clear();next_detection=0;gate.reset()
                         self.falls.reset()
                         zone=Presence(settings.min_presence_seconds,settings.absence_seconds)
                         self.restricted.reset()
@@ -319,6 +323,7 @@ class CameraWorker:
                         presence=Presence(settings.min_presence_seconds,settings.absence_seconds)
                         manual_event=self.db.start_event(now,0,'manual',self.camera_id,settings.camera_name,
                             settings.model_dump(include=CAMERA_FIELDS-{'camera_source'}))
+                        touch.reset()
                     elif not manual_wanted and manual_event is not None:
                         manual_recorder.finish(latest_time)
                         self.db.end_event(manual_event,latest_time,'manual_stopped')
@@ -327,6 +332,11 @@ class CameraWorker:
                     lap.append(time.perf_counter())
                     boxes=[];ids=[];labels={};count=0;inference_ms=None;action=None
                     lying={}
+                    if (analysis_active and now>=next_detection and current.motion_gate and model is not None
+                            and event_id is None and manual_event is None and not presence.active and presence.candidate is None
+                            and not detected_boxes and pacing.idle(now) and gate.skip(original,now)):
+                        # Empty and motionless: the model stays idle until something moves.
+                        next_detection=now+1/pacing.fps(current,False,now)-.003
                     if analysis_active and now>=next_detection:
                         setup_started=time.time()
                         import torch
@@ -380,21 +390,21 @@ class CameraWorker:
                         result=None
                         detected_boxes,detected_ids=boxes,ids
                         last_inference_ms=inference_ms
-                        next_detection=now+1/current.detection_fps-.003
+                        next_detection=now+1/pacing.fps(current,count>0 or event_id is not None or manual_event is not None,now)-.003
                         detections.append(time.perf_counter())
                         if manual_event is None:
                             action=presence.update(now,count)
                             if action=='start':
                                 event_id=self.db.start_event(now,count,camera_id=self.camera_id,camera_name=settings.camera_name,
                                     camera_settings=settings.model_dump(include=CAMERA_FIELDS-{'camera_source'}))
+                                touch.reset()
                                 if self.on_presence:
                                     try:
                                         self.on_presence(self.camera_id,settings.camera_name,now)
                                     except Exception:
                                         log.exception('Falha ao avisar sobre a presença')
-                            if event_id is not None and count and now-last_db_touch>=.5:
+                            if event_id is not None and count and touch.due(now,count):
                                 self.db.touch_event(event_id,now,count)
-                                last_db_touch=now
                         if current.recognition_enabled and now-last_recognition>=.30:
                             last_recognition=now
                             self.recognition.submit(event_id,original,boxes,ids,now,current)
@@ -434,9 +444,8 @@ class CameraWorker:
                             manual_recorder.write(recorded,now)
                         if now-manual_recorder.start_time>=settings.segment_seconds:
                             manual_recorder.finish(now)
-                        if now-last_db_touch>=.5:
+                        if touch.due(now,count):
                             self.db.touch_event(manual_event,now,count)
-                            last_db_touch=now
                     lap.append(time.perf_counter())
                     preview=resize_width(annotated,current.preview_width)
                     if analysis_active and current.fall_detection_enabled:
