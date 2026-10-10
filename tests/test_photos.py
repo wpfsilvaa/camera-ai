@@ -92,7 +92,8 @@ class MonitorPhotoTests(unittest.TestCase):
         photo_id = 'a' * 32
         self.assertEqual(self.request('PUT', f'/photos/{photo_id}', jpeg(64, 48), token=False)[0], 404)       # Needs the token.
         self.assertEqual(self.request('PUT', f'/photos/{photo_id}', b'GIF89a-not-jpeg')[0], 415)
-        self.assertEqual(self.request('PUT', f'/photos/{photo_id}', jpeg(64, 48))[0], 200)
+        self.assertEqual(self.request('PUT', f'/photos/{photo_id}', jpeg(64, 48), headers={'X-Photo-Author': 'Ana%20Souza'})[0], 200)
+        self.assertEqual([p for p in monitor.photo_list() if p['id'] == photo_id][0]['a'], 'Ana Souza')
         self.assertIn(photo_id, self.request('GET', '/photos')[1].decode())
         status, body = self.request('GET', f'/photo/{photo_id}.jpg', token=False)
         self.assertEqual((status, body[:2]), (200, b'\xff\xd8'))
@@ -106,7 +107,7 @@ class MonitorPhotoTests(unittest.TestCase):
         monitor.Handler.desk.configure(True, True, 'resting', False, frame=False)
         self.assertEqual(monitor.Handler.desk.display()['photos'], [])
         monitor.Handler.desk.configure(True, True, 'resting', False, frame=True)
-        self.assertIn(photo_id, monitor.Handler.desk.display()['photos'])
+        self.assertIn(photo_id, [p['id'] for p in monitor.Handler.desk.display()['photos']])
         self.request('DELETE', f'/photos/{photo_id}')
 
 

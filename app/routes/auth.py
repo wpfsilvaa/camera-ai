@@ -17,6 +17,11 @@ class Credentials(BaseModel):
     remember: bool = False
 
 
+class Profile(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    username: str = Field(min_length=3, max_length=32)
+
+
 class PasswordChange(BaseModel):
     current: str = Field(max_length=128)
     new: str = Field(max_length=128)
@@ -35,8 +40,8 @@ class UserChanges(BaseModel):
     password: str | None = Field(default=None, max_length=128)
 
 
-def build(auth):
-    """Login page, sessions and user management."""
+def build(auth, on_profile=None):
+    """Login page, sessions and user management. on_profile(user_id, name) runs after a profile edit."""
     router = APIRouter()
 
     @router.get('/login')
@@ -76,6 +81,16 @@ def build(auth):
             raise HTTPException(409, 'Crie um usuário antes de definir senhas.')
         await run_in_threadpool(call_service, auth.change_own_password, request.state.user['id'], body.current, body.new, request.cookies.get(COOKIE))
         return {'ok': True}
+
+    @router.patch('/api/auth/profile')
+    async def update_profile(body: Profile, request: Request):
+        user = request.state.user
+        if not user:
+            raise HTTPException(409, 'Crie um usuário antes de editar o perfil.')
+        updated = await run_in_threadpool(call_service, auth.update_profile, user['id'], body.name, body.username)
+        if on_profile:
+            on_profile(user['id'], updated['name'])
+        return updated
 
     @router.get('/api/users')
     def list_users():

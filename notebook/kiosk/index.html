@@ -13,11 +13,23 @@
   <div id="frame" class="frame hidden" aria-live="polite">
     <div class="slide" id="slide-a"><div class="back"></div><img alt=""></div>
     <div class="slide" id="slide-b"><div class="back"></div><img alt=""></div>
-    <div class="frame-top"><time id="frame-clock">--:--</time><span id="frame-date"></span></div>
+    <div class="scrim top"></div><div class="scrim bottom"></div>
+    <div class="fr-head">
+      <div class="fr-time" id="frame-clock">--:--</div>
+      <div class="fr-date" id="frame-date"></div>
+      <div class="fr-today" id="frame-today"></div>
+    </div>
+    <div class="fr-status" id="frame-status"></div>
+    <aside id="frame-month" class="fr-month calendar" aria-label="Calendário do mês"></aside>
     <p id="frame-greeting" class="frame-greeting hidden"></p>
     <p id="frame-greeting-sub" class="frame-greeting-sub hidden"></p>
     <section id="frame-reminder" class="frame-reminder hidden"><div class="rem-label">Lembrete</div><p id="fr-text"></p><small id="fr-meta"></small></section>
-    <p id="frame-hint" class="frame-hint"></p>
+    <div class="fr-foot">
+      <div class="fr-week" id="frame-week" aria-label="Semana"></div>
+      <p id="frame-hint" class="frame-hint"></p>
+    </div>
+    <p id="frame-credit" class="fr-credit"></p>
+    <div class="fr-progress"><i id="frame-progress"></i></div>
   </div>
   <div class="glow" aria-hidden="true"></div>
   <main id="screen" data-view="idle" data-mode="ui">

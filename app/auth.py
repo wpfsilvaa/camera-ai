@@ -108,6 +108,21 @@ class Auth:
                 connection.execute('DELETE FROM sessions WHERE user_id=? AND token_hash!=?',
                                    (user_id, token_hash(keep_session) if keep_session else ''))
 
+    def update_profile(self, user_id, name, username):
+        """Own display name and login. The session stays valid: it is tied to the account, not the name."""
+        name, username = ' '.join(str(name).split()), str(username).strip().lower()
+        if not name or len(name) > 60:
+            raise ValueError('Informe um nome de até 60 letras.')
+        if not USERNAME.fullmatch(username):
+            raise ValueError('Usuário deve ter de 3 a 32 letras minúsculas, números, ponto, hífen ou sublinhado.')
+        with self.lock, self.db.connect() as connection:
+            if not connection.execute('SELECT 1 FROM users WHERE id=?', (user_id,)).fetchone():
+                raise KeyError('Usuário não encontrado.')
+            if connection.execute('SELECT 1 FROM users WHERE username=? AND id!=?', (username, user_id)).fetchone():
+                raise ValueError('Já existe um usuário com esse nome de login.')
+            connection.execute('UPDATE users SET name=?,username=? WHERE id=?', (name, username, user_id))
+        return {'id': user_id, 'name': name, 'username': username}
+
     def delete_user(self, user_id):
         with self.lock, self.db.connect() as connection:
             row = connection.execute('SELECT role FROM users WHERE id=?', (user_id,)).fetchone()

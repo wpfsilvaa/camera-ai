@@ -8,7 +8,7 @@ import logging
 import os
 import threading
 import time
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import httpx
 
@@ -94,13 +94,18 @@ class NotebookMonitor:
         if self.photos is None:
             return
         try:
-            wanted = [r['id'] for r in self.photos.list()] if settings.notebook_photo_frame_enabled else []
-            have = set(client.get(f'{url}/photos', headers=headers, timeout=5).json().get('ids', []))
+            rows = self.photos.list() if settings.notebook_photo_frame_enabled else []
+            wanted, authors = [r['id'] for r in rows], {r['id']: r['author'] for r in rows}
+            listing = client.get(f'{url}/photos', headers=headers, timeout=5).json()
+            have, shown = set(listing.get('ids', [])), listing.get('authors', {})
+            for photo_id in have & set(wanted):
+                if authors.get(photo_id, '') != shown.get(photo_id, ''):   # The sender renamed their account.
+                    client.put(f'{url}/photos/{photo_id}/author', content=authors.get(photo_id, '').encode('utf-8'), headers=headers, timeout=5)
             for photo_id in have - set(wanted):
                 client.delete(f'{url}/photos/{photo_id}', headers=headers, timeout=5)
             for photo_id in [i for i in wanted if i not in have][:2]:
                 client.put(f'{url}/photos/{photo_id}', content=self.photos.path(photo_id).read_bytes(), timeout=20,
-                           headers={**headers, 'Content-Type': 'image/jpeg'})
+                           headers={**headers, 'Content-Type': 'image/jpeg', 'X-Photo-Author': quote(authors.get(photo_id, ''))})
         except (httpx.HTTPError, ValueError, OSError):
             log.warning('Não foi possível sincronizar as fotos com a tela do notebook', exc_info=True)
 

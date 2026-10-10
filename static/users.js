@@ -10,6 +10,7 @@ async function loadAccount() {
   if (!user) return;
   $('#account-name').textContent = user.name;
   $('#account-initial').textContent = user.name.slice(0,1).toUpperCase();
+  if ($('#profile-form')) { $('#profile-form').elements.name.value = user.name; $('#profile-form').elements.username.value = user.username; }
   $('#account-summary').textContent = `${user.name} · usuário ${user.username} · ${roleLabel[user.role]}${user.role === 'family' ? ' (somente visualizar)' : ''}`;
 }
 
@@ -68,4 +69,14 @@ $('#password-form').addEventListener('submit', event => {
 $('#logout-button').addEventListener('click', async () => {
   await api('/api/auth/logout', {method:'POST'}).catch(() => {});
   location.replace('/login');
+});
+
+$('#profile-form')?.addEventListener('submit', event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  action(form.querySelector('button[type=submit]'), async () => {
+    await api('/api/auth/profile', {method: 'PATCH', body: JSON.stringify({name: form.elements.name.value.trim(), username: form.elements.username.value.trim().toLowerCase()})});
+    toast('Perfil atualizado. Seu novo nome já aparece nas fotos e lembretes.');
+    await loadAccount();
+  });
 });

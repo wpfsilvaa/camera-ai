@@ -68,7 +68,7 @@
     const now = new Date();
     $('clock').textContent = now.toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'});
     $('date').textContent = now.toLocaleDateString('pt-BR', {weekday: 'long', day: 'numeric', month: 'long'});
-    $('frame-clock').textContent = $('clock').textContent; $('frame-date').textContent = now.toLocaleDateString('pt-BR', {weekday: 'long', day: 'numeric'});
+    $('frame-clock').textContent = $('clock').textContent;
   }
 
   function render() {
@@ -90,6 +90,7 @@
     document.querySelector('.vi-shield').classList.toggle('hidden', state === 'analysing');
     document.querySelector('.vi-eye').classList.toggle('hidden', state !== 'analysing');
     applyMode(view);
+    renderFrameInfo();
     greet(view);
     renderReminder();
     renderCalendar();
@@ -158,9 +159,35 @@
   }
   setInterval(() => { if ((last.reminders || []).length > 1) { remIndex++; renderReminder(); } }, 9000);
 
+  // Photo frame information: date, "today" line, week strip and the small status pills.
+  const ICON_SHIELD = '<svg class="vi" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 4.5 5.5v6c0 4.6 3.1 8.4 7.5 10 4.4-1.6 7.5-5.4 7.5-10v-6L12 2.5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8.7 12.2 2.4 2.4 4.3-4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const ICON_EYE = '<svg class="vi" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>';
+  let infoKey = '';
+  function renderFrameInfo() {
+    const now = new Date(), bdays = last.bdays || [], events = allEvents(bdays);
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()), tomorrow = addDays(today, 1);
+    const names = date => eventsOn(events, date).map(ev => ev.name.replace(/</g, '&lt;'));
+    const hour = now.getHours(), period = hour >= 5 && hour < 12 ? 'Bom dia' : hour >= 12 && hour < 18 ? 'Boa tarde' : 'Boa noite';
+    const todayLine = names(today).length ? `Hoje: ${names(today).join(' · ')}` : names(tomorrow).length ? `Amanhã: ${names(tomorrow).join(' · ')}` : period;
+    const battery = last.battery != null && (last.plugged === false || last.battery < 20) ? `<span class="fr-pill low">🔋 ${last.battery}%${last.plugged === false ? ' sem carregador' : ''}</span>` : '';
+    const vigia = VIGIA[last.vigia] ? `<span class="fr-pill ${last.vigia}">${last.vigia === 'analysing' ? ICON_EYE : ICON_SHIELD}${VIGIA[last.vigia]}</span>` : '';
+    const key = `${now.toDateString()}|${now.getHours()}|${todayLine}|${last.vigia}|${battery}|${JSON.stringify(bdays)}`;
+    if (key === infoKey) return;
+    infoKey = key;
+    const dateText = now.toLocaleDateString('pt-BR', {weekday: 'long', day: 'numeric', month: 'long'});
+    $('frame-date').textContent = dateText.charAt(0).toUpperCase() + dateText.slice(1);
+    $('frame-today').textContent = todayLine.replace(/&lt;/g, '<');
+    $('frame-status').innerHTML = vigia + battery;
+    const sunday = addDays(today, -today.getDay());
+    $('frame-week').innerHTML = Array.from({length: 7}, (_, i) => {
+      const day = addDays(sunday, i), found = eventsOn(events, day), kind = ['holiday', 'bday', 'date'].find(k => found.some(ev => ev.kind === k));
+      return `<div class="d ${day.getTime() === today.getTime() ? 'today' : ''} ${kind || ''}"><b>${'DSTQQSS'[i]}</b><span>${day.getDate()}</span>${kind ? '<i></i>' : ''}</div>`;
+    }).join('');
+  }
+
   // Photo frame --------------------------------------------------------------
   // By day an idle screen shows the family photos; at night it is black. Touch, mouse or key brings the buttons back.
-  let slideMs = 0;
+  let slideMs = 0, monthTimer = null, monthFirst = null;
   let awakeUntil = 0, swallowClick = false, order = [], active = 'a', slideTimer = null, hintTimer = null, hintIndex = 0, lastMove = 0;
 
   function wake() { awakeUntil = Date.now() + cfg().awake * 1000; render(); }
@@ -172,12 +199,44 @@
   document.addEventListener('keydown', wake, true);
   document.addEventListener('pointermove', event => { if (Date.now() - lastMove > 500 && (Math.abs(event.movementX) + Math.abs(event.movementY) > 3)) { lastMove = Date.now(); wake(); } }, true);
 
+  // Picks white or dark text for the top-left and bottom areas depending on how bright the photo is there.
+  function toneFor(img) {
+    try {
+      const W = innerWidth, H = innerHeight, scale = Math.min(W / img.naturalWidth, H / img.naturalHeight), dw = img.naturalWidth * scale, dh = img.naturalHeight * scale;
+      const ox = (W - dw) / 2, oy = (H - dh) / 2, canvas = document.createElement('canvas');
+      canvas.width = 64; canvas.height = 36;
+      const g = canvas.getContext('2d', {willReadFrequently: true});
+      g.drawImage(img, 0, 0, 64, 36);
+      const brightness = (x0, y0, x1, y1) => {
+        let sum = 0, n = 0;
+        for (let sx = x0; sx < x1; sx += (x1 - x0) / 14) for (let sy = y0; sy < y1; sy += (y1 - y0) / 6) {
+          n++;
+          if (sx < ox || sx > ox + dw || sy < oy || sy > oy + dh) { sum += 0.15; continue; }   // Letterbox: the dark blurred copy.
+          const d = g.getImageData(Math.min(63, Math.floor((sx - ox) / dw * 64)), Math.min(35, Math.floor((sy - oy) / dh * 36)), 1, 1).data;
+          sum += (0.2126 * d[0] + 0.7152 * d[1] + 0.0722 * d[2]) / 255;
+        }
+        return sum / n;
+      };
+      return {top: brightness(0, 0, W * 0.5, H * 0.3), bottom: brightness(0, H * 0.68, W, H)};
+    } catch { return {top: 0, bottom: 0}; }
+  }
+  function applyTone(tone) {
+    const frame = $('frame');
+    const set = (zone, bright) => {
+      frame.style.setProperty(`--fg-${zone}`, bright ? '#14181a' : '#fff');
+      frame.style.setProperty(`--sh-${zone}`, bright ? '0 .1vmin 1.2vmin #fffc' : '0 .15vmin 1.6vmin #000c');
+      frame.style.setProperty(`--scrim-${zone === 'top' ? 'top' : 'bot'}`, bright ? 'transparent' : (zone === 'top' ? '#0008' : '#000a'));
+    };
+    set('top', tone.top > 0.62); set('bot', tone.bottom > 0.62);
+  }
+
+  let creditTimer = null;
   function nextSlide() {
-    const photos = last.photos || [];
-    if (!photos.length) return;
-    order = order.filter(id => photos.includes(id));
-    if (!order.length) order = [...photos].sort(() => Math.random() - 0.5);
-    const id = order.shift(), incoming = active === 'a' ? 'b' : 'a', el = $('slide-' + incoming), outgoing = $('slide-' + active), img = el.querySelector('img');
+    const photos = last.photos || [], ids = photos.map(p => p.id);
+    if (!ids.length) return;
+    order = order.filter(id => ids.includes(id));
+    if (!order.length) order = [...ids].sort(() => Math.random() - 0.5);
+    const id = order.shift(), who = (photos.find(p => p.id === id) || {}).a, incoming = active === 'a' ? 'b' : 'a', el = $('slide-' + incoming), outgoing = $('slide-' + active), img = el.querySelector('img');
     img.onload = () => {
       el.querySelector('.back').style.backgroundImage = `url(/photo/${id}.jpg)`;
       img.style.setProperty('--kb', `${30 + Math.random() * 40}% ${30 + Math.random() * 40}%`);
@@ -185,6 +244,13 @@
       outgoing.classList.remove('on'); outgoing.classList.add('leaving');
       setTimeout(() => outgoing.classList.remove('leaving'), 1800);
       active = incoming;
+      applyTone(toneFor(img));
+      const credit = $('frame-credit');
+      credit.textContent = who ? `foto de ${who}` : '';
+      credit.classList.toggle('on', Boolean(who));
+      clearTimeout(creditTimer); creditTimer = setTimeout(() => credit.classList.remove('on'), 6000);
+      const bar = $('frame-progress');
+      bar.classList.remove('run'); void bar.offsetWidth; bar.style.setProperty('--slide', `${cfg().slide}s`); bar.classList.add('run');
     };
     img.src = `/photo/${id}.jpg`;
   }
@@ -198,6 +264,10 @@
       const [m, d] = b.d.split('-').map(Number);
       if (m - 1 === today.getMonth() && d === today.getDate()) list.push(`🎂 Hoje é aniversário de ${b.n}!`);
       else if (same(new Date(today.getFullYear(), m - 1, d), addDays(today, 1))) list.push(`🎂 Amanhã é aniversário de ${b.n}`);
+    }
+    for (const b of last.bdays || []) {
+      const [m, d] = b.d.split('-').map(Number), diff = Math.round((new Date(today.getFullYear(), m - 1, d) - today) / 86400000);
+      if (diff >= 2 && diff <= 7) list.push(`🎂 Faltam ${diff} dias para o aniversário de ${b.n}`);
     }
     list.push(...cfg().hints);
     list.push(now.toLocaleDateString('pt-BR', {weekday: 'long', day: 'numeric', month: 'long'}));
@@ -214,13 +284,16 @@
         setTimeout(() => { hintIndex = (hintIndex + 1) % list.length; box.textContent = list[hintIndex]; box.style.opacity = 1; }, 600);
       };
       showHint(); hintTimer = setInterval(showHint, 9000);
+      const month = $('frame-month'), pop = () => { if (!cfg().calendar) return; month.classList.add('show'); setTimeout(() => month.classList.remove('show'), 12000); };
+      monthTimer = setInterval(pop, 60000); monthFirst = setTimeout(pop, 5000);
     } else if (!on && slideTimer) {
-      clearInterval(slideTimer); clearInterval(hintTimer); slideTimer = hintTimer = null;
+      clearInterval(slideTimer); clearInterval(hintTimer); clearInterval(monthTimer); clearTimeout(monthFirst); slideTimer = hintTimer = null;
+      $('frame-month').classList.remove('show');
     }
   }
 
   function applyMode(view) {
-    const awake = Date.now() < awakeUntil, photos = last.photos || [];
+    const awake = Date.now() < awakeUntil, photos = (last.photos || []).map(p => p.id);
     let mode = 'ui';
     if (view === 'idle' && last.frame && !awake) mode = last.night && cfg().black ? 'black' : photos.length ? 'frame' : 'ui';
     if (slideTimer && slideMs !== cfg().slide * 1000) startFrame(false);   // The interval changed in the settings.
@@ -248,21 +321,20 @@
       [new Date(year, 10, 15), 'Proclamação da República', 'holiday'], [new Date(year, 10, 20), 'Consciência Negra', 'holiday'], [new Date(year, 11, 25), 'Natal', 'holiday']];
     return list.map(([date, name, kind]) => ({date, name, kind}));
   }
-  let calendarKey = '';
-  function renderCalendar() {
-    const box = $('calendar'), now = new Date(), bdays = last.bdays || [];
-    box.classList.toggle('hidden', !cfg().calendar);
-    const key = `${now.toDateString()}|${JSON.stringify(bdays)}|${cfg().calendar}`;
-    if (key === calendarKey) return;
-    calendarKey = key;
-    const year = now.getFullYear(), month = now.getMonth();
-    const events = [...specialDays(year), ...specialDays(year + 1)];
+  // Events (holidays, special dates, birthdays) of this year and the next, for the calendar, the week strip and the "today" line.
+  function allEvents(bdays) {
+    const year = new Date().getFullYear(), events = [...specialDays(year), ...specialDays(year + 1)];
     for (const y of [year, year + 1]) for (const b of bdays) { const [m, d] = b.d.split('-').map(Number); events.push({date: new Date(y, m - 1, d), name: `Aniversário de ${b.n}`, kind: 'bday'}); }
-    const on = date => events.filter(ev => ev.date.getFullYear() === date.getFullYear() && ev.date.getMonth() === date.getMonth() && ev.date.getDate() === date.getDate());
+    return events;
+  }
+  const eventsOn = (events, date) => events.filter(ev => ev.date.getFullYear() === date.getFullYear() && ev.date.getMonth() === date.getMonth() && ev.date.getDate() === date.getDate());
+
+  function monthHTML(now, bdays) {
+    const year = now.getFullYear(), month = now.getMonth(), events = allEvents(bdays);
     const first = new Date(year, month, 1), days = new Date(year, month + 1, 0).getDate();
     let cells = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(l => `<b>${l}</b>`).join('') + '<span class="cal-day out"></span>'.repeat(first.getDay());
     for (let day = 1; day <= days; day++) {
-      const found = on(new Date(year, month, day)), kinds = ['holiday', 'bday', 'date'].filter(k => found.some(ev => ev.kind === k));
+      const found = eventsOn(events, new Date(year, month, day)), kinds = ['holiday', 'bday', 'date'].filter(k => found.some(ev => ev.kind === k));
       cells += `<span class="cal-day ${kinds[0] || ''} ${day === now.getDate() ? 'today' : ''}">${day}</span>`;
     }
     const today = new Date(year, month, now.getDate());
@@ -270,7 +342,19 @@
       const diff = Math.round((ev.date - today) / 86400000), when = diff === 0 ? 'Hoje' : diff === 1 ? 'Amanhã' : `Em ${diff} dias`;
       return `<li><span class="when">${when}</span> <b>${ev.kind === 'bday' ? '🎂 ' : ''}${ev.name.replace(/</g, '&lt;')}</b></li>`;
     }).join('');
-    box.innerHTML = `<div class="cal-title"><span>${now.toLocaleDateString('pt-BR', {month: 'long'})}</span><small>${year}</small></div><div class="cal-grid">${cells}</div><ul class="cal-next">${upcoming}</ul>`;
+    return `<div class="cal-title"><span>${now.toLocaleDateString('pt-BR', {month: 'long'})}</span><small>${year}</small></div><div class="cal-grid">${cells}</div><ul class="cal-next">${upcoming}</ul>`;
+  }
+
+  let calendarKey = '';
+  function renderCalendar() {
+    const box = $('calendar'), now = new Date(), bdays = last.bdays || [];
+    box.classList.toggle('hidden', !cfg().calendar);
+    const key = `${now.toDateString()}|${JSON.stringify(bdays)}|${cfg().calendar}`;
+    if (key === calendarKey) return;
+    calendarKey = key;
+    const html = monthHTML(now, bdays);
+    box.innerHTML = html;
+    $('frame-month').innerHTML = html;
   }
 
   // The family member's camera arrives through MediaMTX ("face"); until it does, the initial letter shows.

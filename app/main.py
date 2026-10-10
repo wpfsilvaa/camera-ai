@@ -132,7 +132,7 @@ PUBLIC = {
     '/sw.js', '/manifest.webmanifest', '/static/icon-192.png', '/static/icon-512.png', '/static/icon-maskable.png',
 }
 # Family accounts are read-only; these (their own password and devices) are the only changes they may make.
-FAMILY_WRITES = {'/api/auth/logout', '/api/auth/password', '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/test',
+FAMILY_WRITES = {'/api/auth/logout', '/api/auth/password', '/api/auth/profile', '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/test',
                  '/api/push/presence-status', '/api/push/presence', '/api/push/topics-status', '/api/push/topics', '/api/notebook/call/answer', '/api/notebook/call/end',
                  '/api/intercom/listen', '/api/intercom/talk', '/api/intercom/video', '/api/intercom/face', '/api/intercom/hangup'}
 
@@ -476,7 +476,13 @@ async def stream(request: Request, camera_id: str = 'main'):
                              headers={'X-Accel-Buffering': 'no'})
 
 
-app.include_router(auth_routes.build(auth))
+def author_renamed(user_id, name):
+    """Photos and reminders keep the author's name as text: follow the account when it is renamed."""
+    for table in ('photos', 'reminders'):
+        db.execute(f'UPDATE {table} SET author=? WHERE user_id=?', (name[:60], user_id))
+
+
+app.include_router(auth_routes.build(auth, on_profile=author_renamed))
 app.include_router(people_routes.build(recognition, learning))
 app.include_router(alert_routes.build(alerts, config))
 app.include_router(backup_routes.build(backups))

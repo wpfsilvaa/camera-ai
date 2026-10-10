@@ -14,7 +14,7 @@ import sys
 import threading
 import time
 import uuid
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -127,6 +127,18 @@ def photo_ids():
     return [p.stem for p in files if PHOTO_ID.match(p.stem)]
 
 
+def photo_list():
+    """[{'id', 'a'}]: photos with who sent them (the sidecar file written on upload)."""
+    found = []
+    for photo_id in photo_ids():
+        try:
+            author = (PHOTOS / f'{photo_id}.author').read_text(encoding='utf-8').strip()[:40]
+        except OSError:
+            author = ''
+        found.append({'id': photo_id, 'a': ''.join(ch for ch in author if ch.isprintable())})
+    return found
+
+
 def build():
     """Changes whenever a kiosk file changes, so an open screen reloads itself after an update."""
     times = [int((KIOSK / name).stat().st_mtime) for name in ('index.html', 'kiosk.css', 'kiosk.js') if (KIOSK / name).is_file()]
@@ -173,7 +185,7 @@ class Desk:
                     'greet': {k: greet[k] for k in ('name', 'id', 'birthday', 'age')} if greet else None,
                     'bdays': self.bdays if fresh else [],
                     'reminders': [r for r in self.reminders if r['e'] > now] if fresh else [],
-                    'cfg': self.cfg if fresh else dict(DEFAULT_CFG), 'frame': self.frame if fresh else False, 'photos': photo_ids() if fresh and self.frame else []}
+                    'cfg': self.cfg if fresh else dict(DEFAULT_CFG), 'frame': self.frame if fresh else False, 'photos': photo_list() if fresh and self.frame else []}
 
     def linked(self):
         return self.clock() - self.last_poll < LINK_SECONDS
@@ -251,7 +263,7 @@ class Handler(BaseHTTPRequestHandler):
                                 (query.get('greet_kind') or [''])[0], (query.get('age') or [''])[0], (query.get('bdays') or [''])[0], (query.get('reminders') or [''])[0], query.get('frame') == ['1'], (query.get('cfg') or [''])[0])
             return self.reply(200, {**reading(), 'call': self.desk.snapshot()})
         if url.path == '/photos' and self.authorized():
-            return self.reply(200, {'ids': photo_ids()})
+            return self.reply(200, {'ids': photo_ids(), 'authors': {p['id']: p['a'] for p in photo_list()}})
         if not self.local():
             return self.send_error(404)
         photo = re.fullmatch(r'/photo/([a-f0-9]{32})\.jpg', url.path)
@@ -277,6 +289,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_error(404)
 
     def do_PUT(self):
+        renamed = re.fullmatch(r'/photos/([a-f0-9]{32})/author', urlsplit(self.path).path)
+        if renamed and self.authorized():
+            size = min(int(self.headers.get('Content-Length') or 0), 200)
+            if (PHOTOS / f'{renamed[1]}.jpg').is_file():
+                (PHOTOS / f'{renamed[1]}.author').write_text(self.rfile.read(size).decode('utf-8', 'replace')[:40], encoding='utf-8')
+            return self.reply(200, {'ok': True})
         photo = re.fullmatch(r'/photos/([a-f0-9]{32})', urlsplit(self.path).path)
         if not (photo and self.authorized()):
             return self.send_error(404)
@@ -290,6 +308,8 @@ class Handler(BaseHTTPRequestHandler):
         temporary = PHOTOS / f'{photo[1]}.part'
         temporary.write_bytes(data)
         temporary.replace(PHOTOS / f'{photo[1]}.jpg')
+        author = unquote(self.headers.get('X-Photo-Author', ''))[:40]
+        (PHOTOS / f'{photo[1]}.author').write_text(author, encoding='utf-8')
         self.reply(200, {'ok': True})
 
     def do_DELETE(self):
@@ -297,6 +317,7 @@ class Handler(BaseHTTPRequestHandler):
         if not (photo and self.authorized()):
             return self.send_error(404)
         (PHOTOS / f'{photo[1]}.jpg').unlink(missing_ok=True)
+        (PHOTOS / f'{photo[1]}.author').unlink(missing_ok=True)
         self.reply(200, {'ok': True})
 
     def do_POST(self):
