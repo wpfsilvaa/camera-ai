@@ -114,3 +114,9 @@ input,select,textarea{background:var(--surface);color:var(--ink);border-color:va
 .routine-grid .resources-panel:not(.hidden){display:block}
 @media(max-width:900px){.routine-grid{grid-template-columns:1fr}}
 .routine-grid:has(.resources-panel.hidden){grid-template-columns:1fr}
+
+/* Watch mode badge above the camera */
+.vigia-label{display:flex;align-items:center;gap:8px;margin:0 10px 10px;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;border:1px solid transparent}
+.vigia-label.on{background:var(--green-bg);color:var(--green-ink);border-color:var(--green-ink)}
+.vigia-label.off{background:var(--red-bg);color:var(--red-ink);border-color:var(--red-ink)}
+.vigia-dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex-shrink:0}

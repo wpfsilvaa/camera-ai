@@ -107,8 +107,20 @@ function route() {
 $$('[data-go]').forEach(button => button.addEventListener('click', () => { location.hash = button.dataset.go; }));
 window.addEventListener('hashchange', route);
 
+// Watch mode badge above the camera: green when it is on, red when off.
+function renderVigia(camera) {
+  const label = $('#vigia-label');
+  if (!label || !settings) return;
+  const on = !!settings.sentinel_enabled, hour = Number(new Date().toLocaleString('en-GB', {timeZone: 'America/Sao_Paulo', hour: '2-digit', hourCycle: 'h23'}));
+  const start = settings.sentinel_start_hour, end = settings.sentinel_end_hour;
+  const inside = start === end ? false : start < end ? hour >= start && hour < end : hour >= start || hour < end;
+  const hours = `${String(start).padStart(2, '0')}h às ${String(end).padStart(2, '0')}h`;
+  label.classList.toggle('on', on); label.classList.toggle('off', !on);
+  $('#vigia-text').textContent = !on ? 'Modo vigia desativado' : camera.sentinel ? `Modo vigia ativo · ${hours} · vigiando agora, poupando energia` : inside ? `Modo vigia ativo · ${hours} · há movimento, analisando` : `Modo vigia ativo · ${hours} · começa mais tarde`;
+}
 function renderStatus() {
   const {camera, whatsapp, stats} = status;
+  renderVigia(camera);
   renderAlerts(status.alerts || []);
   renderHome();
   loadRoutine().catch(() => {});
