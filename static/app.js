@@ -185,7 +185,7 @@ async function loadHistory() {
   historyEvents = data.events; total = data.total;
   $('#history-total').textContent = `${total} registro(s)`;
   $('#history-empty').classList.toggle('hidden', Boolean(total));
-  $('#history-table').innerHTML = historyEvents.map(event => `<tr class="history-row" data-event="${event.id}"><td><strong>${date(event.started,{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</strong><small>${escapeHTML(event.camera_name || 'Câmera principal')} · #${event.id} · ${event.kind==='manual' ? 'Gravação manual' : `máximo ${event.max_people} pessoa(s)`}</small></td><td>${badge(event.identity)}</td><td>${event.ended ? duration(event.ended-event.started) : '<span class="pill green">Gravando</span>'}</td><td>${!event.clips.length && event.photos?.length ? `${event.photos.length} foto(s)<small>Sem vídeo · modo restrito</small>` : `${event.clips.length} parte(s)<small>${escapeHTML(event.clips.length ? deliveryLabel(event.clips.at(-1),event) : event.ended ? 'Sem vídeo' : 'Preparando gravação')}</small>`}</td><td><button class="button secondary compact" data-event="${event.id}">Revisar ↗</button></td></tr>`).join('');
+  $('#history-table').innerHTML = historyEvents.map(event => `<tr class="history-row" data-event="${event.id}" tabindex="0" role="button" aria-label="Abrir registro #${event.id}"><td><strong>${date(event.started,{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</strong><small>${escapeHTML(event.camera_name || 'Câmera principal')} · #${event.id} · ${event.kind==='manual' ? 'Gravação manual' : `máximo ${event.max_people} pessoa(s)`}</small></td><td>${badge(event.identity)}</td><td>${event.ended ? duration(event.ended-event.started) : '<span class="pill green">Gravando</span>'}</td><td>${!event.clips.length && event.photos?.length ? `${event.photos.length} foto(s)<small>Sem vídeo · modo restrito</small>` : `${event.clips.length} parte(s)<small>${escapeHTML(event.clips.length ? deliveryLabel(event.clips.at(-1),event) : event.ended ? 'Sem vídeo' : 'Preparando gravação')}</small>`}</td><td class="row-chevron" aria-hidden="true">›</td></tr>`).join('');
   $('#previous-page').disabled = offset === 0;
   $('#next-page').disabled = offset + 20 >= total;
   $('#page-indicator').textContent = total ? `${offset+1}–${Math.min(offset+20,total)} de ${total}` : 'Nenhum registro';
@@ -217,6 +217,10 @@ function openEvent(event) {
   else $('#event-content .label-actions').insertAdjacentHTML('beforeend','<p class="small muted">Este registro não tem imagens individuais para ensinar. Novos registros com a comparação ativa terão uma identificação por pessoa.</p>');
   if (!$('#event-dialog').open) $('#event-dialog').showModal();
 }
+document.addEventListener('keydown', event => {
+  const row = event.key === 'Enter' && event.target.closest?.('tr[data-event]');
+  if (row) row.click();
+});
 document.addEventListener('click', event => {
   const eventButton = event.target.closest('[data-event]');
   if (eventButton) {

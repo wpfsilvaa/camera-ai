@@ -74,9 +74,9 @@ input,select,textarea{background:var(--surface);color:var(--ink);border-color:va
 }
 @media(max-width:960px) and (min-width:501px){.nav-link .nav-count{display:none}}
 
-/* History: the whole row opens the record; the button stays visible while the table scrolls sideways */
+/* History: the whole row opens the record */
 .history-row{cursor:pointer}
-.history-row:hover td{background:var(--surface-2)}
-.history-row td:last-child{position:sticky;right:0;background:var(--surface);box-shadow:-8px 0 8px -8px var(--shadow)}
-.history-row:hover td:last-child{background:var(--surface-2)}
-th:last-child{position:sticky;right:0}
+.history-row:hover td,.history-row:focus-visible td{background:var(--surface-2)}
+.history-row:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+.row-chevron{width:1%;font-size:22px;color:var(--muted);text-align:right}
+.history-row:hover .row-chevron{color:var(--green-ink)}
