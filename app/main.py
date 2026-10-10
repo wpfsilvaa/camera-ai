@@ -27,13 +27,14 @@ from .pacing import Greeter, first_name, is_night, vigia_state
 from .jobs import Jobs
 from .learning import LearningSuggestions
 from .notebook import NotebookMonitor
+from .photos import Photos
 from .reminders import Reminders
 from .offline import OfflineAnalysis
 from .proxy import allowed_origins, is_https
 from .push import Push
 from .recognition import Recognition
 from .storage import Storage
-from .routes import alerts as alert_routes, auth as auth_routes, backup as backup_routes, intercom as intercom_routes, people as people_routes, push as push_routes, storage as storage_routes
+from .routes import alerts as alert_routes, auth as auth_routes, backup as backup_routes, intercom as intercom_routes, people as people_routes, photos as photos_routes, push as push_routes, storage as storage_routes
 from .services import call_service
 
 db = Database()
@@ -67,6 +68,7 @@ notebook.frame = lambda: latest_frame('main')
 
 greeter = Greeter()
 reminders = Reminders(db)
+photos = Photos(db)
 
 
 def vigia_for_kitchen():
@@ -92,6 +94,7 @@ def vigia_for_kitchen():
 
 
 notebook.vigia = vigia_for_kitchen
+notebook.photos = photos
 push.people = lambda camera_id: cameras.get(camera_id).snapshot()['tracks']
 
 
@@ -145,7 +148,7 @@ async def protect(request: Request, call_next):
             return JSONResponse({'detail': 'Entre novamente para continuar.'}, status_code=401)
         user = request.state.user
         if user and user['role'] != 'admin':
-            if request.method not in ('GET', 'HEAD', 'OPTIONS') and path not in FAMILY_WRITES and not path.startswith('/api/reminders') or path.startswith(('/api/users', '/api/backup', '/api/learning', '/api/storage')):
+            if request.method not in ('GET', 'HEAD', 'OPTIONS') and path not in FAMILY_WRITES and not path.startswith(('/api/reminders', '/api/photos')) or path.startswith(('/api/users', '/api/backup', '/api/learning', '/api/storage')):
                 return JSONResponse({'detail': 'Seu acesso é somente para visualização. Peça a um administrador.'}, status_code=403)
     # Prevent other sites from changing local settings through the browser.
     if request.method not in ('GET', 'HEAD', 'OPTIONS'):
@@ -479,4 +482,5 @@ app.include_router(intercom_routes.build(config))
 app.include_router(push_routes.build(push))
 app.include_router(alert_routes.build_notebook(notebook))
 app.include_router(storage_routes.build(storage))
+app.include_router(photos_routes.build(photos))
 app.mount('/static', StaticFiles(directory=ROOT / 'static'), name='static')

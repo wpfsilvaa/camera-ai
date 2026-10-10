@@ -48,6 +48,7 @@ class NotebookMonitor:
     def __init__(self, alerts, config=default_config, token=notebook_token):
         self.alerts, self.config, self.token = alerts, config, token
         self.frame = None  # Callable returning the camera's current JPEG (attached to call alerts).
+        self.photos = None  # Photos object whose files are copied to the screen's frame.
         self.vigia = None  # Callable returning extra query parameters for the kitchen screen (watch mode, night, greeting).
         self.call = {'state': 'idle'}
         self.lock = threading.Lock()
@@ -79,12 +80,29 @@ class NotebookMonitor:
                         params.update(self.vigia())
                     except Exception:
                         log.exception('Falha ao montar o estado da tela do notebook')
+                    params['frame'] = int(settings.notebook_photo_frame_enabled)
                 response = client.get(f'{url}/status', headers={'Authorization': f'Bearer {token}'}, timeout=5, params=params)
                 if response.status_code == 200:
                     reading = response.json()
+                    self.sync_photos(client, url, {'Authorization': f'Bearer {token}'}, settings)
             except (httpx.HTTPError, ValueError):
                 pass
         self.check(settings, reading, now)
+
+    def sync_photos(self, client, url, headers, settings):
+        """Make the screen's folder of photos match the family album (a couple of uploads per poll)."""
+        if self.photos is None:
+            return
+        try:
+            wanted = [r['id'] for r in self.photos.list()] if settings.notebook_photo_frame_enabled else []
+            have = set(client.get(f'{url}/photos', headers=headers, timeout=5).json().get('ids', []))
+            for photo_id in have - set(wanted):
+                client.delete(f'{url}/photos/{photo_id}', headers=headers, timeout=5)
+            for photo_id in [i for i in wanted if i not in have][:2]:
+                client.put(f'{url}/photos/{photo_id}', content=self.photos.path(photo_id).read_bytes(), timeout=20,
+                           headers={**headers, 'Content-Type': 'image/jpeg'})
+        except (httpx.HTTPError, ValueError, OSError):
+            log.warning('Não foi possível sincronizar as fotos com a tela do notebook', exc_info=True)
 
     def reset(self):
         with self.lock:

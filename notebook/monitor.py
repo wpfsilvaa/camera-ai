@@ -8,6 +8,7 @@ estado da chamada) e decide quando avisar (app/notebook.py). A tela do quiosque 
 import hmac
 import json
 import os
+import re
 import socket
 import sys
 import threading
@@ -19,6 +20,9 @@ from pathlib import Path
 
 SUPPLIES = Path('/sys/class/power_supply')
 PORT = int(os.environ.get('MONITOR_PORT', '8765'))
+PHOTOS = Path(os.environ.get('MONITOR_PHOTOS_DIR', Path.home() / '.cache/casa-monitor/photos'))
+PHOTO_ID = re.compile(r'^[a-f0-9]{32}$')
+MAX_PHOTO_BYTES = 4 * 1024 * 1024
 KIOSK = Path(os.environ.get('MONITOR_KIOSK_DIR', Path(__file__).resolve().parent / 'kiosk'))
 TOKEN_FILE = Path(os.environ.get('MONITOR_TOKEN_FILE', Path.home() / '.config/casa-monitor/token'))
 
@@ -91,6 +95,15 @@ def parse_reminders(text):
     return found
 
 
+def photo_ids():
+    """Photo ids on this screen, oldest upload first."""
+    try:
+        files = sorted(PHOTOS.glob('*.jpg'), key=lambda p: p.stat().st_mtime)
+    except OSError:
+        return []
+    return [p.stem for p in files if PHOTO_ID.match(p.stem)]
+
+
 def build():
     """Changes whenever a kiosk file changes, so an open screen reloads itself after an update."""
     times = [int((KIOSK / name).stat().st_mtime) for name in ('index.html', 'kiosk.css', 'kiosk.js') if (KIOSK / name).is_file()]
@@ -108,9 +121,10 @@ class Desk:
         self.vigia = None   # (state, night, received_at) from the dashboard's last poll.
         self.greet = None   # {'name', 'id', 'until', 'birthday', 'age'}: shown once per id.
         self.bdays = []     # [{'n': first name, 'd': 'MM-DD'}] for the calendar.
+        self.frame = False   # Photo frame switched on in the dashboard's settings.
         self.reminders = []  # [{'i', 'a', 't', 'e'}]: notes cycled on the screen until their expiry.
 
-    def configure(self, call, panic, vigia=None, night=False, greet='', greet_id='', kind='', age='', bdays='', reminders=''):
+    def configure(self, call, panic, vigia=None, night=False, greet='', greet_id='', kind='', age='', bdays='', reminders='', frame=False):
         with self.lock:
             now = self.last_poll = self.clock()
             self.enabled = {'call': call, 'panic': panic}
@@ -122,6 +136,7 @@ class Desk:
                               'birthday': birthday, 'age': int(age) if age.isdigit() and 0 < int(age) < 130 else 0}
             self.bdays = parse_birthdays(bdays)
             self.reminders = parse_reminders(reminders)
+            self.frame = bool(frame)
 
     def display(self):
         """Watch-mode state, night tone and greeting for the kitchen screen; stale data is dropped."""
@@ -132,7 +147,8 @@ class Desk:
             return {'vigia': vigia[0] if fresh else None, 'night': bool(vigia[1]) if fresh else False,
                     'greet': {k: greet[k] for k in ('name', 'id', 'birthday', 'age')} if greet else None,
                     'bdays': self.bdays if fresh else [],
-                    'reminders': [r for r in self.reminders if r['e'] > now] if fresh else []}
+                    'reminders': [r for r in self.reminders if r['e'] > now] if fresh else [],
+                    'frame': self.frame if fresh else False, 'photos': photo_ids() if fresh and self.frame else []}
 
     def linked(self):
         return self.clock() - self.last_poll < LINK_SECONDS
@@ -207,10 +223,24 @@ class Handler(BaseHTTPRequestHandler):
             query = parse_qs(url.query)
             self.desk.configure(query.get('call') == ['1'], query.get('panic') == ['1'], (query.get('vigia') or [None])[0],
                                 query.get('night') == ['1'], (query.get('greet') or [''])[0], (query.get('greet_id') or [''])[0],
-                                (query.get('greet_kind') or [''])[0], (query.get('age') or [''])[0], (query.get('bdays') or [''])[0], (query.get('reminders') or [''])[0])
+                                (query.get('greet_kind') or [''])[0], (query.get('age') or [''])[0], (query.get('bdays') or [''])[0], (query.get('reminders') or [''])[0], query.get('frame') == ['1'])
             return self.reply(200, {**reading(), 'call': self.desk.snapshot()})
+        if url.path == '/photos' and self.authorized():
+            return self.reply(200, {'ids': photo_ids()})
         if not self.local():
             return self.send_error(404)
+        photo = re.fullmatch(r'/photo/([a-f0-9]{32})\.jpg', url.path)
+        if photo:
+            path = PHOTOS / f'{photo[1]}.jpg'
+            if not path.is_file():
+                return self.send_error(404)
+            self.send_response(200)
+            data = path.read_bytes()
+            self.send_header('Content-Type', 'image/jpeg')
+            self.send_header('Content-Length', str(len(data)))
+            self.send_header('Cache-Control', 'max-age=86400')
+            self.end_headers()
+            return self.wfile.write(data)
         if url.path == '/state':
             info = reading()
             return self.reply(200, {'call': self.desk.snapshot(), 'linked': self.desk.linked(), 'enabled': self.desk.enabled,
@@ -220,6 +250,29 @@ class Handler(BaseHTTPRequestHandler):
         if entry and (KIOSK / entry[0]).is_file():
             return self.reply(200, body=(KIOSK / entry[0]).read_bytes(), kind=entry[1])
         self.send_error(404)
+
+    def do_PUT(self):
+        photo = re.fullmatch(r'/photos/([a-f0-9]{32})', urlsplit(self.path).path)
+        if not (photo and self.authorized()):
+            return self.send_error(404)
+        size = int(self.headers.get('Content-Length') or 0)
+        if not 0 < size <= MAX_PHOTO_BYTES:
+            return self.send_error(413)
+        data = self.rfile.read(size)
+        if not data.startswith(b'\xff\xd8'):
+            return self.send_error(415)
+        PHOTOS.mkdir(parents=True, exist_ok=True)
+        temporary = PHOTOS / f'{photo[1]}.part'
+        temporary.write_bytes(data)
+        temporary.replace(PHOTOS / f'{photo[1]}.jpg')
+        self.reply(200, {'ok': True})
+
+    def do_DELETE(self):
+        photo = re.fullmatch(r'/photos/([a-f0-9]{32})', urlsplit(self.path).path)
+        if not (photo and self.authorized()):
+            return self.send_error(404)
+        (PHOTOS / f'{photo[1]}.jpg').unlink(missing_ok=True)
+        self.reply(200, {'ok': True})
 
     def do_POST(self):
         url = urlsplit(self.path)

@@ -25,7 +25,7 @@ from .pacing import DetectionPacing, MotionGate, TouchThrottle
 from .presence import Presence
 from .restricted import PhotoSchedule, RestrictedWatch
 from .tracking import PersonTracker
-from .recorder import Recorder
+from .recorder import Recorder, audio_url
 from .recognition import Recognition
 
 log = logging.getLogger(__name__)
@@ -466,6 +466,7 @@ class CameraWorker:
                             recorder.finish(now)  # Restricted mode: the record goes on, without video.
                             self.keep_photo(event_id,annotated,now,ids,labels)
                         elif recorder.writer is None:
+                            recorder.audio_url=audio_url(settings.camera_source) if current.record_audio else None
                             recorder.start(event_id,resize_width(annotated,settings.recording_width),now,settings.fps)
                         else:
                             recorder.write(resize_width(annotated,settings.recording_width),now)
@@ -478,6 +479,7 @@ class CameraWorker:
                     if manual_event is not None:
                         recorded=resize_width(original,settings.recording_width)
                         if manual_recorder.writer is None:
+                            manual_recorder.audio_url=audio_url(settings.camera_source) if current.record_audio else None
                             manual_recorder.start(manual_event,recorded,now,settings.fps)
                         else:
                             manual_recorder.write(recorded,now)

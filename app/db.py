@@ -90,6 +90,10 @@ class Database:
                     id TEXT PRIMARY KEY, event_id INTEGER NOT NULL REFERENCES events(id), created REAL NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS idx_photos_event ON event_photos(event_id);
+                -- Family photos for the kitchen screen's photo frame (files live in data/photos).
+                CREATE TABLE IF NOT EXISTS photos (
+                    id TEXT PRIMARY KEY, author TEXT NOT NULL, user_id TEXT, created REAL NOT NULL
+                );
                 -- Notes left for the kitchen screen; each one disappears at its expiry.
                 CREATE TABLE IF NOT EXISTS reminders (
                     id TEXT PRIMARY KEY, author TEXT NOT NULL, user_id TEXT, text TEXT NOT NULL,

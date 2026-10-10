@@ -1,6 +1,7 @@
 import logging
 import queue
 import shutil
+import signal
 import subprocess
 import threading
 import time
@@ -11,6 +12,50 @@ import cv2
 from .config import CLIPS
 
 log = logging.getLogger(__name__)
+
+
+class AudioTap:
+    """Records the camera computer's microphone (MediaMTX "mic" path) next to a clip.
+
+    Packets keep wall-clock timestamps (-copyts), so the mux step can line the sound up with the video
+    even though the microphone takes a moment to connect. Failing to get sound never loses the video.
+    """
+
+    def __init__(self, url, path):
+        self.url, self.path, self.process = url, path, None
+
+    def start(self):
+        try:
+            self.process = subprocess.Popen([
+                'ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-rtsp_transport', 'tcp', '-use_wallclock_as_timestamps', '1',
+                '-i', self.url, '-vn', '-ac', '1', '-c:a', 'aac', '-b:a', '64k', '-copyts', '-f', 'matroska', str(self.path)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except OSError:
+            self.process = None
+
+    def stop(self):
+        process, self.process = self.process, None
+        if process is None:
+            return
+        if process.poll() is None:
+            process.send_signal(signal.SIGINT)   # Lets ffmpeg write the end of the file.
+        try:
+            process.wait(timeout=6)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+
+
+def audio_url(source):
+    """The camera computer's microphone stream for an RTSP source, or the local MediaMTX for a USB camera."""
+    from urllib.parse import urlsplit
+    from .sources import local_device
+    if local_device(source):
+        return 'rtsp://127.0.0.1:8554/mic'
+    parts = urlsplit(source)
+    if parts.scheme in ('rtsp', 'rtsps') and parts.hostname:
+        return parts._replace(path='/mic', query='', fragment='').geturl()
+    return None
 
 
 class Recorder:
@@ -33,6 +78,8 @@ class Recorder:
         self.start_time = 0
         self.queue = None
         self.thread = None
+        self.audio_url = None   # Set by the camera loop when sound should be recorded with the clips.
+        self.audio = None
 
     def start(self, event_id, frame, timestamp, fps):
         if shutil.disk_usage(self.directory).free < 512 * 1024 * 1024:
@@ -50,6 +97,9 @@ class Recorder:
             raise RuntimeError('Não foi possível abrir o arquivo de gravação.')
         self.db.execute('INSERT INTO clips(id,event_id,started) VALUES(?,?,?)', (self.clip_id, event_id, timestamp))
         cv2.imwrite(str(self.directory / f'{self.clip_id}.jpg'), frame)
+        if self.audio_url:
+            self.audio = AudioTap(self.audio_url, self.directory / f'{self.clip_id}.mka')
+            self.audio.start()
         self.queue = queue.Queue(self.QUEUE)
         self.thread = threading.Thread(target=self.run, args=(self.writer, self.queue), daemon=True, name='recorder')
         self.thread.start()
@@ -97,10 +147,27 @@ class Recorder:
         self.thread.join()
         self.writer.release()
         self.writer = None
+        if self.audio:
+            self.audio.stop()
+            self.audio = None
         self.db.execute("UPDATE clips SET ended=?,duration=?,state='processing' WHERE id=?", (timestamp, self.frames / self.fps, self.clip_id))
         self.clip_id = None
         self.last_frame = None
         self.queue = self.thread = None
+
+
+def audio_offset(sound, video_start):
+    """Seconds the sound starts after the video (wall-clock timestamps), or None when there is no usable sound."""
+    try:
+        if not sound.is_file() or sound.stat().st_size < 2000:
+            return None
+        probe = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=start_time', '-of', 'default=nw=1:nk=1', str(sound)],
+                               capture_output=True, text=True, timeout=10)
+        start = float(probe.stdout.strip().splitlines()[0])
+    except (OSError, ValueError, IndexError, subprocess.TimeoutExpired):
+        return None
+    offset = start - video_start if start > 1e9 else 0.0
+    return min(max(offset, 0.0), 30.0)
 
 
 def transcode(db, row, directory=CLIPS):
@@ -111,12 +178,21 @@ def transcode(db, row, directory=CLIPS):
     try:
         if not source.exists():
             raise RuntimeError('Gravação temporária não encontrada após interrupção.')
-        result = subprocess.run([
-            'ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
-            '-i', str(source), '-an', '-c:v', 'libx264', '-preset', 'veryfast',
-            '-threads', '2', '-crf', '23', '-maxrate', '4000k', '-bufsize', '8000k',
-            '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(temporary),
-        ], capture_output=True, timeout=180)
+        sound = directory / f'{clip_id}.mka'
+        offset = audio_offset(sound, row['started'])
+        command = ['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-i', str(source)]
+        if offset is not None:
+            command += ['-itsoffset', f'{offset:.3f}', '-i', str(sound), '-map', '0:v', '-map', '1:a', '-c:a', 'aac', '-b:a', '64k']
+        else:
+            command += ['-an']
+        command += ['-c:v', 'libx264', '-preset', 'veryfast', '-threads', '2', '-crf', '23', '-maxrate', '4000k', '-bufsize', '8000k',
+                    '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(temporary)]
+        result = subprocess.run(command, capture_output=True, timeout=180)
+        if (result.returncode or not temporary.exists()) and offset is not None:
+            # The sound file was unusable: keep the video without it.
+            result = subprocess.run(['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-i', str(source), '-an', '-c:v', 'libx264',
+                                     '-preset', 'veryfast', '-threads', '2', '-crf', '23', '-maxrate', '4000k', '-bufsize', '8000k',
+                                     '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(temporary)], capture_output=True, timeout=180)
         if result.returncode or not temporary.exists() or temporary.stat().st_size < 100:
             raise RuntimeError('Falha ao converter o vídeo. Verifique FFmpeg e espaço em disco.')
         temporary.replace(output)
@@ -126,12 +202,13 @@ def transcode(db, row, directory=CLIPS):
             duration = float(probe.stdout.strip())
         db.execute("UPDATE clips SET state='ready',error=NULL,duration=?,ended=COALESCE(ended,started+?) WHERE id=?", (duration, duration, clip_id))
         source.unlink(missing_ok=True)
+        sound.unlink(missing_ok=True)
     except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
         db.execute("UPDATE clips SET state='failed',error=? WHERE id=?", (str(exc)[:250], clip_id))
         temporary.unlink(missing_ok=True)
 
 
-CLIP_FILES = ('mp4', 'avi', 'jpg', 'tmp.mp4', 'analyzed.mp4', 'analysis.avi', 'analysis.tmp.mp4')
+CLIP_FILES = ('mp4', 'avi', 'mka', 'jpg', 'tmp.mp4', 'analyzed.mp4', 'analysis.avi', 'analysis.tmp.mp4')
 # Only finished clips of closed, idle events may be removed.
 REMOVABLE = """SELECT clips.id FROM clips JOIN events ON events.id=clips.event_id
     WHERE events.ended IS NOT NULL AND events.analysis_state!='running'

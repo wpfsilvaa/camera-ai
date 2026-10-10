@@ -54,6 +54,8 @@ class CameraSettings(BaseModel):
     confidence: float = Field(default=0.5, ge=0.2, le=0.95)
     absence_seconds: float = Field(default=8, ge=2, le=120)
     min_presence_seconds: float = Field(default=1, ge=0.25, le=10)
+    # Record the camera computer's microphone (MediaMTX "mic" path) with each clip.
+    record_audio: bool = True
     segment_seconds: int = Field(default=60, ge=10, le=180)
     fps: int = Field(default=30, ge=5, le=30)
     # Normalized [x1, y1, x2, y2] areas (bed, sofa) where lying down is expected.
@@ -168,6 +170,8 @@ class Settings(CameraSettings):
     notebook_panic_enabled: bool = True
     # The kitchen screen greets recognised people by first name ("Bom dia, Waldemar").
     notebook_greeting_enabled: bool = True
+    # Idle kitchen screen: family photos by day (buttons appear on touch), black at night.
+    notebook_photo_frame_enabled: bool = True
     notebook_battery_percent: int = Field(default=20, ge=5, le=60)
     notebook_unplugged_minutes: int = Field(default=15, ge=0, le=240)
     notebook_offline_minutes: int = Field(default=5, ge=0, le=240)

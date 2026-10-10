@@ -10,8 +10,17 @@
   <script src="/kiosk.js" defer></script>
 </head>
 <body>
+  <div id="frame" class="frame hidden" aria-live="polite">
+    <div class="slide" id="slide-a"><div class="back"></div><img alt=""></div>
+    <div class="slide" id="slide-b"><div class="back"></div><img alt=""></div>
+    <div class="frame-top"><time id="frame-clock">--:--</time><span id="frame-date"></span></div>
+    <p id="frame-greeting" class="frame-greeting hidden"></p>
+    <p id="frame-greeting-sub" class="frame-greeting-sub hidden"></p>
+    <section id="frame-reminder" class="frame-reminder hidden"><div class="rem-label">Lembrete</div><p id="fr-text"></p><small id="fr-meta"></small></section>
+    <p id="frame-hint" class="frame-hint"></p>
+  </div>
   <div class="glow" aria-hidden="true"></div>
-  <main id="screen" data-view="idle">
+  <main id="screen" data-view="idle" data-mode="ui">
     <header>
       <div><time id="clock">--:--</time><span id="date"></span></div>
       <div class="status"><span id="vigia" class="vigia hidden" role="status"><svg class="vi vi-shield" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 4.5 5.5v6c0 4.6 3.1 8.4 7.5 10 4.4-1.6 7.5-5.4 7.5-10v-6L12 2.5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8.7 12.2 2.4 2.4 4.3-4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="vi vi-eye hidden" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg><span id="vigia-text"></span></span><span id="battery" class="hidden"></span></div>

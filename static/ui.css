@@ -134,3 +134,16 @@ input,select,textarea{background:var(--surface);color:var(--ink);border-color:va
 .reminders-list{list-style:none;margin:14px 0 0;padding:0}.reminders-list li{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--border);font-size:13px}
 .reminders-list small{display:block;color:var(--muted);font-size:11px;margin-top:2px}
 .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* Tap the picture to listen */
+.camera-view{cursor:pointer}
+.listen-hint{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:#172c24b3;color:#e6eddf;border:1px solid #ffffff30;border-radius:999px;padding:4px 12px;font-size:11px;white-space:nowrap;opacity:.85;pointer-events:none;z-index:2}
+.listen-hint.live{background:#2f8f66cc;border-color:#ffffff60;opacity:1}
+
+/* Photos for the kitchen screen */
+.photo-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0}
+.photos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px}
+.photos-grid figure{margin:0;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--surface-2)}
+.photos-grid img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover}
+.photos-grid figcaption{padding:4px 8px;font-size:11px;color:var(--muted)}
+label.button{cursor:pointer}
