@@ -85,6 +85,8 @@ def vigia_for_kitchen():
     info_night = kiosk_night(settings, hour)
     info = {'vigia': vigia_state(settings.sentinel_enabled, settings.sentinel_start_hour, settings.sentinel_end_hour, hour, bool(camera.get('sentinel'))),
             'night': int(kiosk_night(settings, hour)),
+            # Only the "red tones" choice recolours the screen; with the panel off (or black) it shows its normal colours when on.
+            'red': int(kiosk_night(settings, hour) and settings.kiosk_night_mode == 'red'),
             'cfg': json.dumps({'slide': settings.kiosk_slide_seconds, 'awake': settings.kiosk_awake_seconds, 'sound': settings.kiosk_sound_on,
                                'vol': {name: getattr(settings, f'kiosk_vol_{name}_{"night" if info_night else "day"}') for name in ('button', 'call', 'help', 'message')},
                                'calendar': settings.kiosk_calendar_enabled, 'framecal': settings.kiosk_frame_calendar, 'hints': settings.kiosk_hints, 'black': settings.kiosk_night_mode == 'black'}, ensure_ascii=False)}

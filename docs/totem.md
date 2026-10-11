@@ -4,9 +4,9 @@ O notebook que serve a câmera também mostra uma tela para quem está em casa: 
 moldura de fotos, calendário, saudações, lembretes e recados. Ela roda no navegador do próprio notebook e
 conversa com o painel por um pequeno serviço local (`notebook/monitor.py`).
 
-| Moldura de fotos (dia) | Botões e calendário | Noite (tons de vermelho) |
+| Moldura de fotos | Botões e calendário | Noite, opção "tons de vermelho" |
 |---|---|---|
-| ![Moldura de fotos](screenshots/totem-moldura.jpg) | ![Botões](screenshots/totem-botoes.png) | ![Noite](screenshots/totem-noite.png) |
+| ![Moldura de fotos](screenshots/totem-moldura.jpg) | ![Botões](screenshots/totem-botoes.png) | ![Noite em tons de vermelho](screenshots/totem-noite.png) |
 
 | Recado com a saudação | Aniversário |
 |---|---|
@@ -89,7 +89,7 @@ uma. O nome de quem enviou acompanha a conta se ela for renomeada em **Minha con
 
 Em **Configurações → Totem → Noite → Como a tela fica à noite**, a opção **"Desligar a tela (liga quando alguém
 aparece)"** apaga o painel de verdade (DPMS), poupando energia e eliminando qualquer luz no quarto. Quando alguém
-aparece na câmera, a tela liga em cerca de um segundo e mostra a moldura (ou os botões e o calendário), no visual de noite;
+aparece na câmera, a tela liga em cerca de um segundo e mostra a moldura (ou os botões e o calendário) com as **cores normais** (só a opção "tons de vermelho" muda as cores);
 ela volta a apagar depois do tempo escolhido (padrão 45 s) sem ninguém, e uma chamada sempre a mantém ligada.
 Mexer o mouse ou apertar uma tecla também a liga.
 

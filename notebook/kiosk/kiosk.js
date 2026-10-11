@@ -100,7 +100,7 @@
     else if (confirming) view = 'confirm';
     screen.dataset.view = view;
     soundFor(view, call);
-    document.documentElement.dataset.night = last.night ? '1' : '0';
+    document.documentElement.dataset.night = last.red ? '1' : '0';   // Red tones only when that look was chosen.
     const state = VIGIA[last.vigia] ? last.vigia : '';
     screen.dataset.vigia = state;
     $('vigia').classList.toggle('hidden', !state);

@@ -395,16 +395,18 @@ class Desk:
         self.version = 0     # Bumped on every change worth showing; /state?v=N waits for it (long-poll).
         self.changed = threading.Condition()
         self._signature = ''
+        self.red = False   # Night look in red tones (only when chosen in the settings).
         self.acks = []   # Message ids confirmed with "Li" on this screen, until the dashboard stores them.
         self.cfg = dict(DEFAULT_CFG)   # Screen settings from the dashboard.
         self.frame = False   # Photo frame switched on in the dashboard's settings.
         self.reminders = []  # [{'i', 'a', 't', 'e'}]: notes cycled on the screen until their expiry.
 
-    def configure(self, call, panic, vigia=None, night=False, greet='', greet_id='', kind='', age='', bdays='', reminders='', frame=False, cfg='', msgs='', quiet=False, acked=''):
+    def configure(self, call, panic, vigia=None, night=False, greet='', greet_id='', kind='', age='', bdays='', reminders='', frame=False, cfg='', msgs='', quiet=False, acked='', red=False):
         with self.lock:
             now = self.last_poll = self.clock()
             self.enabled = {'call': call, 'panic': panic}
             self.vigia = (vigia, night, now) if vigia in VIGIA_STATES else None
+            self.red = bool(red)
             name = ''.join(ch for ch in greet if ch.isprintable())[:30].strip()
             if name and (not self.greet or self.greet['id'] != greet_id):
                 birthday = kind == 'birthday'
@@ -444,7 +446,7 @@ class Desk:
             now, vigia = self.clock(), self.vigia
             fresh = vigia is not None and now - vigia[2] < LINK_SECONDS
             greet = self.greet if self.greet and now < self.greet['until'] else None
-            return {'vigia': vigia[0] if fresh else None, 'night': bool(vigia[1]) if fresh else False,
+            return {'vigia': vigia[0] if fresh else None, 'night': bool(vigia[1]) if fresh else False, 'red': self.red if fresh else False,
                     'greet': {k: greet[k] for k in ('name', 'id', 'birthday', 'age', 'msgs', 'quiet')} if greet else None,
                     'bdays': self.bdays if fresh else [],
                     'reminders': [r for r in self.reminders if r['e'] > now] if fresh else [],
@@ -552,7 +554,7 @@ class Handler(BaseHTTPRequestHandler):
             query = parse_qs(url.query)
             self.desk.configure(query.get('call') == ['1'], query.get('panic') == ['1'], (query.get('vigia') or [None])[0],
                                 query.get('night') == ['1'], (query.get('greet') or [''])[0], (query.get('greet_id') or [''])[0],
-                                (query.get('greet_kind') or [''])[0], (query.get('age') or [''])[0], (query.get('bdays') or [''])[0], (query.get('reminders') or [''])[0], query.get('frame') == ['1'], (query.get('cfg') or [''])[0], (query.get('greet_msgs') or [''])[0], query.get('greet_quiet') == ['1'], (query.get('acked') or [''])[0])
+                                (query.get('greet_kind') or [''])[0], (query.get('age') or [''])[0], (query.get('bdays') or [''])[0], (query.get('reminders') or [''])[0], query.get('frame') == ['1'], (query.get('cfg') or [''])[0], (query.get('greet_msgs') or [''])[0], query.get('greet_quiet') == ['1'], (query.get('acked') or [''])[0], query.get('red') == ['1'])
             self.dim_from(query)
             self.desk.touch()   # Anything new for the screen goes out immediately to the waiting /state request.
             return self.reply(200, {**reading(), 'call': self.desk.snapshot(), 'acks': list(self.desk.acks)})

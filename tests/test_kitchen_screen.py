@@ -385,6 +385,13 @@ class MonitorDisplayTests(unittest.TestCase):
         desk.configure(True, True, 'resting', False)
         self.assertEqual(desk.display()['tests'], [])
 
+    def test_red_look_is_only_sent_when_chosen(self):
+        desk = monitor.Desk()
+        desk.configure(True, True, 'resting', True)                       # Night, but no red look: normal colours.
+        self.assertEqual((desk.display()['night'], desk.display()['red']), (True, False))
+        desk.configure(True, True, 'resting', True, red=True)
+        self.assertTrue(desk.display()['red'])
+
     def test_screen_settings_are_validated_and_clamped(self):
         self.assertEqual(monitor.parse_cfg(''), monitor.DEFAULT_CFG)
         cfg = monitor.parse_cfg('{"slide":9999,"awake":1,"sound":false,"vol":{"button":250,"call":-5,"help":"loud"},"calendar":false,"black":"yes","hints":["Oi","","x"]}')
