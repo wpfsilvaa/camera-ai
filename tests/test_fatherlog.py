@@ -44,6 +44,17 @@ class FatherLogTests(unittest.TestCase):
         today, yesterday = summary['week'][-1], summary['week'][-2]
         self.assertEqual((today['visits'], today['areas'], yesterday['visits'], yesterday['sightings']), (3, {'Geladeira': 2, 'Armário': 1}, 1, 1))
 
+    def test_visit_in_a_record_confirmed_as_someone_else_is_not_counted(self):
+        self.db.execute("INSERT INTO people(id,name,is_father,created) VALUES('ana','Ana',0,0)")
+        event = self.presence(NOON - 600, 'ana')
+        self.db.execute('UPDATE person_tracks SET reviewed=1 WHERE event_id=?', (event,))
+        self.db.execute('UPDATE events SET ended=? WHERE id=?', (NOON - 500, event))
+        self.log.record_visit('main', NOON - 550, 'Geladeira')
+        self.log.record_visit('main', NOON - 60, 'Geladeira')   # Outside any reviewed record.
+        self.assertEqual(self.log.summary(NOON)['today']['areas'], {'Geladeira': [NOON - 60]})
+        self.db.execute("UPDATE person_tracks SET person_id='father' WHERE event_id=?", (event,))   # Reviewed again: it was him.
+        self.assertEqual(len(self.log.summary(NOON)['today']['areas']['Geladeira']), 2)
+
 
 if __name__ == '__main__':
     unittest.main()

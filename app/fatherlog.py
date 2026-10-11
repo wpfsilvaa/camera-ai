@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from .db import TZ
 
 DAYS = 7
+SLACK = 5   # Seconds around a record that still count as inside it.
 
 
 class FatherLog:
@@ -26,7 +27,12 @@ class FatherLog:
             ORDER BY e.started''', (since, until))
 
     def visits(self, since, until):
-        return self.db.rows('SELECT started,camera_id,area FROM restricted_visits WHERE started>=? AND started<? ORDER BY started', (since, until))
+        """Visits to restricted areas, minus those in a record the family reviewed and found were not the father."""
+        return self.db.rows('''SELECT v.started,v.camera_id,v.area FROM restricted_visits v WHERE v.started>=? AND v.started<?
+            AND NOT EXISTS (SELECT 1 FROM events e WHERE e.camera_id=v.camera_id AND v.started BETWEEN e.started-?3 AND COALESCE(e.ended,e.last_seen)+?3
+                AND EXISTS (SELECT 1 FROM person_tracks t WHERE t.event_id=e.id AND t.reviewed=1 AND t.person_id IS NOT NULL AND t.person_id!='father')
+                AND NOT EXISTS (SELECT 1 FROM person_tracks t WHERE t.event_id=e.id AND t.person_id='father'))
+            ORDER BY v.started''', (since, until, SLACK))
 
     @staticmethod
     def by_area(visits):
