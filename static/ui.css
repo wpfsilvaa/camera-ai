@@ -207,3 +207,4 @@ label.button{cursor:pointer}
 .camera-actions{display:flex;flex-wrap:wrap;gap:8px;padding-top:12px;border-top:1px solid var(--border)}
 .camera-picker-button small{color:var(--muted);font-size:12px;margin-left:-4px}
 .monitor-grid{grid-template-columns:minmax(0,1fr)!important}.monitor-grid .live-panel{max-width:960px}
+.routine-chart{margin-inline:auto}.routine-body .routine-text,#routine-caption{text-align:center}
