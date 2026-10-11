@@ -111,5 +111,37 @@ class MonitorPhotoTests(unittest.TestCase):
         self.request('DELETE', f'/photos/{photo_id}')
 
 
+class LongPollTests(MonitorPhotoTests):
+    def test_state_waits_for_a_change_and_returns_at_once_when_it_comes(self):
+        import json
+        import time
+        version = json.loads(self.request('GET', '/state', token=False)[1])['v']
+        started = time.time()
+        threading.Timer(0.3, monitor.Handler.desk.bump).start()
+        body = json.loads(self.request('GET', f'/state?v={version}&wait=4', token=False)[1])
+        self.assertGreater(body['v'], version)
+        self.assertLess(time.time() - started, 2)            # Woken by the change, not by the timeout.
+
+    def test_state_returns_after_the_wait_when_nothing_changes(self):
+        import json
+        import time
+        version = json.loads(self.request('GET', '/state', token=False)[1])['v']
+        started = time.time()
+        self.request('GET', f'/state?v={version}&wait=1', token=False)
+        self.assertGreaterEqual(time.time() - started, 0.9)
+
+    def test_touch_only_bumps_when_the_screen_would_change(self):
+        desk = monitor.Handler.desk
+        desk.configure(True, True, 'resting', False)
+        desk.touch()
+        before = desk.version
+        desk.configure(True, True, 'resting', False)     # Same state again.
+        desk.touch()
+        self.assertEqual(desk.version, before)
+        desk.configure(True, True, 'analysing', False)   # The watch mode changed.
+        desk.touch()
+        self.assertGreater(desk.version, before)
+
+
 if __name__ == '__main__':
     unittest.main()

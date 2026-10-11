@@ -4,7 +4,7 @@
   const screen = $('screen');
   let last = {call: {state: 'idle'}}, confirming = false, face = null, faceTimer = null;
   let build = null, greetedId = null, greetTimer = null;
-  const DEFAULT_CFG = {slide: 15, awake: 30, sound: true, vol: {button: 70, call: 70, help: 100, message: 80}, calendar: true, hints: [], black: true};
+  const DEFAULT_CFG = {slide: 15, awake: 30, sound: true, vol: {button: 70, call: 70, help: 100, message: 80}, calendar: true, framecal: 'always', hints: [], black: true};
   const cfg = () => ({...DEFAULT_CFG, ...(last.cfg || {}), vol: {...DEFAULT_CFG.vol, ...((last.cfg || {}).vol || {})}});
 
   // Sounds generated here (no files). Each kind has its own volume (0-100, set for day and night in the dashboard);
@@ -72,15 +72,15 @@
     const response = await fetch('/call', {method: 'POST', headers: {'X-Kiosk': '1', 'Content-Type': 'application/json'}, body: JSON.stringify({kind})});
     if (!response.ok) { $('note').textContent = 'Não foi possível chamar agora. Tente de novo.'; $('note').classList.remove('hidden'); }
     confirming = false;
-    await poll();
+    await poll(true);
   }
 
   $('btn-call').onclick = () => press('call');
   $('btn-panic').onclick = () => { confirming = true; render(); };
   $('confirm-yes').onclick = () => press('panic');
   $('confirm-no').onclick = () => { confirming = false; render(); };
-  $('btn-cancel').onclick = async () => { await post('/cancel'); poll(); };
-  $('btn-end').onclick = async () => { await post('/cancel'); poll(); };
+  $('btn-cancel').onclick = async () => { await post('/cancel'); poll(true); };
+  $('btn-end').onclick = async () => { await post('/cancel'); poll(true); };
 
   function clock() {
     const now = new Date();
@@ -261,7 +261,7 @@
 
   // Photo frame --------------------------------------------------------------
   // By day an idle screen shows the family photos; at night it is black. Touch, mouse or key brings the buttons back.
-  let slideMs = 0, monthTimer = null, monthFirst = null;
+  let slideMs = 0, monthTimer = null, monthFirst = null, monthPopping = false;
   let awakeUntil = 0, swallowClick = false, order = [], active = 'a', slideTimer = null, hintTimer = null, hintIndex = 0, lastMove = 0;
 
   function wake() { awakeUntil = Date.now() + cfg().awake * 1000; render(); }
@@ -358,7 +358,7 @@
         setTimeout(() => { hintIndex = (hintIndex + 1) % list.length; box.textContent = list[hintIndex]; box.style.opacity = 1; }, 600);
       };
       showHint(); hintTimer = setInterval(showHint, 9000);
-      const month = $('frame-month'), pop = () => { if (!cfg().calendar) return; month.classList.add('show'); setTimeout(() => month.classList.remove('show'), 12000); };
+      const month = $('frame-month'), pop = () => { if (cfg().framecal !== 'pulse') return; monthPopping = true; month.classList.add('show'); setTimeout(() => { monthPopping = false; month.classList.remove('show'); }, 12000); };
       monthTimer = setInterval(pop, 60000); monthFirst = setTimeout(pop, 5000);
     } else if (!on && slideTimer) {
       clearInterval(slideTimer); clearInterval(hintTimer); clearInterval(monthTimer); clearTimeout(monthFirst); slideTimer = hintTimer = null;
@@ -373,6 +373,9 @@
     if (slideTimer && slideMs !== cfg().slide * 1000) startFrame(false);   // The interval changed in the settings.
     screen.dataset.mode = mode;
     $('frame').classList.toggle('hidden', mode !== 'frame');
+    // Month card on the frame: always there, sliding in for 12 s each minute, or never.
+    const month = $('frame-month'), how = cfg().framecal;
+    if (mode === 'frame') month.classList.toggle('show', how === 'always' || (how === 'pulse' && monthPopping));
     startFrame(mode === 'frame');
   }
 
@@ -465,12 +468,20 @@
     }, 0);
   }
 
-  async function poll() {
-    try { last = await (await fetch('/state', {cache: 'no-store'})).json(); }
-    catch { last = {call: {state: 'idle'}, linked: false, enabled: {call: false, panic: false}}; }
+  // The monitor answers /state at once when something changes (long-poll) and at least every 3 s; `version` says what we have.
+  let version = -1;
+  const OFFLINE = {call: {state: 'idle'}, linked: false, enabled: {call: false, panic: false}};
+  async function poll(immediate = false) {
+    try {
+      const response = await fetch(immediate ? '/state' : `/state?v=${version}&wait=3`, {cache: 'no-store'});
+      const data = await response.json();
+      if (!immediate || data.v !== undefined) version = data.v ?? version;
+      last = data;
+    } catch { last = OFFLINE; await new Promise(resolve => setTimeout(resolve, 1000)); }
     render();
   }
 
   clock(); setInterval(clock, 10000);
-  poll(); setInterval(poll, 1000);
+  (async () => { for (;;) await poll(); })();   // Waits for changes instead of asking every second.
+  setInterval(render, 1000);                      // Timers on the screen (greetings, wake-up) still advance locally.
 })();

@@ -188,6 +188,7 @@ class Settings(CameraSettings):
     kiosk_vol_message_day: int = Field(default=80, ge=0, le=100)
     kiosk_vol_message_night: int = Field(default=35, ge=0, le=100)
     kiosk_calendar_enabled: bool = True
+    kiosk_frame_calendar: str = 'always'                             # On the photo frame: always visible, pulse (12 s a minute) or off.
     kiosk_birthdays_enabled: bool = True
     kiosk_hints: list[str] = Field(default_factory=list, max_length=10)   # Extra messages cycled on the photo frame.
 
@@ -196,6 +197,13 @@ class Settings(CameraSettings):
     def kiosk_night_valid(cls, value):
         if value not in ('black', 'red', 'normal'):
             raise ValueError('Escolha como a tela fica à noite.')
+        return value
+
+    @field_validator('kiosk_frame_calendar')
+    @classmethod
+    def kiosk_frame_calendar_valid(cls, value):
+        if value not in ('always', 'pulse', 'off'):
+            raise ValueError('Escolha como o calendário aparece na moldura.')
         return value
 
     @field_validator('kiosk_hints')

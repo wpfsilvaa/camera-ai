@@ -2,6 +2,7 @@
 import time
 import uuid
 
+PURGE_EVERY = 30   # Expired rows are swept at most this often: lists are read several times a second.
 MAX_TEXT = 240
 MAX_ACTIVE = 40
 KEEP_READ_DAYS = 7   # Read "once" messages stay in the list a while so the sender sees they were read.
@@ -10,15 +11,19 @@ KEEP_READ_DAYS = 7   # Read "once" messages stay in the list a while so the send
 class PersonMessages:
     def __init__(self, db):
         self.db = db
+        self.purged = 0
 
     def purge(self, now):
+        if now - self.purged < PURGE_EVERY:
+            return
+        self.purged = now
         self.db.execute('DELETE FROM person_messages WHERE expires<=? OR (once=1 AND read_at IS NOT NULL AND read_at<?)', (now, now - KEEP_READ_DAYS * 86400))
 
     def active(self, now=None, only_user=None):
         """Messages in the list; with only_user, just the ones that account wrote (messages are private to their author)."""
         now = now or time.time()
         self.purge(now)
-        where, params = ('WHERE m.user_id=?', (only_user,)) if only_user is not None else ('', ())
+        where, params = ('WHERE m.expires>? AND m.user_id=?', (now, only_user)) if only_user is not None else ('WHERE m.expires>?', (now,))
         return self.db.rows(f'SELECT m.*,p.name AS to_name FROM person_messages m LEFT JOIN people p ON p.id=m.to_person {where} ORDER BY m.created DESC', params)
 
     def add(self, author, user_id, to_person, text, hours, once=True, now=None, single=False):

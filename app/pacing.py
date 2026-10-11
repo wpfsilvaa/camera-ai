@@ -138,6 +138,7 @@ class Greeter:
     def __init__(self, seconds=GREET_SECONDS, cooldown=GREET_COOLDOWN):
         self.seconds, self.cooldown = seconds, cooldown
         self.last = {}
+        self.last_any = 0   # When anybody was last greeted (keeps the screen refreshing fast around a greeting).
         self.current = None
 
     def update(self, tracks, now, birthdays=None, today=None):
@@ -149,6 +150,7 @@ class Greeter:
             person, name = track.get('person_id'), first_name(track.get('name') or '')
             if person and name and now - self.last.get(person, -self.cooldown) >= self.cooldown:
                 self.last[person] = now
+                self.last_any = now
                 age = birthday_today((birthdays or {}).get(person), today) if today and birthdays else None
                 self.current = {'name': name, 'id': int(now), 'person': person, 'until': now + (BIRTHDAY_SECONDS if age is not None else self.seconds)}
                 if age is not None:

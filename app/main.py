@@ -85,7 +85,7 @@ def vigia_for_kitchen():
             'night': int(kiosk_night(settings, hour)),
             'cfg': json.dumps({'slide': settings.kiosk_slide_seconds, 'awake': settings.kiosk_awake_seconds, 'sound': settings.kiosk_sound_on,
                                'vol': {name: getattr(settings, f'kiosk_vol_{name}_{"night" if info_night else "day"}') for name in ('button', 'call', 'help', 'message')},
-                               'calendar': settings.kiosk_calendar_enabled, 'hints': settings.kiosk_hints, 'black': settings.kiosk_night_mode == 'black'}, ensure_ascii=False)}
+                               'calendar': settings.kiosk_calendar_enabled, 'framecal': settings.kiosk_frame_calendar, 'hints': settings.kiosk_hints, 'black': settings.kiosk_night_mode == 'black'}, ensure_ascii=False)}
     notes = reminders.active(now)
     if notes:
         info['reminders'] = json.dumps([{'i': n['id'][:8], 'a': first_name(n['author']), 't': n['text'], 'e': round(n['expires'])} for n in notes[:10]], ensure_ascii=False)
@@ -124,6 +124,15 @@ def vigia_for_kitchen():
 
 
 notebook.vigia = vigia_for_kitchen
+
+
+def screen_busy():
+    """True while the kitchen screen should be refreshed quickly: someone is in view, a call is on, or a greeting just ran."""
+    camera = next((c for c in cameras.snapshots() if c['id'] == 'main'), {})
+    return bool(camera.get('people')) or notebook.call.get('state') in ('ringing', 'answered') or time.time() - greeter.last_any < 30
+
+
+notebook.busy = screen_busy
 notebook.photos = photos
 
 

@@ -3,6 +3,7 @@ import time
 import uuid
 
 MAX_ACTIVE = 20
+PURGE_EVERY = 30   # Expired rows are swept at most this often: lists are read several times a second.
 MAX_TEXT = 200
 MAX_HOURS = 24 * 14
 
@@ -10,14 +11,17 @@ MAX_HOURS = 24 * 14
 class Reminders:
     def __init__(self, db):
         self.db = db
+        self.purged = 0
 
     def purge(self, now):
-        self.db.execute('DELETE FROM reminders WHERE expires<=?', (now,))
+        if now - self.purged >= PURGE_EVERY:
+            self.purged = now
+            self.db.execute('DELETE FROM reminders WHERE expires<=?', (now,))
 
     def active(self, now=None):
         now = now or time.time()
         self.purge(now)
-        return self.db.rows('SELECT id,author,user_id,text,created,expires FROM reminders ORDER BY created')
+        return [r for r in self.db.rows('SELECT id,author,user_id,text,created,expires FROM reminders ORDER BY created') if r['expires'] > now]
 
     def add(self, author, user_id, text, hours, now=None):
         now = now or time.time()

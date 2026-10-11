@@ -18,7 +18,11 @@ from .sources import local_device
 
 log = logging.getLogger(__name__)
 
-POLL_INTERVAL = 2   # Short, so a recognised face reaches the kitchen screen quickly.
+# The screen is asked often only while it matters (someone in front of the camera, a call going on) and rarely otherwise:
+# a recognised face reaches it within about half a second, and an empty house costs one request every few seconds.
+FAST_INTERVAL = 0.5
+SLOW_INTERVAL = 3
+PHOTO_SYNC_SECONDS = 5
 TOKEN = DATA / 'notebook.token'
 PORT = 8765
 KINDS = ('notebook_battery', 'notebook_unplugged', 'notebook_power_back', 'notebook_offline', 'notebook_online')
@@ -50,6 +54,8 @@ class NotebookMonitor:
         self.frame = None  # Callable returning the camera's current JPEG (attached to call alerts).
         self.read = None  # Called with message ids the person confirmed on the screen.
         self.confirmed = []  # Acks already stored: tell the screen it can forget them.
+        self.busy = None  # Callable: True while the screen needs quick updates.
+        self.last_photo_sync = 0
         self.delivered = None  # Called with message ids once the screen accepted them.
         self.photos = None  # Photos object whose files are copied to the screen's frame.
         self.vigia = None  # Callable returning extra query parameters for the kitchen screen (watch mode, night, greeting).
@@ -109,7 +115,9 @@ class NotebookMonitor:
                         self.confirmed = acks
                     if deliver and self.delivered:
                         self.delivered(deliver)
-                    self.sync_photos(client, url, {'Authorization': f'Bearer {token}'}, settings)
+                    if now - self.last_photo_sync >= PHOTO_SYNC_SECONDS:
+                        self.last_photo_sync = now
+                        self.sync_photos(client, url, {'Authorization': f'Bearer {token}'}, settings)
             except (httpx.HTTPError, ValueError):
                 pass
         self.check(settings, reading, now)
@@ -140,8 +148,25 @@ class NotebookMonitor:
             self.call = {'state': 'idle'}
             self.silent_alerted = self.unplugged_alerted = False
 
+    def interval(self):
+        try:
+            return FAST_INTERVAL if self.busy and self.busy() else SLOW_INTERVAL
+        except Exception:
+            return SLOW_INTERVAL
+
     def due(self, now=None):
-        return (now or time.time()) - self.last_poll >= POLL_INTERVAL
+        return (now or time.time()) - self.last_poll >= self.interval()
+
+    def run(self, stop_event):
+        """Own thread: polls the screen at the adaptive rate (the delivery loop only ticks once a second)."""
+        with httpx.Client(timeout=10, trust_env=False) as client:
+            while not stop_event.is_set():
+                try:
+                    if self.due():
+                        self.poll(client)
+                except Exception:
+                    log.exception('Falha na consulta à tela do notebook')
+                stop_event.wait(0.1)
 
     # Rules -------------------------------------------------------------------
 

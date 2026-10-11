@@ -123,6 +123,16 @@ class NotebookTests(unittest.TestCase):
         status = self.monitor.status(MORNING)
         self.assertEqual((status['state'], status['battery'], status['plugged']), ('battery', 64, False))
 
+    def test_poll_rate_is_fast_only_while_the_screen_needs_it(self):
+        self.assertEqual(self.monitor.interval(), 3)             # No "busy" probe: the relaxed rate.
+        self.monitor.busy = lambda: True
+        self.assertEqual(self.monitor.interval(), 0.5)           # Someone in front of the camera, or a call going on.
+        self.monitor.last_poll = 100.0
+        self.assertFalse(self.monitor.due(100.3))
+        self.assertTrue(self.monitor.due(100.6))
+        self.monitor.busy = lambda: (_ for _ in ()).throw(RuntimeError('probe failed'))
+        self.assertEqual(self.monitor.interval(), 3)             # A failing probe never stops the polling.
+
     def test_url_comes_from_the_camera_host(self):
         self.assertEqual(notebook_url('rtsp://192.168.1.103:8554/cam'), 'http://192.168.1.103:8765')
         self.assertEqual(notebook_url('0'), 'http://127.0.0.1:8765')  # A local camera: the monitor runs on this computer.

@@ -57,7 +57,7 @@ def reading():
 # A call nobody answered stops ringing after this long ("panic" keeps ringing until someone answers or he cancels).
 MISSED_AFTER = 300
 RESULT_SECONDS = 10  # How long "call ended / missed" stays on the kiosk screen.
-DEFAULT_CFG = {'slide': 15, 'awake': 30, 'sound': True, 'vol': {'button': 70, 'call': 70, 'help': 100, 'message': 80}, 'calendar': True, 'hints': [], 'black': True}
+DEFAULT_CFG = {'slide': 15, 'awake': 30, 'sound': True, 'vol': {'button': 70, 'call': 70, 'help': 100, 'message': 80}, 'calendar': True, 'framecal': 'always', 'hints': [], 'black': True}
 TEST_SOUNDS = ('press', 'ring', 'help', 'message')
 VIGIA_STATES = ('off', 'resting', 'analysing', 'scheduled')
 GREET_SECONDS = 10
@@ -127,6 +127,8 @@ def parse_cfg(text):
     if isinstance(data.get('vol'), dict):
         cfg['vol'] = {name: min(max(data['vol'][name], 0), 100) if isinstance(data['vol'].get(name), int) and not isinstance(data['vol'].get(name), bool) else DEFAULT_CFG['vol'][name]
                       for name in DEFAULT_CFG['vol']}
+    if data.get('framecal') in ('always', 'pulse', 'off'):
+        cfg['framecal'] = data['framecal']
     for key in ('calendar', 'black', 'sound'):
         if isinstance(data.get(key), bool):
             cfg[key] = data[key]
@@ -174,6 +176,9 @@ class Desk:
         self.greet = None   # {'name', 'id', 'until', 'birthday', 'age'}: shown once per id.
         self.bdays = []     # [{'n': first name, 'd': 'MM-DD'}] for the calendar.
         self.tests = []  # [{'id', 'sound', 'volume', 'text', 'at'}]: sounds/messages the dashboard asked the screen to play now.
+        self.version = 0     # Bumped on every change worth showing; /state?v=N waits for it (long-poll).
+        self.changed = threading.Condition()
+        self._signature = ''
         self.acks = []   # Message ids confirmed with "Li" on this screen, until the dashboard stores them.
         self.cfg = dict(DEFAULT_CFG)   # Screen settings from the dashboard.
         self.frame = False   # Photo frame switched on in the dashboard's settings.
@@ -207,7 +212,9 @@ class Desk:
         with self.lock:
             now = self.clock()
             self.tests = [t for t in self.tests if now - t['at'] < 30][-4:] + [{'id': uuid.uuid4().hex, 'sound': sound, 'volume': min(max(volume, 0), 100), 'text': text, 'at': now}]
-        return self.tests[-1]['id']
+            test_id = self.tests[-1]['id']
+        self.bump()
+        return test_id
 
     def ack(self, message_id):
         if re.fullmatch(r'[a-f0-9]{32}', message_id or ''):
@@ -227,6 +234,23 @@ class Desk:
                     'reminders': [r for r in self.reminders if r['e'] > now] if fresh else [],
                     'tests': [{k: t[k] for k in ('id', 'sound', 'volume', 'text')} for t in self.tests if now - t['at'] < 15],
                     'cfg': self.cfg if fresh else dict(DEFAULT_CFG), 'frame': self.frame if fresh else False, 'photos': photo_list() if fresh and self.frame else []}
+
+    def bump(self):
+        with self.changed:
+            self.version += 1
+            self.changed.notify_all()
+
+    def touch(self):
+        """Bump the version when what the screen would show differs from the last time."""
+        signature = json.dumps(self.display(), sort_keys=True, default=str) + json.dumps(self.snapshot(), sort_keys=True, default=str)
+        if signature != self._signature:
+            self._signature = signature
+            self.bump()
+
+    def wait_change(self, since, seconds):
+        with self.changed:
+            self.changed.wait_for(lambda: self.version != since, timeout=seconds)
+            return self.version
 
     def linked(self):
         return self.clock() - self.last_poll < LINK_SECONDS
@@ -302,6 +326,7 @@ class Handler(BaseHTTPRequestHandler):
             self.desk.configure(query.get('call') == ['1'], query.get('panic') == ['1'], (query.get('vigia') or [None])[0],
                                 query.get('night') == ['1'], (query.get('greet') or [''])[0], (query.get('greet_id') or [''])[0],
                                 (query.get('greet_kind') or [''])[0], (query.get('age') or [''])[0], (query.get('bdays') or [''])[0], (query.get('reminders') or [''])[0], query.get('frame') == ['1'], (query.get('cfg') or [''])[0], (query.get('greet_msgs') or [''])[0], query.get('greet_quiet') == ['1'], (query.get('acked') or [''])[0])
+            self.desk.touch()   # Anything new for the screen goes out immediately to the waiting /state request.
             return self.reply(200, {**reading(), 'call': self.desk.snapshot(), 'acks': list(self.desk.acks)})
         if url.path == '/photos' and self.authorized():
             return self.reply(200, {'ids': photo_ids(), 'authors': {p['id']: p['a'] for p in photo_list()}})
@@ -320,10 +345,15 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             return self.wfile.write(data)
         if url.path == '/state':
+            query = parse_qs(url.query)
+            since = query.get('v', [''])[0]
+            if since.lstrip('-').isdigit() and int(since) >= 0:
+                # Long-poll: answers as soon as something changes, or after a few seconds so timers still advance.
+                self.desk.wait_change(int(since), min(float((query.get('wait') or ['3'])[0] or 3), 5))
             info = reading()
             return self.reply(200, {'call': self.desk.snapshot(), 'linked': self.desk.linked(), 'enabled': self.desk.enabled,
                                     'battery': info['battery'], 'plugged': info['plugged'], 'now': time.time(), **self.desk.display(),
-                                    'build': build()})
+                                    'build': build(), 'v': self.desk.version})
         entry = self.kiosk_files.get(url.path)
         if entry and (KIOSK / entry[0]).is_file():
             return self.reply(200, body=(KIOSK / entry[0]).read_bytes(), kind=entry[1])
@@ -373,17 +403,23 @@ class Handler(BaseHTTPRequestHandler):
                 call = self.desk.answer(str(self.body().get('name', ''))) if url.path == '/call/answer' else self.desk.end()
             except ValueError as error:
                 return self.reply(409, {'error': str(error)})
+            self.desk.bump()
             return self.reply(200, call)
         # A custom header keeps other web pages in the kiosk browser from pressing the button.
         if not self.local() or self.headers.get('X-Kiosk') != '1':
             return self.send_error(404)
         try:
             if url.path == '/call':
-                return self.reply(201, self.desk.press(str(self.body().get('kind'))))
+                call = self.desk.press(str(self.body().get('kind')))
+                self.desk.bump()
+                return self.reply(201, call)
             if url.path == '/cancel':
-                return self.reply(200, self.desk.end())
+                call = self.desk.end()
+                self.desk.bump()
+                return self.reply(200, call)
             if url.path == '/ack':
                 self.desk.ack(str(self.body().get('id', '')))
+                self.desk.bump()
                 return self.reply(200, {'ok': True})
         except ValueError as error:
             return self.reply(409, {'error': str(error)})

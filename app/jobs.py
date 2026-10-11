@@ -47,7 +47,10 @@ class Jobs:
         self.headers = {'Authorization': f'Bearer {gateway_token()}'}
 
     def start(self):
-        for target in (self.process_loop, self.delivery_loop):
+        targets = [self.process_loop, self.delivery_loop]
+        if self.notebook:
+            targets.append(lambda: self.notebook.run(self.stop_event))   # The screen has its own, faster loop.
+        for target in targets:
             thread = threading.Thread(target=target, daemon=True)
             thread.start()
             self.threads.append(thread)
@@ -202,13 +205,11 @@ class Jobs:
                         step(client)
                     except Exception:
                         log.exception('Falha na fila do WhatsApp')
-                self.stop_event.wait(1)   # Also paces the kitchen screen's poll: a recognised face should show up fast.
+                self.stop_event.wait(1)
 
     def alert_step(self, client):
         if not self.alerts:
             return
         if time.time() - self.alerts.last_check >= CHECK_INTERVAL:
             self.alerts.check()
-        if self.notebook and self.notebook.due():
-            self.notebook.poll(client)
         self.alerts.deliver_one(client)
