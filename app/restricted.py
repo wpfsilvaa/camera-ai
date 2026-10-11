@@ -25,6 +25,7 @@ class RestrictedWatch:
 
     def __init__(self):
         self.identities = {}  # track id -> person id
+        self.areas = set()    # Indexes of the areas that have a watched person inside (after the last update).
 
     def reset(self):
         self.identities.clear()
@@ -39,13 +40,15 @@ class RestrictedWatch:
             if person:
                 self.identities[key] = person
         width, height = frame_size
-        inside = []
+        inside, self.areas = [], set()
         for box, key in zip(boxes, ids):
-            if not any(overlap(box, zone, width, height) >= OVERLAP for zone in zones):
+            hit = [index for index, zone in enumerate(zones) if overlap(box, zone, width, height) >= OVERLAP]
+            if not hit:
                 continue
             person = self.identities.get(key)
             if who == 'anyone' or person == FATHER or (who == 'father_or_unknown' and person is None):
                 inside.append(key)
+                self.areas.update(hit)
         return inside
 
 

@@ -105,6 +105,11 @@ class Database:
                     id TEXT PRIMARY KEY, author TEXT NOT NULL, user_id TEXT, text TEXT NOT NULL,
                     created REAL NOT NULL, expires REAL NOT NULL
                 );
+                -- Each time someone goes into a restricted area (the fridge), so the family can follow how often.
+                CREATE TABLE IF NOT EXISTS restricted_visits (
+                    id INTEGER PRIMARY KEY, camera_id TEXT NOT NULL, started REAL NOT NULL, person TEXT, area TEXT NOT NULL DEFAULT ''
+                );
+                CREATE INDEX IF NOT EXISTS idx_restricted_visits_started ON restricted_visits(started);
                 -- Family logbook: dated notes written in the dashboard.
                 CREATE TABLE IF NOT EXISTS journal (
                     id TEXT PRIMARY KEY, author TEXT NOT NULL, user_id TEXT, text TEXT NOT NULL, tag TEXT NOT NULL DEFAULT 'geral', created REAL NOT NULL
@@ -145,6 +150,8 @@ class Database:
                                      ('presence_quiet', 'INTEGER NOT NULL DEFAULT 0'), ('muted', "TEXT NOT NULL DEFAULT '[]'")):
                 if name not in push_columns:
                     db.execute(f'ALTER TABLE push_subscriptions ADD COLUMN {name} {definition}')
+            if 'area' not in {r['name'] for r in db.execute('PRAGMA table_info(restricted_visits)')}:
+                db.execute("ALTER TABLE restricted_visits ADD COLUMN area TEXT NOT NULL DEFAULT ''")
             if db.execute('PRAGMA user_version').fetchone()[0] < 1:
                 # "Someone appeared" for every presence was too noisy: devices move to "only when the father is recognised" once (they can switch back).
                 db.execute("UPDATE push_subscriptions SET presence_filter='father' WHERE presence_filter='all'")

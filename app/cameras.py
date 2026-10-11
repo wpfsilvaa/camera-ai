@@ -14,6 +14,7 @@ class CameraManager:
         self.fall_handler = None  # Set by the application; receives suspected falls from every camera.
         self.presence_handler = None  # Receives each new presence record from every camera.
         self.restricted_handler = None  # Receives each visit to a restricted area (restricted mode).
+        self.visit_handler = None  # Receives (camera id, time, name) for every visit to a restricted area.
         self.reminder_handler = None  # Receives (camera id, reminder text) when the father goes into a restricted area.
         self.workers = {}
         self.add_worker('main', recognition)
@@ -23,6 +24,7 @@ class CameraManager:
         worker.on_fall = lambda *args: self.fall_handler and self.fall_handler(*args)
         worker.on_presence = lambda *args: self.presence_handler and self.presence_handler(*args)
         worker.on_restricted = lambda *args: self.restricted_handler and self.restricted_handler(*args)
+        worker.on_visit = lambda *args: self.visit_handler and self.visit_handler(*args)
         worker.on_reminder = lambda *args: self.reminder_handler and self.reminder_handler(*args)
         self.workers[camera_id] = worker
         return worker

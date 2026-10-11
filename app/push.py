@@ -82,6 +82,7 @@ class Push:
         self.lock = threading.Lock()
         self.last_presence = {}
         self.last_father = {}
+        self.sightings_today = None  # Callable: how many presence records of the father today (for "3rd time today").
         self.frame = None  # Set by the application: camera_id -> latest JPEG (with boxes and names) or None.
         self.people = None  # camera_id -> visible tracks [{'id', 'person_id', 'name'}], for the presence filter.
         self.quiet = None  # now -> True during the configured quiet hours.
@@ -179,8 +180,10 @@ class Push:
                     if now - self.last_father.get(camera_id, 0) >= FATHER_COOLDOWN:
                         self.last_father[camera_id] = now
                         who = ' '.join((track.get('name') or 'pai').split()[1:] if (track.get('name') or '').lower().startswith(('meu ', 'minha ')) else (track.get('name') or 'pai').split())
+                        times = self.sightings_today() if self.sightings_today else 0
+                        again = f' Já são {times} vezes hoje.' if times >= 2 else ''
                         self.notify(self.presence_alert(camera_id, now, 'father',
-                                                        f'{who[:1].upper()}{who[1:]} apareceu na câmera {camera_name} às {clock(now)}.'))
+                                                        f'{who[:1].upper()}{who[1:]} apareceu na câmera {camera_name} às {clock(now)}.{again}'))
             if now >= deadline:
                 break
             self.sleep(1)

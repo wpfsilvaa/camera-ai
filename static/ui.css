@@ -245,3 +245,19 @@ label.button{cursor:pointer}
 .call-photo-face img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .call-photo label.text-button{cursor:pointer}
 .birthday-field+.birthday-field{margin-top:10px}.profile-card .birthday-field{display:block}
+
+/* O pai hoje */
+.father-today{margin:0 0 22px}.father-today .panel-body{display:grid;gap:14px}
+.father-row{display:flex;gap:18px;align-items:center;flex-wrap:wrap}.father-count{display:flex;align-items:baseline;gap:8px;min-width:190px}
+.father-count strong{font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}.father-count span{font-size:12px;color:var(--muted)}
+.time-chips{display:flex;flex-wrap:wrap;gap:6px;flex:1}.time-chip{padding:3px 9px;border-radius:999px;background:var(--surface-2);font-size:12px;font-variant-numeric:tabular-nums}
+#father-areas{display:grid;gap:14px}.area-chips .time-chip{background:var(--red-bg);color:var(--red-ink)}
+.week-bars{display:flex;gap:10px;align-items:flex-end;padding-top:6px;border-top:1px solid var(--border)}
+.week-day{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;max-width:60px;font-size:11px;color:var(--muted)}
+.week-bar{display:flex;gap:3px;align-items:flex-end;height:48px;width:100%;justify-content:center}.week-bar i,.week-bar b{display:block;width:40%;min-height:2px;border-radius:3px 3px 0 0}
+.week-bar i,.week-legend i{background:var(--chart,#4f7f63)}.week-bar b,.week-legend b{background:#c36c5c}
+.week-legend{margin-left:auto;font-size:11px;color:var(--muted);display:flex;gap:6px;align-items:center}.week-legend i,.week-legend b{width:9px;height:9px;border-radius:2px;display:inline-block}
+
+.zone-names{display:grid;gap:8px;margin-top:10px}.zone-name{display:flex;gap:8px;align-items:center}
+.zone-name>span{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--red-bg);color:var(--red-ink);font-size:12px;font-weight:700;flex-shrink:0}
+.zone-name input{flex:1}

@@ -92,7 +92,8 @@ class ReminderTests(unittest.TestCase):
         import numpy as np
         from app.camera import CameraWorker
         worker = CameraWorker.__new__(CameraWorker)
-        worker.restricted, worker.camera_id, worker.last_reminder = RestrictedWatch(), 'main', 0.0
+        worker.restricted, worker.camera_id, worker.last_reminder, worker.area_seen = RestrictedWatch(), 'main', 0.0, {}
+        worker.on_visit = None
         worker.on_restricted, self.heard = None, []
         worker.on_reminder = lambda camera, text: self.heard.append((camera, text))
         return worker, np.zeros((1000, 1000, 3), np.uint8)
@@ -117,3 +118,22 @@ class ReminderTests(unittest.TestCase):
         off = CameraSettings(restricted_enabled=True, restricted_zones=FRIDGE, restricted_who='anyone')
         worker.check_restricted(self.Zone(), [AT_FRIDGE], [8], {'8': FATHER}, frame, 2000, off)
         self.assertEqual(len(self.heard), 2)
+
+
+class AreaVisitTests(unittest.TestCase):
+    """Each named area counts its own visits (fridge and cupboard), a new one after it was empty for a few seconds."""
+
+    def test_visits_are_logged_per_named_area(self):
+        import numpy as np
+        from app.camera import CameraWorker, AREA_GAP
+        zones = [[.6, .2, .9, .9], [.0, .2, .3, .9]]
+        settings = CameraSettings(restricted_enabled=True, restricted_zones=zones, restricted_zone_names=['Geladeira', ''], restricted_who='anyone')
+        worker = CameraWorker.__new__(CameraWorker)
+        worker.restricted, worker.camera_id, worker.area_seen, seen = RestrictedWatch(), 'main', {}, []
+        worker.on_visit = lambda camera, now, area, person: seen.append((now, area, person))
+        fridge, cupboard = AT_FRIDGE, (50, 300, 250, 900)
+        for now, box in ((1000, fridge), (1002, fridge), (1004, cupboard), (1006, cupboard), (1030, fridge)):
+            worker.restricted.update([box], [7], {'7': FATHER}, FRAME, zones, 'anyone')
+            worker.log_visits(now, settings, 'Meu pai')
+        self.assertEqual([(a, p) for _, a, p in seen], [('Geladeira', 'Meu pai'), ('Área 2', 'Meu pai'), ('Geladeira', 'Meu pai')])
+        self.assertEqual([n for n, _, _ in seen], [1000, 1004, 1030])

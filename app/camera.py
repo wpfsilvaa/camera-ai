@@ -32,6 +32,7 @@ log = logging.getLogger(__name__)
 # A loop pass above this is logged with its stages; so is waiting this long for a camera frame.
 STALL_SECONDS = .3
 STALL_WAIT_SECONDS = 1.0
+AREA_GAP=10  # Seconds without anyone inside before the next entry counts as a new visit to that area.
 REMINDER_GAP=60  # Seconds between two reminders at least.
 RESTRICTED_COLOR=(60,60,200)  # BGR: restricted areas are red, fall areas blue.
 # Ultralytics initialization touches process-wide configuration; serialize warmup.
@@ -122,8 +123,10 @@ class CameraWorker:
         self.on_presence=None  # Called with (camera_id, camera_name, time) when a presence record starts.
         # Called with (camera_id, camera_name, jpeg bytes, person name) when a restricted area visit starts.
         self.on_restricted=None
+        self.on_visit=None   # Called with (camera id, time, name) at the start of every visit to a restricted area.
         self.on_reminder=None   # Called with (camera id, text) when the father goes into a restricted area (a sound on the kitchen screen).
         self.last_reminder=0.0
+        self.area_seen={}   # Area index -> last moment someone was inside (a new visit starts after AREA_GAP seconds without anyone).
         self.restricted=RestrictedWatch()
         self.photos=PhotoSchedule()
         self.last_stall_log=0
@@ -184,11 +187,24 @@ class CameraWorker:
                     log.exception('Falha ao registrar possível queda')
         return lying
 
+    def log_visits(self, now, settings, person):
+        """One visit per area each time someone goes in after it was empty, so a report can say how often the fridge or the cupboard was opened."""
+        names=settings.restricted_zone_names
+        for index in self.restricted.areas:
+            if now-self.area_seen.get(index,-AREA_GAP)>=AREA_GAP and self.on_visit:
+                name=(names[index] if index<len(names) else '') or (f'Área {index+1}' if len(settings.restricted_zones)>1 else 'Área restrita')
+                try:
+                    self.on_visit(self.camera_id,now,name,person)
+                except Exception:
+                    log.exception('Falha ao registrar ida à área restrita')
+            self.area_seen[index]=now
+
     def check_restricted(self, zone, boxes, ids, labels, frame, now, settings):
         """Update the restricted area visit; alert once when it starts, if enabled."""
         height,width=frame.shape[:2]
         inside=self.restricted.update(boxes,ids,labels,(width,height),settings.restricted_zones,settings.restricted_who)
         started=zone.update(now,len(inside))=='start'
+        self.log_visits(now,settings,next((labels.get(str(k),{}).get('name') for k in inside if labels.get(str(k),{}).get('name')),None))
         if started and settings.restricted_reminder and self.on_reminder and now-self.last_reminder>=REMINDER_GAP \
                 and any(self.restricted.identities.get(key)==FATHER for key in inside):
             self.last_reminder=now

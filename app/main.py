@@ -30,6 +30,7 @@ from .jobs import Jobs
 from .learning import LearningSuggestions
 from .notebook import NotebookMonitor
 from .avatars import MAX_BYTES as AVATAR_MAX, Avatars
+from .fatherlog import FatherLog
 from .journal import Journal
 from .messages import MessagePlanner, PersonMessages
 from .photos import Photos
@@ -79,6 +80,9 @@ reminders = Reminders(db)
 photos = Photos(db)
 person_messages = PersonMessages(db)
 journal = Journal(db)
+father_log = FatherLog(db)
+cameras.visit_handler = father_log.record_visit
+push.sightings_today = father_log.count_today
 avatars = Avatars()
 weather = Weather(config)
 greeted = {'id': None}   # Last greeting sent to the screen: its messages go out once.
@@ -386,6 +390,11 @@ def avatar_media(person_id: str):
     if not avatars.has(person_id):
         raise HTTPException(404)
     return FileResponse(avatars.path(person_id), media_type='image/jpeg', headers={'Cache-Control': 'private, max-age=300'})
+
+
+@app.get('/api/father/today')
+def father_today():
+    return father_log.summary()
 
 
 class JournalIn(BaseModel):

@@ -298,6 +298,8 @@ ativa a opção "pai ou não reconhecida", então use "qualquer pessoa" para tes
 - **Enviar pelo WhatsApp:** desligue para receber só as **notificações do painel no celular**. O alerta não vai ao WhatsApp
   e os vídeos gravados por esse modo não entram na fila de envio (ficam no histórico). Ligado (padrão), continua como antes.
 
+**Várias áreas com nome e relatório:** desenhe uma área para cada lugar (geladeira, armário…) e dê um nome a cada uma abaixo da imagem. Cada ida de uma pessoa a uma área vale uma visita (uma nova só depois de 10 s sem ninguém lá). Na visão geral, o painel **O pai hoje** mostra quantas vezes ele apareceu na câmera e quantas idas a cada área, com os horários, mais um gráfico dos últimos 7 dias. A notificação de presença do pai também diz "Já são N vezes hoje" a partir da segunda.
+
 **Lembrete para o pai (diabetes, por exemplo):** ligue **Lembrar o pai com um som e um aviso na tela** e escreva a frase. Quando ele é reconhecido pelo rosto e entra na área restrita, a tela do notebook toca um sinal suave (volume das mensagens, de dia ou de noite) e mostra o lembrete por cerca de 12 segundos. No máximo um por minuto. O botão **Testar o lembrete na tela** mostra como fica. Funciona sem o alerta à família e sem WhatsApp.
 
 ## Possível queda

@@ -65,6 +65,7 @@ class CameraSettings(BaseModel):
     restricted_enabled: bool = False
     restricted_zones: list[list[float]] = Field(default_factory=list, max_length=10)
     restricted_who: str = 'father'
+    restricted_zone_names: list[str] = Field(default_factory=list, max_length=10)   # Name of each restricted area, by position ("Geladeira", "Armário").
     restricted_alert: bool = False
     # Restricted mode: send its alert and videos by WhatsApp too. Off = web-app notifications only.
     restricted_whatsapp: bool = True
@@ -98,6 +99,11 @@ class CameraSettings(BaseModel):
             if len(zone) != 4 or not all(0 <= v <= 1 for v in zone) or zone[0] >= zone[2] or zone[1] >= zone[3]:
                 raise ValueError('Área marcada inválida.')
         return [[round(v, 4) for v in zone] for zone in zones]
+
+    @field_validator('restricted_zone_names')
+    @classmethod
+    def zone_names_valid(cls, names):
+        return [''.join(ch for ch in str(name) if ch.isprintable()).strip()[:30] for name in names]
 
     @field_validator('restricted_who')
     @classmethod
