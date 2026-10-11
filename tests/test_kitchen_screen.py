@@ -143,6 +143,15 @@ class PersonMessageTests(unittest.TestCase):
         self.messages.delete(message, 'u1', False)
         self.assertEqual(self.messages.active(), [])
 
+    def test_each_account_only_lists_its_own_messages(self):
+        mine = self.messages.add('Waldemar', 'u1', 'father', 'Segredo meu', 24)
+        self.messages.add('Lorena', 'u2', 'father', 'Segredo dela', 24)
+        self.assertEqual([m['id'] for m in self.messages.active(only_user='u1')], [mine])
+        self.assertEqual(len(self.messages.active(only_user='u3')), 0)
+        self.assertEqual(len(self.messages.active()), 2)                      # The screen logic still sees all of them.
+        with self.assertRaises(PermissionError):
+            self.messages.delete(mine, 'u2', False)
+
     def test_read_messages_leave_the_list_after_a_week(self):
         message = self.messages.add('Ana', 'u1', 'father', 'oi', 24 * 30, True, now=1000)
         self.messages.mark_read([message], 1000)

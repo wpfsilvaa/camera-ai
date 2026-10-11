@@ -18,6 +18,8 @@ def has_users():
 if __name__ == '__main__':
     logging.basicConfig(level=os.environ.get('LOG_LEVEL', 'INFO').upper(),
                         format='%(asctime)s %(levelname)s %(name)s: %(message)s', datefmt='%d/%m %H:%M:%S')
+    # The screen poll carries message texts in its URL: keep them out of the journal.
+    logging.getLogger('httpx').setLevel(logging.WARNING)
     gateway_token()
     host = os.environ.get('HOST', '127.0.0.1')
     if host not in ('127.0.0.1', 'localhost', '::1') and not os.environ.get('DASHBOARD_PASSWORD') and not has_users():

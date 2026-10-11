@@ -14,10 +14,12 @@ class PersonMessages:
     def purge(self, now):
         self.db.execute('DELETE FROM person_messages WHERE expires<=? OR (once=1 AND read_at IS NOT NULL AND read_at<?)', (now, now - KEEP_READ_DAYS * 86400))
 
-    def active(self, now=None):
+    def active(self, now=None, only_user=None):
+        """Messages in the list; with only_user, just the ones that account wrote (messages are private to their author)."""
         now = now or time.time()
         self.purge(now)
-        return self.db.rows('''SELECT m.*,p.name AS to_name FROM person_messages m LEFT JOIN people p ON p.id=m.to_person ORDER BY m.created DESC''')
+        where, params = ('WHERE m.user_id=?', (only_user,)) if only_user is not None else ('', ())
+        return self.db.rows(f'SELECT m.*,p.name AS to_name FROM person_messages m LEFT JOIN people p ON p.id=m.to_person {where} ORDER BY m.created DESC', params)
 
     def add(self, author, user_id, to_person, text, hours, once=True, now=None):
         now = now or time.time()
@@ -57,7 +59,7 @@ class PersonMessages:
         if not rows:
             raise KeyError('Recado não encontrado.')
         if not is_admin and rows[0]['user_id'] != user_id:
-            raise PermissionError('Só quem escreveu o recado (ou um administrador) pode removê-lo.')
+            raise PermissionError('Só quem escreveu o recado pode removê-lo.')
         self.db.execute('DELETE FROM person_messages WHERE id=?', (message_id,))
 
 

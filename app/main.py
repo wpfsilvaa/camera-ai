@@ -283,28 +283,30 @@ class MessageIn(BaseModel):
 
 
 def message_view(row, user):
+    """A message as its author sees it; nobody else gets to list it (it is shown only to the recipient, on the screen)."""
     return {'id': row['id'], 'to_person': row['to_person'], 'to_name': row['to_name'], 'author': row['author'], 'text': row['text'], 'created': row['created'],
             'expires': row['expires'], 'once': bool(row['once']), 'shown': row['shown'], 'last_shown': row['last_shown'], 'read_at': row['read_at'],
-            'mine': bool(user) and (user['role'] == 'admin' or user['id'] == row['user_id'])}
+            'mine': True}
 
 
 @app.get('/api/messages')
 def list_messages(request: Request):
-    return {'messages': [message_view(r, request.state.user) for r in person_messages.active()]}
+    user = request.state.user
+    return {'messages': [message_view(r, user) for r in person_messages.active(only_user=user['id'] if user else None)]}
 
 
 @app.post('/api/messages')
 def add_message(body: MessageIn, request: Request):
     user = request.state.user
     call_service(person_messages.add, user['name'] if user else 'Casa', user['id'] if user else None, body.to_person, body.text, body.hours, body.once)
-    return {'messages': [message_view(r, user) for r in person_messages.active()]}
+    return {'messages': [message_view(r, user) for r in person_messages.active(only_user=user['id'] if user else None)]}
 
 
 @app.delete('/api/messages/{message_id}')
 def delete_message(message_id: str, request: Request):
     user = request.state.user
     try:
-        person_messages.delete(message_id, user['id'] if user else None, not user or user['role'] == 'admin')
+        person_messages.delete(message_id, user['id'] if user else None, not user)   # Only the author (no login: single-user setup).
     except PermissionError as exc:
         raise HTTPException(403, str(exc))
     except KeyError as exc:
