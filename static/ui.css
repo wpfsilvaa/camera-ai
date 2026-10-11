@@ -33,7 +33,7 @@ input,select,textarea{background:var(--surface);color:var(--ink);border-color:va
 #notebook-text{margin:0 0 8px;line-height:1.5}
 
 /* Settings: three groups instead of one long page */
-.settings-tabs{display:flex;gap:4px;padding:4px;margin-bottom:20px;border-radius:12px;background:var(--surface-2);width:fit-content;max-width:100%;overflow-x:auto}
+.settings-tabs{position:sticky;top:0;z-index:20;box-shadow:0 0 0 8px var(--bg);display:flex;gap:4px;padding:4px;margin-bottom:20px;border-radius:12px;background:var(--surface-2);width:fit-content;max-width:100%;overflow-x:auto}
 .settings-tab{border:0;background:none;color:var(--muted);font-size:13px;font-weight:600;padding:9px 18px;border-radius:9px;white-space:nowrap}
 .settings-tab[aria-selected=true]{background:var(--surface);color:var(--green-ink);box-shadow:0 1px 4px var(--shadow)}
 .settings-tab:hover:not([aria-selected=true]){color:var(--ink)}
@@ -68,7 +68,7 @@ input,select,textarea{background:var(--surface);color:var(--ink);border-color:va
   .toast{bottom:calc(var(--nav-height) + env(safe-area-inset-bottom) + 14px)}
   .topbar{position:sticky;top:0;z-index:10;background:var(--bg)}
   .settings-actions{bottom:calc(var(--nav-height) + env(safe-area-inset-bottom) + 8px)}
-  .settings-tabs{width:100%}
+  .settings-tabs{width:100%;top:51px}
   .settings-tab{flex:1;padding:9px 8px}
 }
 @media(max-width:960px) and (min-width:501px){.nav-link .nav-count{display:none}}
@@ -261,3 +261,6 @@ label.button{cursor:pointer}
 .zone-names{display:grid;gap:8px;margin-top:10px}.zone-name{display:flex;gap:8px;align-items:center}
 .zone-name>span{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--red-bg);color:var(--red-ink);font-size:12px;font-weight:700;flex-shrink:0}
 .zone-name input{flex:1}
+
+/* Dialogs: the title bar with the close button stays at the top while the content scrolls. */
+dialog .dialog-heading{position:sticky;top:0;z-index:5;background:var(--surface);padding:4px 0 8px;margin-bottom:6px}

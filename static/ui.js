@@ -19,6 +19,18 @@
   });
   paintTheme();
 
+  // Dialogs close when the backdrop is clicked (a drag that merely ends outside does not count) ---------
+  let pressedBackdrop = false;
+  const onBackdrop = event => {
+    const box = event.target.getBoundingClientRect();
+    return event.target.matches('dialog') && (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom);
+  };
+  document.addEventListener('pointerdown', event => { pressedBackdrop = onBackdrop(event); });
+  document.addEventListener('click', event => {
+    if (pressedBackdrop && onBackdrop(event)) event.target.close();
+    pressedBackdrop = false;
+  });
+
   // Settings groups ---------------------------------------------------------
   const tabs = [...document.querySelectorAll('.settings-tab')];
   function showGroup(group) {
