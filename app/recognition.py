@@ -303,7 +303,7 @@ class Recognition:
             self.invalidate(db)
         (self.directory / f'{sample_id}.jpg').unlink(missing_ok=True)
 
-    def confirm(self, track_id, person_id, sample_id=None):
+    def confirm(self, track_id, person_id, sample_id=None, sample_ids=()):
         with self.lock, self.db.connect() as db:
             track = db.execute('''SELECT t.*,e.ended,e.kind,e.analysis_state FROM person_tracks t JOIN events e ON e.id=t.event_id
                 WHERE t.id=?''', (track_id,)).fetchone()
@@ -315,16 +315,17 @@ class Recognition:
                 raise ValueError('Aguarde o fim do registro para identificar e ensinar.')
             if person_id and not db.execute('SELECT id FROM people WHERE id=?', (person_id,)).fetchone():
                 raise KeyError('Perfil não encontrado.')
-            if sample_id:
-                sample = db.execute('SELECT model FROM person_samples WHERE id=? AND track_id=?', (sample_id,track_id)).fetchone()
+            chosen = list(dict.fromkeys([*sample_ids, *([sample_id] if sample_id else [])]))
+            for chosen_id in chosen:
+                sample = db.execute('SELECT model FROM person_samples WHERE id=? AND track_id=?', (chosen_id,track_id)).fetchone()
                 if not sample:
                     raise ValueError('A imagem selecionada não pertence a essa pessoa do registro.')
                 if not sample['model'].startswith('sface-'):
                     raise ValueError('Esta imagem antiga é do corpo. Cadastre uma foto do rosto na tela Pessoas.')
             db.execute('UPDATE person_samples SET person_id=NULL WHERE track_id=? AND (person_id!=? OR ? IS NULL)', (track_id,person_id,person_id))
             db.execute('UPDATE person_tracks SET person_id=?,reviewed=?,suggested_id=NULL,similarity=NULL WHERE id=?', (person_id,int(person_id is not None),track_id))
-            if person_id and sample_id:
-                db.execute('UPDATE person_samples SET person_id=? WHERE id=?', (person_id,sample_id))
+            if person_id and chosen:
+                db.executemany('UPDATE person_samples SET person_id=? WHERE id=?', [(person_id,chosen_id) for chosen_id in chosen])
                 db.execute('''UPDATE person_samples SET person_id=NULL WHERE person_id=? AND id NOT IN
                     (SELECT id FROM person_samples WHERE person_id=? ORDER BY created DESC LIMIT 100)''', (person_id,person_id))
             recompute_identity(db,track['event_id'])

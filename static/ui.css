@@ -269,3 +269,7 @@ dialog .dialog-heading{position:sticky;top:0;z-index:5;background:var(--surface)
 .tip-always{display:inline-grid;place-items:center}
 .monitor-row>span>small{display:none}
 .monitor-row>span>small.tip-open{display:block;margin-top:6px;padding:8px 10px;border-radius:8px;background:var(--surface-2)}
+/* Face picker: plain checkboxes on the photos (not the toggle-switch look), so several faces can be marked. */
+.sample-choice input[type=checkbox]{appearance:auto;width:20px;height:20px;border-radius:4px;background:none;z-index:1}
+.sample-choice input[type=checkbox]::before{content:none}
+.track-names .label-buttons{margin-top:6px}

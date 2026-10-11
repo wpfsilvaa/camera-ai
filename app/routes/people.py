@@ -40,6 +40,7 @@ class TrackMerge(BaseModel):
 class PersonConfirmation(BaseModel):
     person_id: str | None = None
     sample_id: str | None = None
+    sample_ids: list[str] = Field(default_factory=list, max_length=12)
 
 
 def decode_photo(content):
@@ -145,7 +146,7 @@ def build(recognition, learning, on_forget=None):
 
     @router.patch('/api/person-tracks/{track_id}')
     def confirm_person(track_id: int, body: PersonConfirmation):
-        call_service(recognition.confirm, track_id, body.person_id, body.sample_id)
+        call_service(recognition.confirm, track_id, body.person_id, body.sample_id, body.sample_ids)
         return {'ok': True}
 
     @router.delete('/api/person-tracks/{track_id}')

@@ -107,6 +107,14 @@ class LearningTests(unittest.TestCase):
         self.assertEqual(self.recognition.merge_fragments(self.now - 3600), 1)
         self.assertEqual([t['id'] for t in self.db.rows('SELECT id FROM person_tracks WHERE event_id=?', (event,))], [a])
 
+    def test_confirm_can_teach_several_faces_at_once(self):
+        track, (a, b, c) = self.track(self.event(), faces=[((.97, .2, .1), 90), ((.9, .1, .42), 80), ((.5, .5, .5), 70)])
+        self.recognition.confirm(track, 'father', sample_ids=[a, b])
+        taught = {r['id'] for r in self.db.rows("SELECT id FROM person_samples WHERE track_id=? AND person_id='father'", (track,))}
+        self.assertEqual(taught, {a, b})
+        with self.assertRaises(ValueError):
+            self.recognition.confirm(track, 'father', sample_ids=['0' * 32])
+
     def test_approve_teaches_and_reject_is_remembered(self):
         track, (sample,) = self.track(self.event(), faces=[((.9, .1, .42), 200)])
         self.learning.scan(self.now)
