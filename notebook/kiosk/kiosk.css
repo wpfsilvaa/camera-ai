@@ -140,8 +140,8 @@ html[data-night="1"] .frame{filter:brightness(.5) sepia(1) hue-rotate(-35deg) sa
 .frame.speaking .frame-reminder,.frame.speaking .fr-foot,.frame.speaking .fr-credit{opacity:0!important;pointer-events:none;transition:opacity .4s}
 .fr-foot{transition:color .9s,opacity .4s}
 /* Messages for a person: a quote, the sender's name small underneath */
-.quote{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:16vh 8vw 8vh;background:radial-gradient(ellipse at center,#000b,#000e);animation:quotein .9s ease-out}
-.quote figure{margin:0;max-width:min(84vw,1400px)}
+.quote{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3vh;padding:15vh 8vw 5vh;background:radial-gradient(ellipse at center,#000b,#000e);animation:quotein .9s ease-out}
+.quote figure{margin:0;max-width:min(84vw,1400px);flex:0 1 auto;min-height:0;max-height:100%;overflow:hidden}
 .quote blockquote{margin:0;font-family:Georgia,"Times New Roman",serif;font-style:italic;font-weight:400;font-size:clamp(32px,5.4vw,82px);line-height:1.28;color:#fff;text-align:center}
 .quote blockquote::before{content:"“";display:block;font-size:2.2em;line-height:.5;color:var(--amber);margin-bottom:.15em}
 .quote figcaption{margin-top:3.2vh;text-align:right;font-family:Georgia,"Times New Roman",serif;font-size:clamp(20px,2.6vw,38px);color:var(--muted);letter-spacing:.06em}
@@ -149,8 +149,8 @@ html[data-night="1"] .frame{filter:brightness(.5) sepia(1) hue-rotate(-35deg) sa
 html[data-night="1"] .quote blockquote{color:#c8493c}
 @keyframes quotein{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.quote{animation:none}}
-.quote-ok{position:absolute;left:50%;bottom:7vh;transform:translateX(-50%);border:0;border-radius:999px;background:var(--green);color:#fff;font:inherit;font-weight:700;font-size:clamp(26px,3.6vw,52px);padding:1.4vh 5vw;cursor:pointer;touch-action:manipulation}
-.quote-ok:active{transform:translateX(-50%) scale(.97)}
+.quote-ok{position:static;flex:0 0 auto;border:0;border-radius:999px;background:var(--green);color:#fff;font:inherit;font-weight:700;font-size:clamp(26px,3.6vw,52px);padding:1.4vh 5vw;cursor:pointer;touch-action:manipulation}
+.quote-ok:active{transform:scale(.97)}
 html[data-night="1"] .quote-ok{color:#f0948a}
 
 /* The greeting shrinks and moves up while the message takes the stage */
@@ -168,7 +168,7 @@ html[data-night="1"] .quote-head{color:#c8493c}
 @media (prefers-reduced-motion:reduce){.quote.attn::after{animation:none}}
 
 /* View-once message: it disappears by itself; a bar shows how long is left */
-.quote-timer{position:absolute;left:50%;bottom:7vh;transform:translateX(-50%);width:min(46vw,640px);text-align:center;color:var(--muted);font-size:clamp(16px,2vw,28px)}
+.quote-timer{position:static;flex:0 0 auto;width:min(46vw,640px);text-align:center;color:var(--muted);font-size:clamp(16px,2vw,28px)}
 .quote-timer b{display:block;height:.9vh;margin-top:1.2vh;border-radius:99px;background:#ffffff26;overflow:hidden}
 .quote-timer i{display:block;height:100%;width:100%;background:var(--amber);transform-origin:left;animation:drain 30s linear forwards}
 @keyframes drain{to{transform:scaleX(0)}}
@@ -212,3 +212,6 @@ html[data-night="1"] .quote-head{color:#c8493c}
 .rain{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:10}
 body:has(#screen[data-mode=black]) .rain{display:none}
 @media (prefers-reduced-motion:reduce){.rain{display:none}}
+
+/* Long messages: the text shrinks to fit (see fitQuote) so the card, the button and the countdown always stay on screen */
+.quote blockquote{overflow-wrap:anywhere}

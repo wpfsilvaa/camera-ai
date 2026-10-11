@@ -163,6 +163,7 @@
     head.textContent = quoteHead.text; head.classList.toggle('hidden', !quoteHead.text); head.classList.toggle('birthday', quoteHead.birthday);
     head.classList.remove('rise'); if (quoteHead.fresh) { void head.offsetWidth; head.classList.add('rise'); quoteHead.fresh = false; }   // Moves up once.
     $('quote').classList.remove('hidden'); $('quote').style.animation = 'none'; void $('quote').offsetWidth; $('quote').style.animation = '';
+    fitQuote();
     syncSpeaking();
     quoteTimer = setTimeout(nextQuote, item.ms || (single ? 30000 : 20000));
     testVolume = item.vol ?? null;
@@ -174,6 +175,13 @@
     chimeTimer = setTimeout(() => { if (current && !item.vol && !single && quoteId === current) { try { sounds.message(); } catch { /* ignore */ } } }, 9000);   // Still unread: once more.
   }
   let quoteHead = {text: '', birthday: false, fresh: false};
+  // Size the text by its length, then shrink it until the whole card fits above the button.
+  function fitQuote() {
+    const figure = $('quote').querySelector('figure'), text = $('quote-text'), length = text.textContent.length;
+    const vw = length <= 70 ? 5.4 : length <= 120 ? 4.4 : length <= 170 ? 3.6 : 3.0;
+    text.style.fontSize = `min(${vw}vw, ${Math.round(vw * 15)}px)`;
+    for (let i = 0; i < 16 && figure.scrollHeight > figure.clientHeight + 1; i++) text.style.fontSize = `${parseFloat(getComputedStyle(text).fontSize) * 0.9}px`;
+  }
   function showQuotes(items, delay, headline = '', birthday = false) {
     hideQuote(); quoteQueue = [...items]; quoteHead = {text: headline, birthday, fresh: Boolean(headline)};
     quoteTimer = setTimeout(nextQuote, delay);
