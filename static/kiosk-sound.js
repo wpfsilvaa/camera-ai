@@ -10,10 +10,10 @@ document.addEventListener('input', event => { if (event.target.matches?.('input[
 document.addEventListener('click', event => {
   const button = event.target.closest('[data-test-sound]');
   if (!button) return;
-  const input = document.querySelector(`input[name="${button.dataset.testInput}"]`);
+  const input = button.dataset.testInput ? document.querySelector(`input[name="${button.dataset.testInput}"]`) : null;
   action(button, async () => {
-    await api('/api/kiosk/test', {method: 'POST', body: JSON.stringify({sound: button.dataset.testSound, volume: Math.min(100, Number(input.value))})});
-    toast(button.dataset.testSound === 'message' ? 'Teste enviado: veja o cartão de exemplo na tela do notebook.' : button.dataset.testSound === 'brightness' ? 'Brilho aplicado por 6 segundos na tela do notebook.' : button.dataset.testSound === 'screenoff' ? 'A tela do notebook apaga por 5 segundos e liga de novo.' : 'Teste enviado para a tela do notebook.');
+    await api('/api/kiosk/test', {method: 'POST', body: JSON.stringify({sound: button.dataset.testSound, volume: Math.min(100, input ? Number(input.value) : Number(button.dataset.testVolume || 70))})});
+    toast(button.dataset.testSound === 'message' ? 'Teste enviado: veja o cartão de exemplo na tela do notebook.' : button.dataset.testSound === 'brightness' ? 'Brilho aplicado por 6 segundos na tela do notebook.' : button.dataset.testSound === 'screenoff' ? 'A tela do notebook apaga por 5 segundos e liga de novo.' : button.dataset.testSound === 'rain' ? 'Chuva na tela do notebook por 15 segundos.' : 'Teste enviado para a tela do notebook.');
   });
 });
 setTimeout(syncVolumeLabels, 2500);

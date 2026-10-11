@@ -189,6 +189,12 @@ class Settings(CameraSettings):
     kiosk_vol_message_day: int = Field(default=80, ge=0, le=100)
     kiosk_vol_message_night: int = Field(default=35, ge=0, le=100)
     kiosk_calendar_enabled: bool = True
+    # Weather on the screen (Open-Meteo): off by default; the city's coordinates are all that is sent.
+    kiosk_weather_enabled: bool = False
+    kiosk_weather_city: str = Field(default='', max_length=120)
+    kiosk_weather_lat: float = Field(default=0.0, ge=-90, le=90)
+    kiosk_weather_lon: float = Field(default=0.0, ge=-180, le=180)
+    kiosk_weather_rain: bool = True   # Falling-drops effect on the screen while it is raining.
     # Screen brightness (laptop backlight): dim at night, brighter while someone is around. Off by default.
     kiosk_dim_enabled: bool = False
     kiosk_bright_day: int = Field(default=60, ge=5, le=100)

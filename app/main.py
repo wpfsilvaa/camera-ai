@@ -29,6 +29,7 @@ from .learning import LearningSuggestions
 from .notebook import NotebookMonitor
 from .messages import MessagePlanner, PersonMessages
 from .photos import Photos
+from .weather import Weather, search as search_cities
 from .reminders import Reminders
 from .offline import OfflineAnalysis
 from .proxy import allowed_origins, is_https
@@ -71,6 +72,7 @@ greeter = Greeter()
 reminders = Reminders(db)
 photos = Photos(db)
 person_messages = PersonMessages(db)
+weather = Weather(config)
 greeted = {'id': None}   # Last greeting sent to the screen: its messages go out once.
 message_planner = MessagePlanner(person_messages)
 screen_state = {'until': 0}   # Until when the panel stays on after someone was in view (night, panel-off mode).
@@ -89,7 +91,7 @@ def vigia_for_kitchen():
             'red': int(kiosk_night(settings, hour) and settings.kiosk_night_mode == 'red'),
             'cfg': json.dumps({'slide': settings.kiosk_slide_seconds, 'awake': settings.kiosk_awake_seconds, 'sound': settings.kiosk_sound_on,
                                'vol': {name: getattr(settings, f'kiosk_vol_{name}_{"night" if info_night else "day"}') for name in ('button', 'call', 'help', 'message')},
-                               'calendar': settings.kiosk_calendar_enabled, 'framecal': settings.kiosk_frame_calendar, 'hints': settings.kiosk_hints, 'black': settings.kiosk_night_mode == 'black'}, ensure_ascii=False)}
+                               'calendar': settings.kiosk_calendar_enabled, 'framecal': settings.kiosk_frame_calendar, 'rain': settings.kiosk_weather_rain, 'hints': settings.kiosk_hints, 'black': settings.kiosk_night_mode == 'black'}, ensure_ascii=False)}
     if settings.kiosk_dim_enabled:
         # Day: the day level. Night: very dim, but brighter while someone is in view (kept for a while after they leave).
         if camera.get('people') or notebook.call.get('state') in ('ringing', 'answered'):
@@ -104,6 +106,9 @@ def vigia_for_kitchen():
             screen_state['until'] = now + settings.kiosk_screen_off_after
         info['screen'] = 'off' if info['night'] and now >= screen_state['until'] else 'on'
         info['screen_hold'] = settings.kiosk_screen_off_after
+    forecast = weather.current(settings)
+    if forecast:
+        info['weather'] = json.dumps(forecast, ensure_ascii=False)
     notes = reminders.active(now)
     if notes:
         info['reminders'] = json.dumps([{'i': n['id'][:8], 'a': first_name(n['author']), 't': n['text'], 'e': round(n['expires'])} for n in notes[:10]], ensure_ascii=False)
@@ -182,7 +187,9 @@ async def lifespan(app):
     cameras.start()
     jobs.start()
     resources.monitor.start()
+    weather.start()
     yield
+    weather.stop()
     resources.monitor.stop()
     offline.cancel()
     cameras.stop()
@@ -265,6 +272,7 @@ def save_settings(settings: Settings, camera_id: str = 'main'):
         with recognition.lock, db.connect() as connection:
             recognition.invalidate(connection)
     call_service(config.save_for_camera, settings, camera_id)
+    weather.poke()
     # Start fetching/converting the chosen detector now, even if the camera is stopped.
     detectors.prepare(settings.detector_model, settings.detector_engine, settings.fall_detection_enabled, settings.detection_size, retry=True)
     return config.for_camera(camera_id)
@@ -344,7 +352,7 @@ def delete_message(message_id: str, request: Request):
 
 
 class KioskTest(BaseModel):
-    sound: str = Field(pattern='^(press|ring|help|message|brightness|screenoff)$')
+    sound: str = Field(pattern='^(press|ring|help|message|brightness|screenoff|rain)$')
     volume: int = Field(ge=0, le=100)
 
 
@@ -355,6 +363,22 @@ def kiosk_test(body: KioskTest, request: Request):
     text = f'Esta é uma mensagem de teste.' if body.sound == 'message' else ''
     call_service(notebook.send_test, body.sound, body.volume, text)
     return {'ok': True, 'from': first_name(user['name']) if user else ''}
+
+
+@app.get('/api/weather/search')
+def weather_search(q: str = Query('', max_length=60)):
+    """Cities matching the text, to pick the one whose forecast the screen shows."""
+    try:
+        return {'cities': search_cities(q)}
+    except Exception:
+        raise HTTPException(503, 'Não foi possível buscar cidades agora. Confira a internet do servidor.')
+
+
+@app.get('/api/weather')
+def weather_now():
+    """What the screen is showing: the cached forecast, so the settings can preview it."""
+    settings = config.get()
+    return {'enabled': settings.kiosk_weather_enabled, 'city': settings.kiosk_weather_city, 'data': weather.current(settings), 'error': weather.error}
 
 
 @app.get('/api/resources')

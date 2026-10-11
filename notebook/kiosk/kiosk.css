@@ -194,3 +194,21 @@ html[data-night="1"] .quote-head{color:#c8493c}
 @media (prefers-reduced-motion:reduce){.fr-cal{transition:none}}
 
 .big .icon svg{display:block;width:1.15em;height:1.15em}
+
+/* Weather: a block under the status pills on the photo frame, a small chip on the buttons screen */
+.w-ico{width:1.15em;height:1.15em;vertical-align:-.2em;flex-shrink:0}
+.fr-weather{position:absolute;top:calc(3.4vh + 6.6vh);right:3vw;text-align:right;color:var(--fg-top);text-shadow:var(--sh-top);transition:color .9s}
+.fr-weather .w-now{display:flex;align-items:center;justify-content:flex-end;gap:.25em;font-size:clamp(40px,6vw,92px);font-weight:300;line-height:1}
+.fr-weather .w-now .w-ico{width:.9em;height:.9em}
+.fr-weather .w-text{font-size:clamp(16px,2vw,30px);font-weight:600;margin-top:.3vh}
+.fr-weather .w-range{font-size:clamp(14px,1.7vw,26px);opacity:.92;margin-top:.4vh}
+.fr-weather .w-days{display:flex;gap:1.6vw;justify-content:flex-end;margin-top:1.4vh;font-size:clamp(13px,1.5vw,22px);opacity:.9}
+.fr-weather .w-days span{display:flex;flex-direction:column;align-items:center;gap:.1em}
+.fr-weather .w-days b{font-weight:600}
+.weather-chip{display:inline-flex;align-items:center;gap:.35em;font-size:clamp(18px,2.4vw,30px);font-weight:700;color:var(--ink);white-space:nowrap}
+.weather-chip small{font-weight:500;font-size:.72em;color:var(--muted)}
+
+/* Rain: drops falling over the screen while the forecast says it is raining */
+.rain{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:10}
+body:has(#screen[data-mode=black]) .rain{display:none}
+@media (prefers-reduced-motion:reduce){.rain{display:none}}

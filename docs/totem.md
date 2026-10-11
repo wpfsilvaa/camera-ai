@@ -8,9 +8,9 @@ conversa com o painel por um pequeno serviço local (`notebook/monitor.py`).
 |---|---|---|
 | ![Moldura de fotos](screenshots/totem-moldura.jpg) | ![Botões](screenshots/totem-botoes.png) | ![Noite em tons de vermelho](screenshots/totem-noite.png) |
 
-| Recado com a saudação | Aniversário |
-|---|---|
-| ![Recado](screenshots/totem-recado.jpg) | ![Aniversário](screenshots/totem-aniversario.jpg) |
+| Recado com a saudação | Aniversário | Previsão e chuva |
+|---|---|---|
+| ![Recado](screenshots/totem-recado.jpg) | ![Aniversário](screenshots/totem-aniversario.jpg) | ![Previsão do tempo com chuva](screenshots/totem-chuva.jpg) |
 
 > As fotos de exemplo destes prints são paisagens geradas por código. As suas ficam só no seu computador.
 
@@ -84,6 +84,18 @@ cadastrada. Quando ela é reconhecida, o recado aparece como citação, com o pr
 Qualquer conta envia fotos em **Configurações → Totem → Moldura de fotos**. O painel as reduz (1920 px),
 cria miniaturas e as sincroniza com o notebook. Cada pessoa remove as suas; administradores removem qualquer
 uma. O nome de quem enviou acompanha a conta se ela for renomeada em **Minha conta → Meu perfil**.
+
+## Previsão do tempo
+
+Em **Configurações → Totem → Previsão do tempo** (desligada por padrão): busque a sua cidade, escolha na lista e
+salve. A moldura mostra a temperatura de agora, máxima e mínima de hoje, chance de chuva e os próximos três dias;
+com os botões à mostra, um resumo fica ao lado do relógio. A previsão também entra nas mensagens que alternam na moldura.
+
+- **Efeito de chuva:** quando a previsão marca chuva agora, pingos caem pela tela (mais fortes com chuva forte, e com
+  um clarão discreto na trovoada). Há um botão para testar por 15 s.
+- **Privacidade:** usa o Open-Meteo (gratuito, sem conta). Só a latitude e a longitude da cidade saem do servidor do
+  painel, que atualiza a cada 20 min; a tela do notebook não acessa a internet. Sem internet, a previsão some depois
+  de 3 h em vez de mostrar dados velhos.
 
 ## Tela desligada à noite
 

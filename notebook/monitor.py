@@ -57,8 +57,8 @@ def reading():
 # A call nobody answered stops ringing after this long ("panic" keeps ringing until someone answers or he cancels).
 MISSED_AFTER = 300
 RESULT_SECONDS = 10  # How long "call ended / missed" stays on the kiosk screen.
-DEFAULT_CFG = {'slide': 15, 'awake': 30, 'sound': True, 'vol': {'button': 70, 'call': 70, 'help': 100, 'message': 80}, 'calendar': True, 'framecal': 'always', 'hints': [], 'black': True}
-TEST_SOUNDS = ('press', 'ring', 'help', 'message')
+DEFAULT_CFG = {'slide': 15, 'awake': 30, 'sound': True, 'vol': {'button': 70, 'call': 70, 'help': 100, 'message': 80}, 'calendar': True, 'framecal': 'always', 'rain': True, 'hints': [], 'black': True}
+TEST_SOUNDS = ('press', 'ring', 'help', 'message', 'rain')
 VIGIA_STATES = ('off', 'resting', 'analysing', 'scheduled')
 GREET_SECONDS = 10
 BIRTHDAY_SECONDS = 25
@@ -98,6 +98,27 @@ def parse_quotes(text):
     return found
 
 
+WEATHER_ICONS = ('sun', 'partly', 'cloud', 'rain', 'storm', 'snow', 'fog')
+
+
+def parse_weather(text):
+    """The forecast from the dashboard's JSON with every field checked, or None."""
+    try:
+        data = json.loads(text) if text else None
+    except ValueError:
+        return None
+    number = lambda value: isinstance(value, (int, float)) and not isinstance(value, bool)
+    if not isinstance(data, dict) or not number(data.get('t')) or not number(data.get('at')) or data.get('icon') not in WEATHER_ICONS:
+        return None
+    days = []
+    for day in (data.get('days') or [])[:4]:
+        if isinstance(day, dict) and all(number(day.get(k)) for k in ('hi', 'lo', 'rain')):
+            days.append({'d': ''.join(ch for ch in str(day.get('d', '')) if ch.isprintable())[:5], 'icon': day['icon'] if day.get('icon') in WEATHER_ICONS else 'cloud',
+                         'hi': round(day['hi']), 'lo': round(day['lo']), 'rain': min(max(round(day['rain']), 0), 100)})
+    return {'t': round(data['t']), 'c': int(data['c']) if number(data.get('c')) else 3, 'icon': data['icon'], 'at': float(data['at']),
+            'text': ''.join(ch for ch in str(data.get('text', '')) if ch.isprintable())[:40], 'days': days}
+
+
 def parse_reminders(text):
     """[{'i', 'a', 't', 'e'}] from the dashboard's JSON: id, author, text, expiry (epoch seconds)."""
     try:
@@ -131,7 +152,7 @@ def parse_cfg(text):
                       for name in DEFAULT_CFG['vol']}
     if data.get('framecal') in ('always', 'pulse', 'off'):
         cfg['framecal'] = data['framecal']
-    for key in ('calendar', 'black', 'sound'):
+    for key in ('calendar', 'black', 'sound', 'rain'):
         if isinstance(data.get(key), bool):
             cfg[key] = data[key]
     if isinstance(data.get('hints'), list):
@@ -395,18 +416,20 @@ class Desk:
         self.version = 0     # Bumped on every change worth showing; /state?v=N waits for it (long-poll).
         self.changed = threading.Condition()
         self._signature = ''
+        self.weather = None   # {'t', 'c', 'text', 'icon', 'days', 'at'} forecast sent by the dashboard.
         self.red = False   # Night look in red tones (only when chosen in the settings).
         self.acks = []   # Message ids confirmed with "Li" on this screen, until the dashboard stores them.
         self.cfg = dict(DEFAULT_CFG)   # Screen settings from the dashboard.
         self.frame = False   # Photo frame switched on in the dashboard's settings.
         self.reminders = []  # [{'i', 'a', 't', 'e'}]: notes cycled on the screen until their expiry.
 
-    def configure(self, call, panic, vigia=None, night=False, greet='', greet_id='', kind='', age='', bdays='', reminders='', frame=False, cfg='', msgs='', quiet=False, acked='', red=False):
+    def configure(self, call, panic, vigia=None, night=False, greet='', greet_id='', kind='', age='', bdays='', reminders='', frame=False, cfg='', msgs='', quiet=False, acked='', red=False, weather=''):
         with self.lock:
             now = self.last_poll = self.clock()
             self.enabled = {'call': call, 'panic': panic}
             self.vigia = (vigia, night, now) if vigia in VIGIA_STATES else None
             self.red = bool(red)
+            self.weather = parse_weather(weather)
             name = ''.join(ch for ch in greet if ch.isprintable())[:30].strip()
             if name and (not self.greet or self.greet['id'] != greet_id):
                 birthday = kind == 'birthday'
@@ -446,7 +469,7 @@ class Desk:
             now, vigia = self.clock(), self.vigia
             fresh = vigia is not None and now - vigia[2] < LINK_SECONDS
             greet = self.greet if self.greet and now < self.greet['until'] else None
-            return {'vigia': vigia[0] if fresh else None, 'night': bool(vigia[1]) if fresh else False, 'red': self.red if fresh else False,
+            return {'vigia': vigia[0] if fresh else None, 'night': bool(vigia[1]) if fresh else False, 'red': self.red if fresh else False, 'weather': self.weather if fresh else None,
                     'greet': {k: greet[k] for k in ('name', 'id', 'birthday', 'age', 'msgs', 'quiet')} if greet else None,
                     'bdays': self.bdays if fresh else [],
                     'reminders': [r for r in self.reminders if r['e'] > now] if fresh else [],
@@ -554,7 +577,7 @@ class Handler(BaseHTTPRequestHandler):
             query = parse_qs(url.query)
             self.desk.configure(query.get('call') == ['1'], query.get('panic') == ['1'], (query.get('vigia') or [None])[0],
                                 query.get('night') == ['1'], (query.get('greet') or [''])[0], (query.get('greet_id') or [''])[0],
-                                (query.get('greet_kind') or [''])[0], (query.get('age') or [''])[0], (query.get('bdays') or [''])[0], (query.get('reminders') or [''])[0], query.get('frame') == ['1'], (query.get('cfg') or [''])[0], (query.get('greet_msgs') or [''])[0], query.get('greet_quiet') == ['1'], (query.get('acked') or [''])[0], query.get('red') == ['1'])
+                                (query.get('greet_kind') or [''])[0], (query.get('age') or [''])[0], (query.get('bdays') or [''])[0], (query.get('reminders') or [''])[0], query.get('frame') == ['1'], (query.get('cfg') or [''])[0], (query.get('greet_msgs') or [''])[0], query.get('greet_quiet') == ['1'], (query.get('acked') or [''])[0], query.get('red') == ['1'], (query.get('weather') or [''])[0])
             self.dim_from(query)
             self.desk.touch()   # Anything new for the screen goes out immediately to the waiting /state request.
             return self.reply(200, {**reading(), 'call': self.desk.snapshot(), 'acks': list(self.desk.acks)})

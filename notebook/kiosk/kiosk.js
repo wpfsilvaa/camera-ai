@@ -4,7 +4,7 @@
   const screen = $('screen');
   let last = {call: {state: 'idle'}}, confirming = false, face = null, faceTimer = null;
   let build = null, greetedId = null, greetTimer = null;
-  const DEFAULT_CFG = {slide: 15, awake: 30, sound: true, vol: {button: 70, call: 70, help: 100, message: 80}, calendar: true, framecal: 'always', hints: [], black: true};
+  const DEFAULT_CFG = {slide: 15, awake: 30, sound: true, vol: {button: 70, call: 70, help: 100, message: 80}, calendar: true, framecal: 'always', rain: true, hints: [], black: true};
   const cfg = () => ({...DEFAULT_CFG, ...(last.cfg || {}), vol: {...DEFAULT_CFG.vol, ...((last.cfg || {}).vol || {})}});
 
   // Sounds generated here (no files). Each kind has its own volume (0-100, set for day and night in the dashboard);
@@ -45,6 +45,7 @@
         if (test.sound === 'press') sounds.press();
         else if (test.sound === 'ring') sounds.ring('call');
         else if (test.sound === 'help') sounds.ring('panic');
+        else if (test.sound === 'rain') { rain.testLevel = test.volume > 66 ? 3 : test.volume > 33 ? 2 : 1; rain.testUntil = Date.now() + 15000; updateRain(); }
         else if (test.sound === 'message') showQuotes([{i: '', t: test.text || 'Esta é uma mensagem de teste.', a: 'Teste', vol: test.volume, ms: 8000}], 0, 'Mensagem de teste', false);
       } catch { /* no audio device */ }
       testVolume = null;
@@ -109,6 +110,8 @@
     document.querySelector('.vi-eye').classList.toggle('hidden', state !== 'analysing');
     applyMode(view);
     runTests();
+    renderWeather();
+    updateRain();
     renderFrameInfo();
     greet(view);
     renderReminder();
@@ -233,6 +236,84 @@
   }
   setInterval(() => { if ((last.reminders || []).length > 1) { remIndex++; renderReminder(); } }, 9000);
 
+  // Weather ------------------------------------------------------------------
+  const WEATHER_ICONS = {
+    sun: '<circle cx="12" cy="12" r="4.4"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M5.3 18.7 7 17M17 7l1.7-1.7"/>',
+    cloud: '<path d="M7 18.2a4 4 0 0 1-.4-7.98A5.6 5.6 0 0 1 17.3 9.4 4.4 4.4 0 0 1 17 18.2H7Z"/>',
+    partly: '<circle cx="8" cy="8" r="3"/><path d="M8 2v1.3M2 8h1.3M3.8 3.8l.9.9M12.2 3.8l-.9.9"/><path d="M9.5 20a3.5 3.5 0 0 1-.3-6.98 4.9 4.9 0 0 1 9.4 1.2A3.9 3.9 0 0 1 18 20H9.5Z"/>',
+    rain: '<path d="M7 14.5a4 4 0 0 1-.4-7.98A5.6 5.6 0 0 1 17.3 5.7 4.4 4.4 0 0 1 17 14.5H7Z"/><path d="M8.5 17.5 7.5 20M12.5 17.5l-1 2.5M16.5 17.5l-1 2.5"/>',
+    storm: '<path d="M7 14a4 4 0 0 1-.4-7.98A5.6 5.6 0 0 1 17.3 5.2 4.4 4.4 0 0 1 17 14"/><path d="m12.5 11-2.5 4.2h3.2L11.5 20"/>',
+    snow: '<path d="M7 14.5a4 4 0 0 1-.4-7.98A5.6 5.6 0 0 1 17.3 5.7 4.4 4.4 0 0 1 17 14.5H7Z"/><path d="M8.5 18h.01M12 20h.01M15.5 18h.01M10 21.2h.01M14 21.2h.01"/>',
+    fog: '<path d="M4 9h16M6 13h13M4 17h16"/>',
+  };
+  const weatherIcon = (name, cls = 'w-ico') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${WEATHER_ICONS[name] || WEATHER_ICONS.cloud}</svg>`;
+  let weatherKey = '';
+  function renderWeather() {
+    const w = last.weather, fresh = w && Date.now() / 1000 - w.at < 3 * 3600;
+    const key = fresh ? `${w.at}|${w.t}` : '';
+    if (key === weatherKey) return;
+    weatherKey = key;
+    $('frame-weather').classList.toggle('hidden', !fresh);
+    $('ui-weather').classList.toggle('hidden', !fresh);
+    if (!fresh) return;
+    const today = w.days[0] || {hi: w.t, lo: w.t, rain: 0};
+    $('frame-weather').innerHTML = `<div class="w-now">${weatherIcon(w.icon)}<span>${w.t}°</span></div><div class="w-text">${w.text}</div>
+      <div class="w-range">máx ${today.hi}° · mín ${today.lo}°${today.rain >= 30 ? ` · chuva ${today.rain}%` : ''}</div>
+      <div class="w-days">${w.days.slice(1, 4).map(d => `<span><b>${d.d}</b>${weatherIcon(d.icon)}<span>${d.hi}°/${d.lo}°</span></span>`).join('')}</div>`;
+    $('ui-weather').innerHTML = `${weatherIcon(w.icon)}<span>${w.t}°</span><small>${today.hi}°/${today.lo}°</small>`;
+  }
+
+  // Rain effect: a light canvas of slanted streaks, only while it is raining (or being tested) and the screen shows something.
+  const rain = {level: 0, drops: [], raf: null, last: 0, flash: 0, ctx: null, testUntil: 0, testLevel: 2};
+  const RAIN_COUNT = [0, 45, 100, 170];
+  function rainLevelFor(w) {
+    if (!w || Date.now() / 1000 - w.at > 3 * 3600) return 0;
+    if (w.icon === 'storm') return 3;
+    if (w.icon !== 'rain') return 0;
+    return [51, 53, 56, 61, 80].includes(w.c) ? 1 : [65, 66, 67, 82, 81].includes(w.c) ? 3 : 2;
+  }
+  function updateRain() {
+    const canvas = $('rain'), test = Date.now() < rain.testUntil;
+    const level = test ? rain.testLevel : (cfg().rain === false ? 0 : rainLevelFor(last.weather));
+    const visible = level > 0 && screen.dataset.mode !== 'black' && !document.hidden;
+    canvas.classList.toggle('hidden', !visible);
+    if (!visible) { if (rain.raf) { cancelAnimationFrame(rain.raf); rain.raf = null; } rain.level = 0; return; }
+    if (rain.level !== level) {
+      rain.level = level;
+      canvas.width = innerWidth; canvas.height = innerHeight; rain.ctx = canvas.getContext('2d');
+      rain.drops = Array.from({length: RAIN_COUNT[level]}, () => newDrop(true));
+    }
+    if (!rain.raf) rain.raf = requestAnimationFrame(rainFrame);
+  }
+  function newDrop(anywhere) {
+    const fast = 0.7 + Math.random() * 0.8;
+    return {x: Math.random() * (innerWidth + 200) - 100, y: anywhere ? Math.random() * innerHeight : -40, len: 14 + Math.random() * 20, speed: 700 * fast * (1 + rain.level * 0.25), bin: Math.floor(Math.random() * 3)};
+  }
+  function rainFrame(now) {
+    rain.raf = requestAnimationFrame(rainFrame);
+    if (now - rain.last < 33) return;                       // About 30 frames a second is plenty and cheap.
+    const step = Math.min((now - rain.last) / 1000, 0.1); rain.last = now;
+    const ctx = rain.ctx, wind = 0.18;
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+    [0.2, 0.35, 0.5].forEach((alpha, bin) => {                // Three strokes by opacity instead of one per drop.
+      ctx.strokeStyle = `rgba(205,225,255,${alpha})`; ctx.beginPath();
+      for (const d of rain.drops) {
+        if (d.bin !== bin) continue;
+        ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + d.len * wind, d.y + d.len);
+      }
+      ctx.stroke();
+    });
+    for (let i = 0; i < rain.drops.length; i++) {
+      const d = rain.drops[i]; d.y += d.speed * step; d.x += d.speed * step * wind;
+      if (d.y > innerHeight + 30) rain.drops[i] = newDrop(false);
+    }
+    if (rain.level === 3 && Math.random() < 0.004) rain.flash = 1;   // Storm: now and then a faint flash.
+    if (rain.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${(rain.flash * 0.18).toFixed(3)})`; ctx.fillRect(0, 0, innerWidth, innerHeight); rain.flash -= step * 3; }
+  }
+  addEventListener('resize', () => { rain.level = 0; });
+  document.addEventListener('visibilitychange', updateRain);
+
   // Photo frame information: date, "today" line, week strip and the small status pills.
   const ICON_SHIELD = '<svg class="vi" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 4.5 5.5v6c0 4.6 3.1 8.4 7.5 10 4.4-1.6 7.5-5.4 7.5-10v-6L12 2.5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8.7 12.2 2.4 2.4 4.3-4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const ICON_EYE = '<svg class="vi" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>';
@@ -343,6 +424,8 @@
       const [m, d] = b.d.split('-').map(Number), diff = Math.round((new Date(today.getFullYear(), m - 1, d) - today) / 86400000);
       if (diff >= 2 && diff <= 7) list.push(`🎂 Faltam ${diff} dias para o aniversário de ${b.n}`);
     }
+    const w = last.weather;
+    if (w && Date.now() / 1000 - w.at < 3 * 3600 && w.days[0]) list.push(`Hoje: ${w.text.toLowerCase()}, máx ${w.days[0].hi}° e mín ${w.days[0].lo}°${w.days[0].rain >= 30 ? `, chance de chuva ${w.days[0].rain}%` : ''}`);
     list.push(...cfg().hints);
     list.push(now.toLocaleDateString('pt-BR', {weekday: 'long', day: 'numeric', month: 'long'}));
     return list;
