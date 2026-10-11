@@ -119,8 +119,8 @@ Três peças, que você liga separadamente (todas funcionam dia e noite):
 | **Brilho** | Configurações → Totem → Brilho da tela | Brilho de dia e de noite, subindo com presença. |
 
 Com o vigia e a tela desligada juntos, o notebook só trabalha de verdade quando há gente por perto. A economia exata
-depende do aparelho (o painel de um notebook costuma ser uma das maiores cargas). Para a tela apagada de dia usar o mesmo
-tempo de "Desligar a tela depois de" e o mesmo modo de ligar por presença da noite.
+depende do aparelho (o painel de um notebook costuma ser uma das maiores cargas). De dia, a tela apagada usa o mesmo tempo de
+"Desligar a tela depois de" e liga por presença do mesmo jeito que à noite.
 
 ## Tela desligada à noite
 
