@@ -23,5 +23,14 @@ class SourceTests(unittest.TestCase):
                 local_device(source)
 
 
+class LightVideoTests(unittest.TestCase):
+    def test_only_rtsp_cameras_have_the_light_video(self):
+        from app.sources import supports_light_video
+        for source in ('rtsp://192.168.1.103:8554/cam', 'rtsps://host/cam', ' rtsp://x/y '):
+            self.assertTrue(supports_light_video(source))
+        for source in ('0', 'usb:/dev/v4l/by-id/cam-video-index0?1280x720@30', '/dev/video0', 'video.mp4', 'http://x/cam.mjpg', ''):
+            self.assertFalse(supports_light_video(source))
+
+
 if __name__ == '__main__':
     unittest.main()

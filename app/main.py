@@ -20,7 +20,7 @@ from .auth import COOKIE, SAME_SITE, Auth
 from .backup import Backups
 from .cameras import CameraManager
 from . import detectors, resources
-from .sources import usb_cameras
+from .sources import supports_light_video, usb_cameras
 from .config import CLIPS, DATA, ROOT, WA_URL, CameraSettings, ExtraCamera, Settings, config
 from .db import TZ, Database
 from .pacing import Greeter, first_name, kiosk_night, vigia_state
@@ -492,7 +492,7 @@ async def status(request: Request, camera_id: str = 'main'):
     whatsapp = await gateway('GET', '/status')
     if request.state.user and request.state.user['role'] != 'admin':
         whatsapp = {**whatsapp, 'qr': None}  # Scanning the QR code would link another phone.
-    return {'camera': worker.snapshot(), 'cameras': cameras.snapshots(), 'whatsapp': whatsapp,
+    return {'camera': {**worker.snapshot(), 'light_video': supports_light_video(worker.config.get().camera_source)}, 'cameras': cameras.snapshots(), 'whatsapp': whatsapp,
             'recognition': worker.recognition.status(), 'offline': offline.status(),
             'stats': db.stats(), 'camera_stats': db.stats(camera_id), 'alerts': alerts.recent(5), 'notebook': notebook.status(), 'storage_free_gb': round(storage.free / 1024**3, 1), 'now': time.time()}
 

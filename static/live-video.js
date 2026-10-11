@@ -4,6 +4,8 @@
   const video = $('#live-video');
   const remembered = () => { try { return localStorage.getItem('casa-view'); } catch { return null; } };
   let mode = remembered() || (matchMedia('(max-width: 760px)').matches ? 'direct' : 'boxes');
+  // The light video exists only for RTSP cameras (it comes from the camera computer's MediaMTX): not for a USB camera.
+  const available = () => status?.camera?.light_video === true;
   let session = null;  // {cameraId, pc, id, playing}
   let failedFor = null;  // Camera whose light video failed: show the MJPEG there until the page reloads.
 
@@ -48,15 +50,17 @@
     video.classList.toggle('hidden', !playing);
     if (playing) $('#camera-placeholder').classList.add('hidden');
     $$('[data-view]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.view === mode)));
+    document.querySelector('.view-mode')?.classList.toggle('hidden', !available());
   }
 
   video.addEventListener('playing', () => { if (session) { session.playing = true; render(); } });
 
   window.liveVideo = {
-    direct: () => mode === 'direct' && failedFor !== selectedCamera,
+    direct: () => mode === 'direct' && available() && failedFor !== selectedCamera,
     playing: () => Boolean(session?.playing),
     // Called by updateStream(): keep the light video running only while it is wanted, for the selected camera.
     show(wanted) {
+      render();   // Also shows or hides the selector once the camera's source is known.
       if (session && (!wanted || session.cameraId !== selectedCamera)) stop();
       if (wanted && !session) start(selectedCamera);
     },

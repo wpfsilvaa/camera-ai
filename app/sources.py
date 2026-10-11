@@ -40,3 +40,10 @@ def usb_cameras():
     if not found:
         found = [{'source': f'usb:{p}', 'name': p.name} for p in sorted(Path('/dev').glob('video*')) if p.name[5:].isdigit()]
     return found
+
+
+def supports_light_video(source):
+    """The phone-sized "light" video comes from the camera computer's MediaMTX, so it only exists for RTSP sources
+    (not for a USB camera read directly by the app, a webcam index or a video file)."""
+    from urllib.parse import urlsplit
+    return local_device(source) is None and urlsplit(source.strip()).scheme in ('rtsp', 'rtsps')
