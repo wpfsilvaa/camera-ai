@@ -29,7 +29,9 @@
     note.classList.toggle('hidden', !active);
     if (active) note.textContent = call.muted ? 'Toque em qualquer lugar da tela para ouvir o ambiente.' : talking ? 'Em conversa: você ouve o ambiente e ele ouve você.' : 'Ouvindo o ambiente. Toque em Conversar para falar, ou na imagem para parar de ouvir.';
     if (chip) {
-      chip.textContent = talking ? '🎙 Em conversa' : active ? '🔊 Ouvindo · toque para parar' : '🔈 Toque na imagem para ouvir';
+      const label = talking ? 'Em conversa' : active ? 'Ouvindo · toque na imagem para silenciar' : 'Sem som · toque na imagem para ouvir';
+      chip.textContent = talking ? '🎙' : active ? '🔊' : '🔇';
+      chip.title = label; chip.setAttribute('aria-label', label);
       chip.classList.toggle('live', active);
     }
   }

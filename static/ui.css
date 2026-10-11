@@ -228,3 +228,5 @@ label.button{cursor:pointer}
 }
 @media(max-width:500px){.nav-count{font-size:10px}}
 @media(max-width:600px){.form-fields .switch-row:has(.tip-open){align-items:flex-start}}
+.listen-hint{left:auto;right:17px;top:46px;transform:none;width:30px;height:30px;padding:0;display:grid;place-items:center;font-size:15px;line-height:1}
+@media(max-width:500px){.listen-hint{right:12px;top:40px}}
