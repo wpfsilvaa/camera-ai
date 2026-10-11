@@ -27,7 +27,7 @@ from .pacing import Greeter, first_name, kiosk_night, vigia_state
 from .jobs import Jobs
 from .learning import LearningSuggestions
 from .notebook import NotebookMonitor
-from .messages import PersonMessages
+from .messages import MessagePlanner, PersonMessages
 from .photos import Photos
 from .reminders import Reminders
 from .offline import OfflineAnalysis
@@ -72,6 +72,7 @@ reminders = Reminders(db)
 photos = Photos(db)
 person_messages = PersonMessages(db)
 greeted = {'id': None}   # Last greeting sent to the screen: its messages go out once.
+message_planner = MessagePlanner(person_messages)
 
 
 def vigia_for_kitchen():
@@ -103,11 +104,20 @@ def vigia_for_kitchen():
                 if waiting:
                     info['greet_msgs'] = json.dumps([{'i': r['id'], 't': r['text'], 'a': first_name(r['author'])} for r in waiting[:5]], ensure_ascii=False)
                     info['_deliver'] = [r['id'] for r in waiting[:5]]
-                    greeted['pending'] = greeting['id']   # Counted as sent only once the screen accepted them.
+                    greeted['pending'], greeted['person'] = greeting['id'], greeting['person']   # Counted as sent only once the screen accepted them.
                 else:
                     greeted['id'] = greeting['id']
             if info.get('greet_quiet') and 'greet_msgs' not in info:
                 info.pop('greet'), info.pop('greet_id'), info.pop('greet_quiet')   # Greeting off and nothing to say.
+        if 'greet' not in info:
+            # No greeting is due (they were greeted recently), but someone recognised may have unread messages.
+            planned = message_planner.pick(camera.get('tracks') or [], now)
+            if planned:
+                person, track, waiting = planned
+                info.update(greet=first_name(track.get('name') or ''), greet_id=int(now), greet_quiet=1,
+                            greet_msgs=json.dumps([{'i': r['id'], 't': r['text'], 'a': first_name(r['author'])} for r in waiting[:5]], ensure_ascii=False))
+                info['_deliver'] = [r['id'] for r in waiting[:5]]
+                greeted['pending'], greeted['person'] = None, person
     return info
 
 
@@ -117,7 +127,10 @@ notebook.photos = photos
 
 def messages_delivered(ids):
     person_messages.mark_shown(ids)
-    greeted['id'] = greeted.get('pending')
+    if greeted.get('pending') is not None:
+        greeted['id'] = greeted['pending']
+    if greeted.get('person'):
+        message_planner.delivered(greeted['person'], time.time())
 
 
 notebook.delivered = messages_delivered

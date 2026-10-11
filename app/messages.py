@@ -38,7 +38,7 @@ class PersonMessages:
     def for_person(self, person_id, now=None):
         """Messages to show now to this person: valid, and for "once" messages only until the person taps "Li"."""
         now = now or time.time()
-        return self.db.rows('SELECT id,author,text FROM person_messages WHERE to_person=? AND expires>? AND (once=0 OR read_at IS NULL) ORDER BY created',
+        return self.db.rows('SELECT id,author,text,once FROM person_messages WHERE to_person=? AND expires>? AND (once=0 OR read_at IS NULL) ORDER BY created',
                             (person_id, now))
 
     def mark_shown(self, message_ids, now=None):
@@ -59,3 +59,30 @@ class PersonMessages:
         if not is_admin and rows[0]['user_id'] != user_id:
             raise PermissionError('Só quem escreveu o recado (ou um administrador) pode removê-lo.')
         self.db.execute('DELETE FROM person_messages WHERE id=?', (message_id,))
+
+
+class MessagePlanner:
+    """Decides when a recognised person's unread messages go on the kitchen screen without a greeting.
+
+    The greeting has its own 30-minute cooldown; waiting messages must not be held back by it. Unread
+    "until read" messages come back every `retry` seconds; "every time" messages respect the longer
+    `cooldown`, so they do not repeat while the person stays in front of the camera.
+    """
+
+    def __init__(self, store, retry=180, cooldown=1800):
+        self.store, self.retry, self.cooldown = store, retry, cooldown
+        self.shown = {}
+
+    def pick(self, tracks, now):
+        """(person_id, [message rows]) for the first recognised person with something to show, or None."""
+        for track in tracks:
+            person = track.get('person_id')
+            if not person or now - self.shown.get(person, -self.cooldown) < self.retry:
+                continue
+            waiting = [m for m in self.store.for_person(person, now) if m['once'] or now - self.shown.get(person, -self.cooldown) >= self.cooldown]
+            if waiting:
+                return person, track, waiting
+        return None
+
+    def delivered(self, person, now):
+        self.shown[person] = now

@@ -12,7 +12,7 @@ from app.db import Database
 from app.pacing import Greeter, birthday_today, first_name, kiosk_night, vigia_state
 from app.config import Settings
 from app.recognition import Recognition
-from app.messages import PersonMessages
+from app.messages import MessagePlanner, PersonMessages
 from app.reminders import Reminders
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'notebook'))
@@ -148,6 +148,38 @@ class PersonMessageTests(unittest.TestCase):
         self.messages.mark_read([message], 1000)
         self.assertEqual(len(self.messages.active(1000 + 6 * 86400)), 1)
         self.assertEqual(self.messages.active(1000 + 8 * 86400), [])
+
+
+class MessagePlannerTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = Database(Path(self.tmp.name) / 'h.sqlite3')
+        self.store = PersonMessages(self.db)
+        self.planner = MessagePlanner(self.store)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_waiting_messages_are_not_held_back_by_the_greeting_cooldown(self):
+        self.store.add('Waldemar', 'u1', 'father', 'Te amo, pai', 24, True, now=1000)
+        track = {'person_id': 'father', 'name': 'Meu pai'}
+        self.assertIsNone(self.planner.pick([{'person_id': None}], 1010))          # Nobody recognised.
+        self.assertIsNone(self.planner.pick([{'person_id': 'someone-else'}], 1010))
+        person, _, waiting = self.planner.pick([track], 1010)
+        self.assertEqual((person, [m['text'] for m in waiting]), ('father', ['Te amo, pai']))
+        self.planner.delivered('father', 1010)
+        self.assertIsNone(self.planner.pick([track], 1100))                       # Just shown: wait before retrying.
+        self.assertIsNotNone(self.planner.pick([track], 1010 + 181))               # Unread: comes back after 3 minutes.
+        self.store.mark_read([waiting[0]['id']], 1200)
+        self.assertIsNone(self.planner.pick([track], 1010 + 400))                 # Read: never again.
+
+    def test_every_time_messages_use_the_long_cooldown(self):
+        self.store.add('Lorena', 'u2', 'father', 'Boa tarde!', 24, False, now=1000)
+        track = {'person_id': 'father', 'name': 'Meu pai'}
+        self.assertIsNotNone(self.planner.pick([track], 1010))
+        self.planner.delivered('father', 1010)
+        self.assertIsNone(self.planner.pick([track], 1010 + 600))                 # Not again while they stay around.
+        self.assertIsNotNone(self.planner.pick([track], 1010 + 1801))
 
 
 class MonitorDisplayTests(unittest.TestCase):
