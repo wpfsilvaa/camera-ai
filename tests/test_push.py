@@ -22,7 +22,7 @@ class PushTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.db = Database(Path(self.tmp.name) / 'history.sqlite3')
-        self.sent, self.gone = [], set()
+        self.sent, self.gone, self.ttls = [], set(), []
         self.push = Push(self.db, sender=self.fake_send)
 
     def tearDown(self):
@@ -32,6 +32,19 @@ class PushTests(unittest.TestCase):
         if subscription_info['endpoint'] in self.gone:
             raise Gone()
         self.sent.append((subscription_info['endpoint'], json.loads(data), headers['Urgency']))
+        self.ttls.append(ttl)
+
+    def test_ringing_nudges_keep_the_tag_vibrate_long_and_expire_fast(self):
+        self.push.subscribe('u1', {'endpoint': 'https://push/a', 'keys': KEYS})
+        self.push.send_all({'id': 'panic-abc', 'kind': 'panic', 'created': 1.0, 'message': 'sem resposta', 'image': 0, 'ring': True})
+        _, payload, urgency = self.sent[-1]
+        self.assertEqual((payload['tag'], payload['ring'], payload['urgent'], urgency, self.ttls[-1]), ('panic-abc', True, True, 'high', 90))
+
+    def test_the_answered_notice_replaces_the_ringing_one_without_ringing(self):
+        self.push.subscribe('u1', {'endpoint': 'https://push/a', 'keys': KEYS})
+        self.push.send_all({'id': 'panic-abc', 'kind': 'panic', 'created': 2.0, 'message': '✅ Ana atendeu', 'image': 0, 'notice': True, 'title': 'Chamada atendida'})
+        _, payload, _ = self.sent[-1]
+        self.assertEqual((payload['tag'], payload['title'], payload['urgent'], payload['ring']), ('panic-abc', 'Chamada atendida', False, False))
 
     def test_keys_are_created_once(self):
         again = Push(self.db, sender=self.fake_send)

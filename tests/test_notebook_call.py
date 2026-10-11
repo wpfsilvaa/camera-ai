@@ -78,6 +78,8 @@ class CallAlertTests(unittest.TestCase):
         self.monitor.frame = lambda: b'jpeg'
         self.heard = []
         self.alerts.listeners.append(self.heard.append)
+        self.rang = []
+        self.alerts.ringers.append(self.rang.append)
         self.reading = {'plugged': True, 'battery': 90, 'call': {'state': 'idle'}}
         self.requests = []
 
@@ -110,6 +112,43 @@ class CallAlertTests(unittest.TestCase):
             self.poll(1000 + step)
         self.assertEqual(len(self.heard), 6)
         self.assertIn('PEDIDO DE AJUDA', self.heard[0]['message'])
+
+    def test_the_phones_keep_getting_nudged_while_a_help_call_rings(self):
+        self.ring('panic')
+        for step in range(0, 700, 5):
+            self.poll(1000 + step)
+        self.assertGreaterEqual(len(self.rang), 28)                      # About every 20 s for 10 minutes.
+        self.assertLessEqual(len(self.rang), 30)
+        self.assertTrue(all(r['ring'] and r['id'] == 'panic-abc' for r in self.rang))     # Same tag: each replaces the last.
+        self.assertIn('sem resposta', self.rang[0]['message'])
+        self.assertEqual(len(self.heard), 6)                              # WhatsApp keeps its slower reminders.
+
+    def test_a_plain_call_nudges_for_three_minutes(self):
+        self.ring('call')
+        for step in range(0, 400, 5):
+            self.poll(1000 + step)
+        self.assertGreaterEqual(len(self.rang), 8)
+        self.assertLessEqual(len(self.rang), 9)
+
+    def test_answering_replaces_the_ringing_notification_and_stops_the_nudges(self):
+        self.ring('panic')
+        for step in (0, 5, 25, 45):
+            self.poll(1000 + step)
+        before = len(self.rang)
+        self.reading = {**self.reading, 'call': {'id': 'abc', 'kind': 'panic', 'state': 'answered', 'since': 1000.0, 'answered_by': 'Ana'}}
+        self.poll(1050)
+        self.poll(1100)
+        self.assertEqual(len(self.rang), before + 1)                      # One calm notice, nothing more.
+        notice = self.rang[-1]
+        self.assertTrue(notice['notice'] and notice['id'] == 'panic-abc' and 'Ana atendeu' in notice['message'])
+        self.assertNotIn('ring', notice)
+
+    def test_a_cancelled_call_also_ends_the_nudges(self):
+        self.ring('call')
+        self.poll(1001)
+        self.reading = {**self.reading, 'call': {'id': 'abc', 'kind': 'call', 'state': 'ended', 'since': 1000.0}}
+        self.poll(1010)
+        self.assertEqual(self.rang[-1]['title'], 'Chamada encerrada')
 
     def test_answered_call_does_not_alert_again(self):
         self.reading = {**self.reading, 'call': {'id': 'abc', 'kind': 'call', 'state': 'answered', 'since': 1000.0}}

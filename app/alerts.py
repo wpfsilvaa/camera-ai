@@ -47,6 +47,7 @@ class Alerts:
         self.offline_since = {}  # camera id -> first moment seen without image
         self.last_check = 0
         self.listeners = []  # Called with each new alert (e.g. push notifications).
+        self.ringers = []    # Called again while a call from the kitchen screen is still unanswered (push only).
 
     # Detection ---------------------------------------------------------------
 
@@ -184,6 +185,25 @@ class Alerts:
         if link:
             text += f'\n{link}'
         return self.raise_alert(alert_id, kind, text, now, image=image)
+
+    def ring(self, call_id, kind, since, now):
+        """A call nobody answered yet: nudge the phones again (push only; WhatsApp keeps its own, slower reminders)."""
+        waited = elapsed(now - since)
+        text = (f'🚨 PEDIDO DE AJUDA sem resposta há {waited}. Ligue para ele agora ou toque em Atender.' if kind == 'panic'
+                else f'📞 Seu pai continua chamando há {waited}. Toque em Atender.')
+        self._ring({'id': f'{kind}-{call_id}', 'kind': kind, 'created': now, 'message': text, 'image': 0, 'ring': True})
+
+    def ring_notice(self, call_id, kind, text, now=None):
+        """Replaces the ringing notification (same tag) with a calm one once the call is over."""
+        self._ring({'id': f'{kind}-{call_id}', 'kind': kind, 'created': now or time.time(), 'message': text, 'image': 0, 'notice': True,
+                    'title': 'Chamada atendida' if text.startswith('✅') else 'Chamada encerrada'})
+
+    def _ring(self, alert):
+        for listener in self.ringers:
+            try:
+                listener(alert)
+            except Exception:
+                log.exception('Falha ao repetir o aviso da chamada')
 
     def send_test(self, now=None):
         now = now or time.time()

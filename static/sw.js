@@ -17,7 +17,9 @@ self.addEventListener('push', event => {
   const data = event.data ? event.data.json() : {title: 'Casa Presente', body: ''};
   event.waitUntil(self.registration.showNotification(data.title, {
     body: data.body, tag: data.tag, image: data.image || undefined, renotify: true, icon: '/static/icon-192.png', badge: '/static/icon-192.png',
-    requireInteraction: Boolean(data.urgent), vibrate: data.urgent ? [300, 100, 300, 100, 300] : [120],
+    requireInteraction: Boolean(data.urgent), silent: false,
+    // A call that keeps ringing vibrates longer, like a phone; the same tag makes each nudge replace the last one.
+    vibrate: data.ring ? [600, 200, 600, 200, 600, 200, 600, 200, 600] : data.urgent ? [300, 100, 300, 100, 300] : [120],
     data: {url: data.url || '/'},
     actions: data.camera ? [{action: 'live', title: 'Ver ao vivo'}, {action: 'talk', title: 'Conversar'}] : [],
   }));

@@ -51,6 +51,7 @@ backups = Backups(db, config, alerts)
 push = Push(db)
 storage = Storage(db)
 alerts.listeners.append(push.notify)
+alerts.ringers.append(push.ring)
 notebook = NotebookMonitor(alerts)
 jobs = Jobs(db, config, recognition, alerts, auth, learning, backups, notebook)
 cameras.fall_handler = alerts.fall

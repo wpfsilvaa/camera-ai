@@ -201,12 +201,17 @@ class Push:
         """Alert listener: send in the background so the camera loop never waits on the network."""
         self.pool.submit(self.send_all, alert)
 
+    def ring(self, alert):
+        """Same as notify, for the repeated nudges of a call that is still ringing."""
+        self.pool.submit(self.send_all, alert)
+
     def send_all(self, alert):
         camera = alert.get('camera_id')
         # Fall alerts keep their photo in data/alerts/<id>.jpg; presence passes its own.
         photo = alert.get('photo') or (f'/alert-media/{alert["id"]}.jpg' if alert.get('image') else None)
-        payload = json.dumps({'title': TITLES.get(alert['kind'], 'Casa Presente'), 'body': alert['message'],
-                              'tag': alert['id'], 'urgent': alert['kind'] in URGENT, 'image': photo,
+        calm = bool(alert.get('notice'))   # "answered" / "ended": replaces the ringing notification without ringing
+        payload = json.dumps({'title': alert.get('title') or TITLES.get(alert['kind'], 'Casa Presente'), 'body': alert['message'],
+                              'tag': alert['id'], 'urgent': alert['kind'] in URGENT and not calm, 'ring': bool(alert.get('ring')), 'image': photo,
                               # Alerts tied to a camera get "Ver ao vivo" and "Conversar" buttons.
                               'camera': camera,
                               'url': f'/?camera={quote(camera)}#overview' if camera else '/?answer=1#overview' if alert['kind'] in ('call', 'panic') else '/#overview'}, ensure_ascii=False)
@@ -218,18 +223,18 @@ class Push:
                     if not any(kind in kinds and key in json.loads(row['muted']) for key, (_, kinds) in TOPICS.items())]
         sent = 0
         for row in rows:
-            if self.send(row['endpoint'], json.loads(row['keys']), payload, urgent=alert['kind'] in IMMEDIATE):
+            if self.send(row['endpoint'], json.loads(row['keys']), payload, urgent=alert['kind'] in IMMEDIATE, ttl=90 if alert.get('ring') or calm else 3600):
                 sent += 1
         return sent
 
-    def send(self, endpoint, keys, payload, urgent=False):
+    def send(self, endpoint, keys, payload, urgent=False, ttl=3600):
         send = self.sender
         if send is None:
             from pywebpush import webpush
             send = webpush
         try:
             send(subscription_info={'endpoint': endpoint, 'keys': keys}, data=payload,
-                 vapid_private_key=self.vapid, vapid_claims={'sub': CONTACT}, ttl=3600,
+                 vapid_private_key=self.vapid, vapid_claims={'sub': CONTACT}, ttl=ttl,
                  headers={'Urgency': 'high' if urgent else 'normal'}, timeout=10)
         except Exception as exc:
             status = getattr(getattr(exc, 'response', None), 'status_code', None)

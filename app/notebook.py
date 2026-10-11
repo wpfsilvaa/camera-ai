@@ -28,7 +28,10 @@ PORT = 8765
 KINDS = ('notebook_battery', 'notebook_unplugged', 'notebook_power_back', 'notebook_offline', 'notebook_online')
 # An unanswered call is announced again this often; a help request keeps going longer.
 REMINDER_SECONDS = 120
-REMINDERS = {'call': 1, 'panic': 5}
+REMINDERS = {'call': 1, 'panic': 5}   # WhatsApp reminders, every REMINDER_SECONDS.
+# Phones are nudged much more often while a call rings, until someone answers or this long has passed.
+RING_SECONDS = 20
+RING_LIMIT = {'call': 180, 'panic': 600}
 
 
 def notebook_url(camera_source):
@@ -52,6 +55,7 @@ class NotebookMonitor:
     def __init__(self, alerts, config=default_config, token=notebook_token):
         self.alerts, self.config, self.token = alerts, config, token
         self.frame = None  # Callable returning the camera's current JPEG (attached to call alerts).
+        self.ring_state = None  # The call currently being re-announced: {'id', 'kind', 'since', 'last'}.
         self.read = None  # Called with message ids the person confirmed on the screen.
         self.confirmed = []  # Acks already stored: tell the screen it can forget them.
         self.busy = None  # Callable: True while the screen needs quick updates.
@@ -198,6 +202,7 @@ class NotebookMonitor:
     def check_call(self, settings, now):
         call = self.call
         if call.get('state') != 'ringing':
+            self.finish_ring(call, now)
             return
         kind, since = call['kind'], call['since']
         if not self.alerts.exists(f'{kind}-{call["id"]}'):
@@ -205,6 +210,23 @@ class NotebookMonitor:
             self.alerts.notebook_call(call['id'], kind, jpeg, since, now)
         for number in range(1, min(int((now - since) // REMINDER_SECONDS), REMINDERS[kind]) + 1):
             self.alerts.notebook_call(call['id'], kind, None, since, now, reminder=number)
+        # Push again every few seconds, like a phone that keeps ringing (the first alert above counts as the first ring).
+        state = self.ring_state
+        if state is None or state['id'] != call['id']:
+            state = self.ring_state = {'id': call['id'], 'kind': kind, 'since': since, 'last': now}
+        if now - since <= RING_LIMIT[kind] and now - state['last'] >= RING_SECONDS:
+            state['last'] = now
+            self.alerts.ring(call['id'], kind, since, now)
+
+    def finish_ring(self, call, now):
+        """The call stopped ringing: say how it ended, replacing the notification that kept nudging the phones."""
+        state, self.ring_state = self.ring_state, None
+        if state is None:
+            return
+        if call.get('id') == state['id'] and call.get('state') == 'answered':
+            self.alerts.ring_notice(state['id'], state['kind'], f"✅ {call.get('answered_by') or 'Alguém'} atendeu a chamada do seu pai.", now)
+        elif call.get('id') == state['id'] and call.get('state') in ('ended', 'missed'):
+            self.alerts.ring_notice(state['id'], state['kind'], 'A chamada do notebook da cozinha terminou.', now)
 
     def check_silence(self, settings, now):
         if self.silent_since is None:

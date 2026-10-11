@@ -63,6 +63,17 @@ cartão do recado entra junto com a saudação, com um toque de três notas e um
 
 **Lembretes:** qualquer conta deixa um lembrete com validade de 1 hora a 7 dias; a tela alterna entre eles.
 
+## Chamadas e pedidos de ajuda
+
+Ao tocar em **Chamar a família** ou **Preciso de ajuda**, o painel avisa por WhatsApp (com a foto da câmera) e por
+notificação no celular. Enquanto ninguém atende, as notificações **se repetem a cada 20 segundos** (pedido de ajuda por até
+10 minutos; chamada comum, 3 minutos), com vibração longa e ficando na tela até alguém tocar. Todas usam a mesma etiqueta, então cada
+uma substitui a anterior em vez de empilhar. O WhatsApp continua com lembretes mais espaçados (a cada 2 minutos).
+Quando alguém atende, ou o idoso cancela, a notificação é substituída por "Fulano atendeu" ou "Chamada encerrada", e as repetições param.
+
+Limite: é uma notificação do navegador, não uma ligação. O iPhone e o Android não deixam um aplicativo web tocar como chamada;
+isso exigiria um aplicativo nativo ou um serviço de telefonia/alarme (veja as alternativas no histórico do projeto).
+
 ## Recados para pessoas
 
 Na página **Recados** do painel, qualquer conta escreve uma mensagem (até 240 letras) para uma pessoa
