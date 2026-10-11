@@ -73,6 +73,7 @@ photos = Photos(db)
 person_messages = PersonMessages(db)
 greeted = {'id': None}   # Last greeting sent to the screen: its messages go out once.
 message_planner = MessagePlanner(person_messages)
+screen_state = {'until': 0}   # Until when the panel stays on after someone was in view (night, panel-off mode).
 bright_state = {'until': 0}   # Until when the screen stays bright after someone was in view (night dimming).
 
 
@@ -95,6 +96,12 @@ def vigia_for_kitchen():
         info['bright'] = settings.kiosk_bright_day if not info['night'] else (settings.kiosk_bright_wake if around else settings.kiosk_bright_night)
         info['bright_wake'] = settings.kiosk_bright_wake if info['night'] else settings.kiosk_bright_day
         info['bright_hold'] = settings.kiosk_bright_hold
+    if settings.kiosk_night_mode == 'off':
+        # Night with the panel switched off: on while someone is in view, on a call, or for a while after.
+        if camera.get('people') or notebook.call.get('state') in ('ringing', 'answered'):
+            screen_state['until'] = now + settings.kiosk_screen_off_after
+        info['screen'] = 'off' if info['night'] and now >= screen_state['until'] else 'on'
+        info['screen_hold'] = settings.kiosk_screen_off_after
     notes = reminders.active(now)
     if notes:
         info['reminders'] = json.dumps([{'i': n['id'][:8], 'a': first_name(n['author']), 't': n['text'], 'e': round(n['expires'])} for n in notes[:10]], ensure_ascii=False)
@@ -335,7 +342,7 @@ def delete_message(message_id: str, request: Request):
 
 
 class KioskTest(BaseModel):
-    sound: str = Field(pattern='^(press|ring|help|message|brightness)$')
+    sound: str = Field(pattern='^(press|ring|help|message|brightness|screenoff)$')
     volume: int = Field(ge=0, le=100)
 
 

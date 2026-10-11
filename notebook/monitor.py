@@ -276,6 +276,110 @@ class Dimmer:
             stop.wait(0.4)
 
 
+class DisplayPower:
+    """Turns the panel off (DPMS) and on again: Hyprland first, X11 as a fallback.
+
+    `commands` is injectable for tests; each entry takes (on: bool) and returns True when it worked.
+    """
+
+    def __init__(self, commands=None):
+        self.commands = commands or [self._hyprland, self._x11]
+        self.state = True        # What we last asked for.
+        self.input_wake = None   # Hyprland instance where input-wakes-screen was already enabled.
+
+    @staticmethod
+    def _run(args, env=None):
+        import subprocess
+        try:
+            result = subprocess.run(args, capture_output=True, text=True, timeout=6, env=env)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return result
+
+    def _hyprland(self, on):
+        runtime = Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}')
+        instances = sorted((p for p in (runtime / 'hypr').glob('*') if (p / '.socket.sock').exists()), key=lambda p: p.stat().st_mtime) if (runtime / 'hypr').is_dir() else []
+        if not instances:
+            return False
+        env = {**os.environ, 'XDG_RUNTIME_DIR': str(runtime), 'HYPRLAND_INSTANCE_SIGNATURE': instances[-1].name}
+        if not on and self.input_wake != instances[-1].name:
+            # With the panel off, a mouse move or key press should turn it on again (off by default in Hyprland).
+            for arguments in (['eval', 'hl.config({ misc = { mouse_move_enables_dpms = true, key_press_enables_dpms = true } })'],
+                              ['keyword', 'misc:mouse_move_enables_dpms', 'true']):
+                result = self._run(['hyprctl', *arguments], env)
+                if result and result.returncode == 0 and 'ok' in result.stdout.lower():
+                    break
+            self.input_wake = instances[-1].name
+        word = 'on' if on else 'off'
+        # Hyprland 0.55+ takes Lua (hl.dsp...); older versions take "dpms on|off".
+        for arguments in (['dispatch', f'hl.dsp.dpms({{ action = "{word}" }})'], ['dispatch', 'dpms', word]):
+            result = self._run(['hyprctl', *arguments], env)
+            if result and result.returncode == 0 and 'ok' in result.stdout.lower():
+                return True
+        return False
+
+    def _x11(self, on):
+        display = os.environ.get('DISPLAY') or ':0'
+        result = self._run(['xset', '-display', display, 'dpms', 'force', 'on' if on else 'off'])
+        return bool(result and result.returncode == 0)
+
+    def set(self, on):
+        if on == self.state:
+            return True
+        for command in self.commands:
+            if command(on):
+                self.state = on
+                return True
+        return False
+
+
+class ScreenSchedule:
+    """When the panel should be off: at night, with nobody around, as the dashboard asks.
+
+    The dashboard sends screen=off|on with every poll (off only at night with nobody in view or on a call);
+    a touch, a click or a key turns it back on for `hold` seconds. Without news, or when the dashboard stops
+    asking for it, the panel is switched on again so it can never stay dark by accident.
+    """
+
+    def __init__(self, power, clock=time.time):
+        self.power, self.clock = power, clock
+        self.wanted = None      # 'off', 'on' or None (leave it alone)
+        self.hold, self.wake_until, self.news_at, self.test_until = 45, 0, 0, 0
+        self.lock = threading.Lock()
+
+    def configure(self, wanted, hold=45):
+        with self.lock:
+            self.wanted, self.hold, self.news_at = wanted, hold, self.clock()
+
+    def wake(self):
+        with self.lock:
+            self.wake_until = self.clock() + self.hold
+
+    def try_off(self, seconds=5):
+        with self.lock:
+            self.test_until = self.clock() + seconds
+
+    def should_be_on(self):
+        with self.lock:
+            now = self.clock()
+            if now < self.test_until:
+                return False
+            if self.wanted != 'off' or now - self.news_at > STALE_BRIGHTNESS:
+                return True
+            return now < self.wake_until
+
+    def step(self):
+        self.power.set(self.should_be_on())
+
+    def run(self, stop):
+        while not stop.is_set():
+            try:
+                self.step()
+            except Exception:
+                pass
+            stop.wait(0.3)
+
+
 class Desk:
     """The call button's state: idle -> ringing -> answered -> ended (or missed)."""
 
@@ -407,6 +511,7 @@ class Handler(BaseHTTPRequestHandler):
     token = ''
     desk = Desk()
     dimmer = Dimmer(Backlight())
+    screen = ScreenSchedule(DisplayPower())
     kiosk_files = {'/': ('index.html', 'text/html; charset=utf-8'), '/kiosk.css': ('kiosk.css', 'text/css'),
                    '/kiosk.js': ('kiosk.js', 'text/javascript'), '/favicon.svg': ('favicon.svg', 'image/svg+xml')}
 
@@ -417,6 +522,7 @@ class Handler(BaseHTTPRequestHandler):
             return min(max(int(value), low), high) if value.isdigit() else None
         target = number('bright', 0, 100)
         self.dimmer.configure(target, number('bright_wake', 0, 100), number('bright_hold', 5, 3600) or 45)
+        self.screen.configure((query.get('screen') or [''])[0] if (query.get('screen') or [''])[0] in ('on', 'off') else None, number('screen_hold', 5, 3600) or 45)
 
     def local(self):
         return self.client_address[0] in ('127.0.0.1', '::1')
@@ -517,6 +623,9 @@ class Handler(BaseHTTPRequestHandler):
         url = urlsplit(self.path)
         if url.path == '/test' and self.authorized():
             spec = self.body()
+            if spec.get('sound') == 'screenoff':   # Hardware: turn the panel off for a few seconds, then back on.
+                self.screen.try_off(5)
+                return self.reply(200, {'ok': True})
             if spec.get('sound') == 'brightness':   # Hardware: handled here, not by the page.
                 if not isinstance(spec.get('volume'), int):
                     return self.reply(422, {'error': 'Teste inválido.'})
@@ -547,6 +656,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, call)
             if url.path == '/wake':
                 self.dimmer.wake()
+                self.screen.wake()
                 return self.reply(200, {'ok': True})
             if url.path == '/ack':
                 self.desk.ack(str(self.body().get('id', '')))
@@ -566,6 +676,8 @@ def main():
         sys.exit(f'Token ausente ou curto em {TOKEN_FILE}.')
     stop = threading.Event()
     threading.Thread(target=Handler.dimmer.run, args=(stop,), daemon=True).start()
+    threading.Thread(target=Handler.screen.run, args=(stop,), daemon=True).start()
+    Handler.screen.power.set(True)   # Whatever happened before, start with the panel on.
     ThreadingHTTPServer(('0.0.0.0', PORT), Handler).serve_forever()
 
 

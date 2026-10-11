@@ -85,6 +85,21 @@ Qualquer conta envia fotos em **Configurações → Totem → Moldura de fotos**
 cria miniaturas e as sincroniza com o notebook. Cada pessoa remove as suas; administradores removem qualquer
 uma. O nome de quem enviou acompanha a conta se ela for renomeada em **Minha conta → Meu perfil**.
 
+## Tela desligada à noite
+
+Em **Configurações → Totem → Noite → Como a tela fica à noite**, a opção **"Desligar a tela (liga quando alguém
+aparece)"** apaga o painel de verdade (DPMS), poupando energia e eliminando qualquer luz no quarto. Quando alguém
+aparece na câmera, a tela liga em cerca de um segundo e mostra a moldura (ou os botões e o calendário), no visual de noite;
+ela volta a apagar depois do tempo escolhido (padrão 45 s) sem ninguém, e uma chamada sempre a mantém ligada.
+Mexer o mouse ou apertar uma tecla também a liga.
+
+- Funciona com **Hyprland** (inclusive o novo formato Lua) e **X11** (`xset`). O monitor habilita sozinho o
+  "mouse/teclado ligam a tela" do Hyprland. Em outros ambientes gráficos, a opção não tem efeito.
+- Segurança: se o painel ficar mais de 90 s sem falar com o monitor, ou ao reiniciá-lo, a tela é ligada de novo,
+  para o notebook nunca ficar apagado por engano.
+- O botão **Testar desligar (5 s)** apaga a tela por 5 segundos e liga de novo.
+- Depende de a câmera ver a pessoa: a tela liga assim que o reconhecimento de presença a detecta (modo vigia incluído).
+
 ## Brilho da tela (noite)
 
 Em **Configurações → Totem → Brilho da tela** (desligado por padrão): de dia a tela usa o brilho que você escolher;

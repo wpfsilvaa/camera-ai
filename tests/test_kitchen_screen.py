@@ -262,6 +262,63 @@ class DimmerTests(unittest.TestCase):
         self.assertEqual(self.dimmer.desired(), 3)
 
 
+class ScreenScheduleTests(unittest.TestCase):
+    def setUp(self):
+        self.now = [1000.0]
+        self.calls = []
+
+        def command(on):
+            self.calls.append(on)
+            return True
+
+        self.power = monitor.DisplayPower(commands=[command])
+        self.schedule = monitor.ScreenSchedule(self.power, clock=lambda: self.now[0])
+
+    def test_off_at_night_on_with_a_touch_and_back_off_after_the_hold(self):
+        self.schedule.configure('off', hold=45)
+        self.schedule.step()
+        self.assertEqual(self.calls, [False])
+        self.schedule.step()
+        self.assertEqual(self.calls, [False])                            # No repeated commands while nothing changes.
+        self.schedule.wake()                                              # Someone touches the (dark) screen.
+        self.schedule.step()
+        self.assertEqual(self.calls, [False, True])
+        self.now[0] += 46
+        self.schedule.configure('off', hold=45)
+        self.schedule.step()
+        self.assertEqual(self.calls, [False, True, False])
+
+    def test_the_dashboard_saying_on_or_nothing_keeps_the_panel_on(self):
+        self.schedule.configure('on')
+        self.schedule.step()
+        self.schedule.configure(None)
+        self.schedule.step()
+        self.assertEqual(self.calls, [])                                  # It was on already: nothing to do.
+
+    def test_a_silent_dashboard_never_leaves_the_panel_dark(self):
+        self.schedule.configure('off')
+        self.schedule.step()
+        self.assertEqual(self.calls, [False])
+        self.now[0] += 120                                                # No poll for two minutes.
+        self.schedule.step()
+        self.assertEqual(self.calls, [False, True])
+
+    def test_the_off_test_lasts_a_few_seconds(self):
+        self.schedule.try_off(5)
+        self.schedule.step()
+        self.assertEqual(self.calls, [False])
+        self.now[0] += 6
+        self.schedule.step()
+        self.assertEqual(self.calls, [False, True])
+
+    def test_tries_the_next_method_when_one_fails(self):
+        order = []
+        power = monitor.DisplayPower(commands=[lambda on: order.append('hypr') or False, lambda on: order.append('x11') or True])
+        self.assertTrue(power.set(False))
+        self.assertEqual(order, ['hypr', 'x11'])
+        self.assertFalse(power.state)
+
+
 class BacklightTests(unittest.TestCase):
     def test_reads_percent_and_never_sets_zero(self):
         with tempfile.TemporaryDirectory() as folder:
