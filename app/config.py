@@ -70,6 +70,7 @@ class CameraSettings(BaseModel):
     # Restricted mode: send its alert and videos by WhatsApp too. Off = web-app notifications only.
     restricted_whatsapp: bool = True
     # Restricted mode: when the father is recognised going into the area, the kitchen screen plays a sound and shows this reminder.
+    restricted_pause_with_family: bool = True   # No alert or reminder while a registered person who is not monitored is in view (they are looking after the father).
     restricted_reminder: bool = False
     restricted_reminder_text: str = Field(default='Atenção com a glicose. Pense antes de pegar algo na geladeira.', max_length=160)
 

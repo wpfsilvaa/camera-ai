@@ -205,6 +205,9 @@ class CameraWorker:
         inside=self.restricted.update(boxes,ids,labels,(width,height),settings.restricted_zones,settings.restricted_who)
         started=zone.update(now,len(inside))=='start'
         self.log_visits(now,settings,next((labels.get(str(k),{}).get('name') for k in inside if labels.get(str(k),{}).get('name')),None))
+        if started and settings.restricted_pause_with_family and any(
+                label.get('person_id') and not label.get('monitored') and label['person_id']!=FATHER for label in labels.values()):
+            return   # Family is with him: the visit is still counted, but nobody needs a warning.
         if started and settings.restricted_reminder and self.on_reminder and now-self.last_reminder>=REMINDER_GAP \
                 and any(key in self.restricted.watched for key in inside):
             self.last_reminder=now

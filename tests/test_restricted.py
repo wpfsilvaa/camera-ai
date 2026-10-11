@@ -115,6 +115,17 @@ class ReminderTests(unittest.TestCase):
         worker.check_restricted(self.Zone(), [AT_FRIDGE], [8], {'8': FATHER}, frame, 1001, self.settings(restricted_reminder_text='Cuidado com o açúcar'))
         self.assertEqual(self.heard, [('main', 'Cuidado com o açúcar')])
 
+    def test_family_in_view_silences_the_reminder_and_the_alert(self):
+        worker, frame = self.worker()
+        worker.on_restricted = lambda *args: self.heard.append(('alert',))
+        both = {'8': FATHER, '9': SON}
+        worker.check_restricted(self.Zone(), [AT_FRIDGE, ACROSS_ROOM], [8, 9], both, frame, 1000, self.settings(restricted_alert=True))
+        self.assertEqual(self.heard, [])
+        worker.check_restricted(self.Zone(), [AT_FRIDGE], [8], {'8': FATHER}, frame, 1100, self.settings(restricted_alert=True))   # Family left.
+        self.assertEqual(len(self.heard), 2)
+        worker.check_restricted(self.Zone(), [AT_FRIDGE, ACROSS_ROOM], [8, 9], both, frame, 1300, self.settings(restricted_alert=True, restricted_pause_with_family=False))
+        self.assertEqual(len(self.heard), 4)
+
     def test_one_reminder_a_minute_and_only_when_enabled(self):
         worker, frame = self.worker()
         worker.check_restricted(self.Zone(), [AT_FRIDGE], [8], {'8': FATHER}, frame, 1000, self.settings())
