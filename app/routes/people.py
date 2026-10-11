@@ -29,6 +29,10 @@ class PersonBirthday(BaseModel):
     birthday: str | None = Field(default=None, max_length=10)
 
 
+class PersonMonitored(BaseModel):
+    monitored: bool
+
+
 class TrackMerge(BaseModel):
     into: int
 
@@ -87,6 +91,11 @@ def build(recognition, learning, on_forget=None):
     @router.put('/api/people/{person_id}/birthday')
     def set_birthday(person_id: str, body: PersonBirthday):
         call_service(recognition.set_birthday, person_id, body.birthday or None)
+        return {'ok': True}
+
+    @router.put('/api/people/{person_id}/monitored')
+    def set_monitored(person_id: str, body: PersonMonitored):
+        call_service(recognition.set_monitored, person_id, body.monitored)
         return {'ok': True}
 
     @router.put('/api/people/{person_id}/phone')

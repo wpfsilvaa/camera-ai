@@ -51,6 +51,7 @@ class Recognition:
         self.db, self.directory = db, Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
+        self.monitored = {'father'}
         self.encoder_lock = threading.Lock()
         self.condition = threading.Condition()
         self.encoder = None
@@ -209,6 +210,19 @@ class Recognition:
             if not db.execute('UPDATE people SET phone=? WHERE id=? AND is_father=0', (phone or None, person_id)).rowcount:
                 raise KeyError('Pessoa não encontrada.')
 
+    def set_monitored(self, person_id, monitored):
+        """Follow this person like the father: presence notices, visits to restricted areas and the weekly report."""
+        if person_id == 'father' and not monitored:
+            raise ValueError('O perfil principal sempre é acompanhado.')
+        with self.lock, self.db.connect() as db:
+            if not db.execute('UPDATE people SET is_father=? WHERE id=?', (int(bool(monitored)), person_id)).rowcount:
+                raise KeyError('Pessoa não encontrada.')
+            if monitored:
+                db.execute('UPDATE people SET phone=NULL WHERE id=?', (person_id,))   # The call button is for the family, not for who is watched.
+            for event in db.execute('SELECT DISTINCT event_id FROM person_tracks WHERE person_id=?', (person_id,)).fetchall():
+                recompute_identity(db, event[0])
+            self.invalidate(db)
+
     def rename_person(self, person_id, name):
         with self.lock, self.db.connect() as db:
             if not db.execute('UPDATE people SET name=? WHERE id=?', (name, person_id)).rowcount:
@@ -220,8 +234,8 @@ class Recognition:
             person = db.execute('SELECT * FROM people WHERE id=?', (person_id,)).fetchone()
             if person is None:
                 raise KeyError('Pessoa não encontrada.')
-            if delete and person['is_father']:
-                raise ValueError('O perfil do pai pode ser renomeado ou ter seus exemplos esquecidos.')
+            if delete and person_id == 'father':
+                raise ValueError('O perfil principal pode ser renomeado ou ter seus exemplos esquecidos.')
             photos = db.execute('SELECT id FROM face_enrollments WHERE person_id=?', (person_id,)).fetchall()
             db.execute('DELETE FROM face_enrollments WHERE person_id=?', (person_id,))
             db.execute('UPDATE person_samples SET person_id=NULL WHERE person_id=?', (person_id,))
@@ -405,6 +419,7 @@ class Recognition:
                 SELECT person_id,feature FROM face_enrollments WHERE model=?''', (self.encoder.version,self.encoder.version))
             self.gallery = [{**r,'feature':normalized(np.frombuffer(r['feature'],dtype=np.float32))} for r in rows]
             self.names = {p['id']:p['name'] for p in self.db.rows('SELECT id,name FROM people')}
+            self.monitored = {p['id'] for p in self.db.rows('SELECT id FROM people WHERE is_father=1')}
             self.revision = revision
             self.votes.clear()
             self.live.clear()
@@ -578,7 +593,7 @@ class Recognition:
                 age=now-item['seen']
                 limit=min(hold_seconds,3) if item.get('source')=='body' else hold_seconds
                 if key in visible and 0<=age<=limit:
-                    output[key]={**item,'held':age>.8}
+                    output[key]={**item,'held':age>.8,'monitored':item['person_id'] in self.monitored}
             # FaceEncoder checks unique face ownership. Body rectangles can overlap
             # substantially even when both faces are clearly separated.
             return output

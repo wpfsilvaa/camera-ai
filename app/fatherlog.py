@@ -23,15 +23,15 @@ class FatherLog:
     def sightings(self, since, until):
         """Presence records in which the father was recognised, oldest first."""
         return self.db.rows('''SELECT e.id,e.started,e.ended,e.camera_name FROM events e
-            WHERE e.started>=? AND e.started<? AND EXISTS (SELECT 1 FROM person_tracks t WHERE t.event_id=e.id AND t.person_id='father')
+            WHERE e.started>=? AND e.started<? AND EXISTS (SELECT 1 FROM person_tracks t JOIN people p ON p.id=t.person_id WHERE t.event_id=e.id AND p.is_father=1)
             ORDER BY e.started''', (since, until))
 
     def visits(self, since, until):
         """Visits to restricted areas, minus those in a record the family reviewed and found were not the father."""
         return self.db.rows('''SELECT v.started,v.camera_id,v.area FROM restricted_visits v WHERE v.started>=? AND v.started<?
             AND NOT EXISTS (SELECT 1 FROM events e WHERE e.camera_id=v.camera_id AND v.started BETWEEN e.started-?3 AND COALESCE(e.ended,e.last_seen)+?3
-                AND EXISTS (SELECT 1 FROM person_tracks t WHERE t.event_id=e.id AND t.reviewed=1 AND t.person_id IS NOT NULL AND t.person_id!='father')
-                AND NOT EXISTS (SELECT 1 FROM person_tracks t WHERE t.event_id=e.id AND t.person_id='father'))
+                AND EXISTS (SELECT 1 FROM person_tracks t JOIN people p ON p.id=t.person_id WHERE t.event_id=e.id AND t.reviewed=1 AND p.is_father=0)
+                AND NOT EXISTS (SELECT 1 FROM person_tracks t JOIN people p ON p.id=t.person_id WHERE t.event_id=e.id AND p.is_father=1))
             ORDER BY v.started''', (since, until, SLACK))
 
     @staticmethod
@@ -42,6 +42,12 @@ class FatherLog:
             found.setdefault(row['area'] or 'Área restrita', []).append(row['started'])
         return found
 
+    def per_person(self, since, until):
+        """How many records each monitored person was confirmed in."""
+        return self.db.rows('''SELECT p.id,p.name,COUNT(DISTINCT e.id) AS sightings FROM people p
+            LEFT JOIN person_tracks t ON t.person_id=p.id LEFT JOIN events e ON e.id=t.event_id AND e.started>=? AND e.started<?
+            WHERE p.is_father=1 GROUP BY p.id ORDER BY p.created''', (since, until))
+
     def count_today(self, now=None):
         now = now or time.time()
         return len(self.sightings(self.midnight(now), now + 1))
@@ -51,7 +57,7 @@ class FatherLog:
         now = now or time.time()
         start = self.midnight(now)
         today = {'sightings': [{'id': r['id'], 'started': r['started'], 'ended': r['ended'], 'camera': r['camera_name']} for r in self.sightings(start, now + 1)],
-                 'areas': self.by_area(self.visits(start, now + 1))}
+                 'areas': self.by_area(self.visits(start, now + 1)), 'people': self.per_person(start, now + 1)}
         week = []
         for back in range(DAYS - 1, -1, -1):
             first, last = self.midnight(now, back), self.midnight(now, back - 1) if back else now + 1

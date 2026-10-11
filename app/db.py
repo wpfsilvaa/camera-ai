@@ -46,7 +46,8 @@ class Database:
                     id TEXT PRIMARY KEY, name TEXT NOT NULL, is_father INTEGER NOT NULL DEFAULT 0,
                     created REAL NOT NULL
                 );
-                CREATE UNIQUE INDEX IF NOT EXISTS one_father ON people(is_father) WHERE is_father=1;
+                -- is_father marks the people the family monitors (the father, plus any other elderly relative or child).
+                DROP INDEX IF EXISTS one_father;
                 INSERT OR IGNORE INTO people(id,name,is_father,created) VALUES('father','Meu pai',1,0);
                 CREATE TABLE IF NOT EXISTS person_tracks (
                     id INTEGER PRIMARY KEY, event_id INTEGER NOT NULL REFERENCES events(id),

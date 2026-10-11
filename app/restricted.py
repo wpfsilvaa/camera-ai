@@ -25,20 +25,25 @@ class RestrictedWatch:
 
     def __init__(self):
         self.identities = {}  # track id -> person id
+        self.watched = set()  # Track ids recognised as a monitored person.
         self.areas = set()    # Indexes of the areas that have a watched person inside (after the last update).
 
     def reset(self):
         self.identities.clear()
+        self.watched.clear()
 
     def update(self, boxes, ids, labels, frame_size, zones, who):
         """Return the track ids of watched people inside a restricted area."""
         visible = {key for key in ids if key is not None}
         for key in self.identities.keys() - visible:
             del self.identities[key]
+            self.watched.discard(key)
         for key in visible:
-            person = labels.get(str(key), {}).get('person_id')
-            if person:
-                self.identities[key] = person
+            label = labels.get(str(key), {})
+            if label.get('person_id'):
+                self.identities[key] = label['person_id']
+                if label.get('monitored') or label['person_id'] == FATHER:
+                    self.watched.add(key)
         width, height = frame_size
         inside, self.areas = [], set()
         for box, key in zip(boxes, ids):
@@ -46,7 +51,7 @@ class RestrictedWatch:
             if not hit:
                 continue
             person = self.identities.get(key)
-            if who == 'anyone' or person == FATHER or (who == 'father_or_unknown' and person is None):
+            if who == 'anyone' or key in self.watched or (who == 'father_or_unknown' and person is None):
                 inside.append(key)
                 self.areas.update(hit)
         return inside

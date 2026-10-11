@@ -206,7 +206,7 @@ class CameraWorker:
         started=zone.update(now,len(inside))=='start'
         self.log_visits(now,settings,next((labels.get(str(k),{}).get('name') for k in inside if labels.get(str(k),{}).get('name')),None))
         if started and settings.restricted_reminder and self.on_reminder and now-self.last_reminder>=REMINDER_GAP \
-                and any(self.restricted.identities.get(key)==FATHER for key in inside):
+                and any(key in self.restricted.watched for key in inside):
             self.last_reminder=now
             try:
                 self.on_reminder(self.camera_id,settings.restricted_reminder_text)
@@ -529,7 +529,7 @@ class CameraWorker:
                     self.report_stall(lap,event_id is not None)
                     rates.append(time.perf_counter())
                     fps=(len(rates)-1)/(rates[-1]-rates[0]) if len(rates)>1 else 0
-                    tracks=[{'id':key,'name':labels.get(str(key),{}).get('name'),'person_id':labels.get(str(key),{}).get('person_id'),'lying_seconds':round(lying[key]) if key in lying else None,
+                    tracks=[{'id':key,'name':labels.get(str(key),{}).get('name'),'person_id':labels.get(str(key),{}).get('person_id'),'monitored':bool(labels.get(str(key),{}).get('monitored')),'lying_seconds':round(lying[key]) if key in lying else None,
                              'held':labels.get(str(key),{}).get('held',False),
                              'source':labels.get(str(key),{}).get('source')} for key in ids]
                     self.update(state='online',error=None,people=count,last_frame=now,event_id=event_id,

@@ -163,7 +163,7 @@ class Push:
 
     def watch_identity(self, camera_id, camera_name, started):
         """Follow the camera's tracks for IDENTIFY_SECONDS and tell "father" and "unknown" devices."""
-        seen, recognized, father_told = set(), set(), False
+        seen, recognized, told = set(), set(), set()
         deadline = started + IDENTIFY_SECONDS
         while True:
             now = self.clock()
@@ -175,10 +175,12 @@ class Push:
                 seen.add(track['id'])
                 if track.get('person_id'):
                     recognized.add(track['id'])
-                if track.get('person_id') == FATHER and not father_told:
-                    father_told = True
-                    if now - self.last_father.get(camera_id, 0) >= FATHER_COOLDOWN:
-                        self.last_father[camera_id] = now
+                person = track.get('person_id')
+                if person and (person == FATHER or track.get('monitored')) and person not in told:
+                    told.add(person)
+                    cooldown_key = camera_id if person == FATHER else f'{camera_id}/{person}'
+                    if now - self.last_father.get(cooldown_key, 0) >= FATHER_COOLDOWN:
+                        self.last_father[cooldown_key] = now
                         who = ' '.join((track.get('name') or 'pai').split()[1:] if (track.get('name') or '').lower().startswith(('meu ', 'minha ')) else (track.get('name') or 'pai').split())
                         times = self.sightings_today() if self.sightings_today else 0
                         again = f' Já são {times} vezes hoje.' if times >= 2 else ''

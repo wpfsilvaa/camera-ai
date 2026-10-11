@@ -55,6 +55,14 @@ class FatherLogTests(unittest.TestCase):
         self.db.execute("UPDATE person_tracks SET person_id='father' WHERE event_id=?", (event,))   # Reviewed again: it was him.
         self.assertEqual(len(self.log.summary(NOON)['today']['areas']['Geladeira']), 2)
 
+    def test_every_monitored_person_counts(self):
+        self.db.execute("INSERT INTO people(id,name,is_father,created) VALUES('mae','Minha mãe',1,1)")
+        self.presence(NOON - 3600, 'father')
+        self.presence(NOON - 1800, 'mae')
+        self.presence(NOON - 900, 'mae')
+        self.assertEqual(self.log.count_today(NOON), 3)
+        self.assertEqual({p['name']: p['sightings'] for p in self.log.summary(NOON)['today']['people']}, {'Meu pai': 1, 'Minha mãe': 2})
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -5,6 +5,9 @@ function renderFatherToday(data) {
   const {sightings, areas} = data.today, week = data.week;
   const chips = times => times.length ? times.map(t => `<span class="time-chip">${fatherClock(t)}</span>`).join('') : '<span class="muted small">Nenhuma ainda.</span>';
   $('#father-sightings').textContent = sightings.length;
+  const watched = data.today.people || [];
+  $('#father-today h2').textContent = watched.length > 1 ? 'Acompanhados hoje' : `${watched[0]?.name || 'O pai'} hoje`;
+  $('#father-people').innerHTML = watched.length > 1 ? watched.map(p => `<span class="pill neutral">${escapeHTML(p.name)}: ${p.sightings}</span>`).join(' ') : '';
   $('#father-sightings-times').innerHTML = chips(sightings.map(s => s.started));
   // Every area with visits today, plus the ones named in the settings (so an area nobody used yet still shows 0).
   const configured = (typeof settings !== 'undefined' && settings?.restricted_enabled ? (settings.restricted_zone_names || []).filter(Boolean) : []);

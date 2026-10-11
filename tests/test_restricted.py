@@ -74,6 +74,13 @@ class RestrictedTests(unittest.TestCase):
             CameraSettings(restricted_who='vizinho')
 
 
+class MonitoredTests(unittest.TestCase):
+    def test_any_monitored_person_counts_as_watched(self):
+        boxes, ids = [AT_FRIDGE, AT_FRIDGE], [1, 2]
+        labels = {'1': {'person_id': 'mae', 'name': 'Minha mãe', 'monitored': True}, '2': SON}
+        self.assertEqual(RestrictedWatch().update(boxes, ids, labels, FRAME, FRIDGE, 'father'), [1])
+
+
 if __name__ == '__main__':
     unittest.main()
 
