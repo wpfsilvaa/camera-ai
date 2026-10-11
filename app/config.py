@@ -177,7 +177,16 @@ class Settings(CameraSettings):
     kiosk_night_start_hour: int = Field(default=22, ge=0, le=23)
     kiosk_night_end_hour: int = Field(default=6, ge=0, le=23)
     kiosk_night_mode: str = 'black'                                  # black screen, red tones, or no night look.
-    kiosk_sounds: str = 'normal'                                     # off, low, normal or high.
+    kiosk_sound_on: bool = True                                      # Master switch for the screen's sounds.
+    # Volume (0-100) of each sound by day and by night: buttons, ringing, help call, message chime.
+    kiosk_vol_button_day: int = Field(default=70, ge=0, le=100)
+    kiosk_vol_button_night: int = Field(default=30, ge=0, le=100)
+    kiosk_vol_call_day: int = Field(default=70, ge=0, le=100)
+    kiosk_vol_call_night: int = Field(default=30, ge=0, le=100)
+    kiosk_vol_help_day: int = Field(default=100, ge=0, le=100)
+    kiosk_vol_help_night: int = Field(default=70, ge=0, le=100)
+    kiosk_vol_message_day: int = Field(default=80, ge=0, le=100)
+    kiosk_vol_message_night: int = Field(default=35, ge=0, le=100)
     kiosk_calendar_enabled: bool = True
     kiosk_birthdays_enabled: bool = True
     kiosk_hints: list[str] = Field(default_factory=list, max_length=10)   # Extra messages cycled on the photo frame.
@@ -187,13 +196,6 @@ class Settings(CameraSettings):
     def kiosk_night_valid(cls, value):
         if value not in ('black', 'red', 'normal'):
             raise ValueError('Escolha como a tela fica à noite.')
-        return value
-
-    @field_validator('kiosk_sounds')
-    @classmethod
-    def kiosk_sounds_valid(cls, value):
-        if value not in ('off', 'low', 'normal', 'high'):
-            raise ValueError('Escolha o volume dos sons da tela.')
         return value
 
     @field_validator('kiosk_hints')

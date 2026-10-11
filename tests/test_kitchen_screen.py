@@ -225,10 +225,25 @@ class MonitorDisplayTests(unittest.TestCase):
         desk.configure(True, True, 'resting', False, acked=good)        # The dashboard stored the first one.
         self.assertEqual(desk.acks, [other])
 
+    def test_sound_tests_reach_the_screen_and_expire(self):
+        clock = [1000.0]
+        desk = monitor.Desk(clock=lambda: clock[0])
+        desk.configure(True, True, 'resting', False)
+        first = desk.queue_test({'sound': 'message', 'volume': 250, 'text': 'Oi'})
+        shown = desk.display()['tests']
+        self.assertEqual(shown, [{'id': first, 'sound': 'message', 'volume': 100, 'text': 'Oi'}])
+        for bad in ({'sound': 'siren', 'volume': 50}, {'sound': 'press', 'volume': 'loud'}, {'sound': 'press'}):
+            with self.assertRaises(ValueError):
+                desk.queue_test(bad)
+        clock[0] += 16
+        desk.configure(True, True, 'resting', False)
+        self.assertEqual(desk.display()['tests'], [])
+
     def test_screen_settings_are_validated_and_clamped(self):
         self.assertEqual(monitor.parse_cfg(''), monitor.DEFAULT_CFG)
-        cfg = monitor.parse_cfg('{"slide":9999,"awake":1,"sounds":"loud","calendar":false,"black":"yes","hints":["Oi","","x"]}')
-        self.assertEqual((cfg['slide'], cfg['awake'], cfg['sounds'], cfg['calendar'], cfg['black'], cfg['hints']), (120, 10, 'normal', False, True, ['Oi', 'x']))
+        cfg = monitor.parse_cfg('{"slide":9999,"awake":1,"sound":false,"vol":{"button":250,"call":-5,"help":"loud"},"calendar":false,"black":"yes","hints":["Oi","","x"]}')
+        self.assertEqual((cfg['slide'], cfg['awake'], cfg['sound'], cfg['calendar'], cfg['black'], cfg['hints']), (120, 10, False, False, True, ['Oi', 'x']))
+        self.assertEqual(cfg['vol'], {'button': 100, 'call': 0, 'help': 100, 'message': 80})    # Clamped; bad values fall back to the default.
         self.assertEqual(monitor.parse_cfg('[1]'), monitor.DEFAULT_CFG)
 
     def test_rejects_unknown_states_and_bad_json(self):

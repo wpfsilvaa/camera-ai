@@ -4,14 +4,16 @@
   const screen = $('screen');
   let last = {call: {state: 'idle'}}, confirming = false, face = null, faceTimer = null;
   let build = null, greetedId = null, greetTimer = null;
-  const DEFAULT_CFG = {slide: 15, awake: 30, sounds: 'normal', calendar: true, hints: [], black: true};
-  const cfg = () => ({...DEFAULT_CFG, ...(last.cfg || {})});
+  const DEFAULT_CFG = {slide: 15, awake: 30, sound: true, vol: {button: 70, call: 70, help: 100, message: 80}, calendar: true, hints: [], black: true};
+  const cfg = () => ({...DEFAULT_CFG, ...(last.cfg || {}), vol: {...DEFAULT_CFG.vol, ...((last.cfg || {}).vol || {})}});
 
-  // Sounds generated here (no files): confirm beep, ringback while calling, chimes when answered or over.
-  let audio = null, ringTimer = null, shownView = 'idle';
-  function tone(freq, at, length, volume = 0.22) {
-    volume *= {off: 0, low: 0.4, normal: 1, high: 1.8}[cfg().sounds] ?? 1;
-    if (volume <= 0) return;
+  // Sounds generated here (no files). Each kind has its own volume (0-100, set for day and night in the dashboard);
+  // a test from the dashboard plays at the slider's value even before it is saved.
+  let audio = null, ringTimer = null, shownView = 'idle', testVolume = null;
+  const level = name => (testVolume !== null ? testVolume : cfg().sound ? cfg().vol[name] : 0) / 100;
+  function tone(freq, at, length, name, relative = 1) {
+    const volume = 0.5 * level(name) * relative;
+    if (volume <= 0.001) return;
     audio = audio || new (window.AudioContext || window.webkitAudioContext)();
     if (audio.state === 'suspended') audio.resume().catch(() => {});
     const osc = audio.createOscillator(), gain = audio.createGain(), start = audio.currentTime + at;
@@ -23,16 +25,31 @@
     osc.connect(gain).connect(audio.destination);
     osc.start(start); osc.stop(start + length + 0.02);
   }
-  const quiet = () => document.documentElement.dataset.night === '1' ? 0.4 : 1;   // Softer at night, never silent.
   const sounds = {
-    press: () => tone(660, 0, 0.12, 0.2 * quiet()),
+    press: () => tone(660, 0, 0.12, 'button', 0.8),
     ring: kind => kind === 'panic'
-      ? [0, 0.28, 0.56].forEach(at => tone(880, at, 0.18, 0.3))                       // Urgent: three quick high beeps.
-      : [0, 0.55].forEach(at => tone(425, at, 0.4, 0.22 * quiet())),                   // Calm "tu-tu" like a phone ringing.
-    message: () => { [[784, 0], [988, 0.2], [1175, 0.4]].forEach(([f, at]) => tone(f, at, 0.28, 0.3 * quiet())); },   // Bright rising chime: someone left you a message.
-    answered: () => { tone(523, 0, 0.16, 0.22 * quiet()); tone(784, 0.18, 0.28, 0.22 * quiet()); },
-    over: () => { tone(784, 0, 0.16, 0.2 * quiet()); tone(523, 0.18, 0.3, 0.2 * quiet()); },
+      ? [0, 0.28, 0.56].forEach(at => tone(880, at, 0.18, 'help'))                      // Urgent: three quick high beeps.
+      : [0, 0.55].forEach(at => tone(425, at, 0.4, 'call', 0.8)),                        // Calm "tu-tu" like a phone ringing.
+    message: () => [[784, 0], [988, 0.2], [1175, 0.4]].forEach(([f, at]) => tone(f, at, 0.28, 'message')),   // Bright rising chime.
+    answered: () => { tone(523, 0, 0.16, 'button', 0.8); tone(784, 0.18, 0.28, 'button', 0.8); },
+    over: () => { tone(784, 0, 0.16, 'button', 0.7); tone(523, 0.18, 0.3, 'button', 0.7); },
   };
+  // Sounds asked for by the dashboard ("Testar" buttons): played once, at the volume of the slider.
+  const seenTests = new Set();
+  function runTests() {
+    for (const test of last.tests || []) {
+      if (seenTests.has(test.id)) continue;
+      seenTests.add(test.id);
+      testVolume = test.volume;
+      try {
+        if (test.sound === 'press') sounds.press();
+        else if (test.sound === 'ring') sounds.ring('call');
+        else if (test.sound === 'help') sounds.ring('panic');
+        else if (test.sound === 'message') showQuotes([{i: '', t: test.text || 'Esta é uma mensagem de teste.', a: 'Teste', vol: test.volume, ms: 8000}], 0, 'Mensagem de teste', false);
+      } catch { /* no audio device */ }
+      testVolume = null;
+    }
+  }
   function soundFor(view, call) {
     if (view === shownView) return;
     const before = shownView;
@@ -91,6 +108,7 @@
     document.querySelector('.vi-shield').classList.toggle('hidden', state === 'analysing');
     document.querySelector('.vi-eye').classList.toggle('hidden', state !== 'analysing');
     applyMode(view);
+    runTests();
     renderFrameInfo();
     greet(view);
     renderReminder();
@@ -138,12 +156,14 @@
     head.classList.remove('rise'); if (quoteHead.fresh) { void head.offsetWidth; head.classList.add('rise'); quoteHead.fresh = false; }   // Moves up once.
     $('quote').classList.remove('hidden'); $('quote').style.animation = 'none'; void $('quote').offsetWidth; $('quote').style.animation = '';
     syncSpeaking();
-    quoteTimer = setTimeout(nextQuote, 20000);
+    quoteTimer = setTimeout(nextQuote, item.ms || 20000);
+    testVolume = item.vol ?? null;
     try { sounds.message(); } catch { /* no audio device */ }
+    testVolume = null;
     $('quote').classList.remove('attn'); void $('quote').offsetWidth; $('quote').classList.add('attn');
     clearTimeout(chimeTimer);
     const current = quoteId;
-    chimeTimer = setTimeout(() => { if (current && quoteId === current) { try { sounds.message(); } catch { /* ignore */ } } }, 9000);   // Still unread: once more.
+    chimeTimer = setTimeout(() => { if (current && !item.vol && quoteId === current) { try { sounds.message(); } catch { /* ignore */ } } }, 9000);   // Still unread: once more.
   }
   let quoteHead = {text: '', birthday: false, fresh: false};
   function showQuotes(items, delay, headline = '', birthday = false) {

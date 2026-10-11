@@ -57,7 +57,8 @@ def reading():
 # A call nobody answered stops ringing after this long ("panic" keeps ringing until someone answers or he cancels).
 MISSED_AFTER = 300
 RESULT_SECONDS = 10  # How long "call ended / missed" stays on the kiosk screen.
-DEFAULT_CFG = {'slide': 15, 'awake': 30, 'sounds': 'normal', 'calendar': True, 'hints': [], 'black': True}
+DEFAULT_CFG = {'slide': 15, 'awake': 30, 'sound': True, 'vol': {'button': 70, 'call': 70, 'help': 100, 'message': 80}, 'calendar': True, 'hints': [], 'black': True}
+TEST_SOUNDS = ('press', 'ring', 'help', 'message')
 VIGIA_STATES = ('off', 'resting', 'analysing', 'scheduled')
 GREET_SECONDS = 10
 BIRTHDAY_SECONDS = 25
@@ -123,9 +124,10 @@ def parse_cfg(text):
     for key, low, high in (('slide', 5, 120), ('awake', 10, 300)):
         if isinstance(data.get(key), int) and not isinstance(data.get(key), bool):
             cfg[key] = min(max(data[key], low), high)
-    if data.get('sounds') in ('off', 'low', 'normal', 'high'):
-        cfg['sounds'] = data['sounds']
-    for key in ('calendar', 'black'):
+    if isinstance(data.get('vol'), dict):
+        cfg['vol'] = {name: min(max(data['vol'][name], 0), 100) if isinstance(data['vol'].get(name), int) and not isinstance(data['vol'].get(name), bool) else DEFAULT_CFG['vol'][name]
+                      for name in DEFAULT_CFG['vol']}
+    for key in ('calendar', 'black', 'sound'):
         if isinstance(data.get(key), bool):
             cfg[key] = data[key]
     if isinstance(data.get('hints'), list):
@@ -171,6 +173,7 @@ class Desk:
         self.vigia = None   # (state, night, received_at) from the dashboard's last poll.
         self.greet = None   # {'name', 'id', 'until', 'birthday', 'age'}: shown once per id.
         self.bdays = []     # [{'n': first name, 'd': 'MM-DD'}] for the calendar.
+        self.tests = []  # [{'id', 'sound', 'volume', 'text', 'at'}]: sounds/messages the dashboard asked the screen to play now.
         self.acks = []   # Message ids confirmed with "Li" on this screen, until the dashboard stores them.
         self.cfg = dict(DEFAULT_CFG)   # Screen settings from the dashboard.
         self.frame = False   # Photo frame switched on in the dashboard's settings.
@@ -194,6 +197,18 @@ class Desk:
             self.frame = bool(frame)
             self.cfg = parse_cfg(cfg)
 
+    def queue_test(self, spec):
+        """A sound (or a sample message) to play on the screen right now, so volumes can be tuned from the dashboard."""
+        sound = str(spec.get('sound', ''))
+        volume = spec.get('volume')
+        if sound not in TEST_SOUNDS or not isinstance(volume, int) or isinstance(volume, bool):
+            raise ValueError('Teste inválido.')
+        text = ''.join(ch for ch in str(spec.get('text', '')) if ch.isprintable())[:200].strip()
+        with self.lock:
+            now = self.clock()
+            self.tests = [t for t in self.tests if now - t['at'] < 30][-4:] + [{'id': uuid.uuid4().hex, 'sound': sound, 'volume': min(max(volume, 0), 100), 'text': text, 'at': now}]
+        return self.tests[-1]['id']
+
     def ack(self, message_id):
         if re.fullmatch(r'[a-f0-9]{32}', message_id or ''):
             with self.lock:
@@ -210,6 +225,7 @@ class Desk:
                     'greet': {k: greet[k] for k in ('name', 'id', 'birthday', 'age', 'msgs', 'quiet')} if greet else None,
                     'bdays': self.bdays if fresh else [],
                     'reminders': [r for r in self.reminders if r['e'] > now] if fresh else [],
+                    'tests': [{k: t[k] for k in ('id', 'sound', 'volume', 'text')} for t in self.tests if now - t['at'] < 15],
                     'cfg': self.cfg if fresh else dict(DEFAULT_CFG), 'frame': self.frame if fresh else False, 'photos': photo_list() if fresh and self.frame else []}
 
     def linked(self):
@@ -347,6 +363,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         url = urlsplit(self.path)
+        if url.path == '/test' and self.authorized():
+            try:
+                return self.reply(200, {'id': self.desk.queue_test(self.body())})
+            except ValueError as error:
+                return self.reply(422, {'error': str(error)})
         if url.path in ('/call/answer', '/call/end') and self.authorized():
             try:
                 call = self.desk.answer(str(self.body().get('name', ''))) if url.path == '/call/answer' else self.desk.end()

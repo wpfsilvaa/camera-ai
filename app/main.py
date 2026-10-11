@@ -80,9 +80,11 @@ def vigia_for_kitchen():
     settings, now = config.for_camera('main'), time.time()
     hour = datetime.fromtimestamp(now, TZ).hour
     camera = next((c for c in cameras.snapshots() if c['id'] == 'main'), {})
+    info_night = kiosk_night(settings, hour)
     info = {'vigia': vigia_state(settings.sentinel_enabled, settings.sentinel_start_hour, settings.sentinel_end_hour, hour, bool(camera.get('sentinel'))),
             'night': int(kiosk_night(settings, hour)),
-            'cfg': json.dumps({'slide': settings.kiosk_slide_seconds, 'awake': settings.kiosk_awake_seconds, 'sounds': settings.kiosk_sounds,
+            'cfg': json.dumps({'slide': settings.kiosk_slide_seconds, 'awake': settings.kiosk_awake_seconds, 'sound': settings.kiosk_sound_on,
+                               'vol': {name: getattr(settings, f'kiosk_vol_{name}_{"night" if info_night else "day"}') for name in ('button', 'call', 'help', 'message')},
                                'calendar': settings.kiosk_calendar_enabled, 'hints': settings.kiosk_hints, 'black': settings.kiosk_night_mode == 'black'}, ensure_ascii=False)}
     notes = reminders.active(now)
     if notes:
@@ -312,6 +314,20 @@ def delete_message(message_id: str, request: Request):
     except KeyError as exc:
         raise HTTPException(404, str(exc))
     return {'ok': True}
+
+
+class KioskTest(BaseModel):
+    sound: str = Field(pattern='^(press|ring|help|message)$')
+    volume: int = Field(ge=0, le=100)
+
+
+@app.post('/api/kiosk/test')
+def kiosk_test(body: KioskTest, request: Request):
+    """Play a sound (or a sample message) on the kitchen screen at the given volume, to tune the settings."""
+    user = request.state.user
+    text = f'Esta é uma mensagem de teste.' if body.sound == 'message' else ''
+    call_service(notebook.send_test, body.sound, body.volume, text)
+    return {'ok': True, 'from': first_name(user['name']) if user else ''}
 
 
 @app.get('/api/resources')

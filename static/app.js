@@ -80,6 +80,7 @@ function deliveryLabel(clip, event) {
 }
 function fillSettings() {
   const form = $('#settings-form');
+  setTimeout(() => window.syncVolumeLabels?.(), 0);
   if (activePage === 'settings') { renderZoneEditor(); loadBackup().catch(() => {}); loadStorage().catch(() => {}); }
   for (const [name, value] of Object.entries(settings)) {
     const field = form.elements.namedItem(name);
