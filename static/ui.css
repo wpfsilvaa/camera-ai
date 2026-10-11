@@ -182,3 +182,26 @@ label.button{cursor:pointer}
 .weather-results{display:flex;flex-direction:column;gap:6px}
 .weather-city{text-align:left;border:1px solid var(--border);background:var(--surface);color:var(--ink);border-radius:8px;padding:9px 12px;font-size:13px;cursor:pointer}
 .weather-city:hover{background:var(--surface-2)}.weather-city small{color:var(--muted);margin-left:.4em}
+
+/* Camera selector with thumbnails */
+.camera-field{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted)}
+.camera-picker{position:relative}
+.camera-picker-button{display:inline-flex;align-items:center;justify-content:space-between;gap:12px;min-width:190px;padding:10px 12px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px;cursor:pointer}
+.camera-picker-button svg{transition:transform .2s}
+.camera-picker-button[aria-expanded=true] svg{transform:rotate(180deg)}
+.camera-picker-button:disabled{opacity:.6;cursor:wait}
+.camera-menu{position:absolute;left:0;top:calc(100% + 8px);z-index:40;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;width:min(560px,calc(100vw - 32px));max-height:70vh;overflow:auto;padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--surface);box-shadow:0 18px 50px #0003}
+.camera-menu.hidden{display:none}
+.camera-card{display:flex;flex-direction:column;gap:6px;padding:6px;border:2px solid transparent;border-radius:12px;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.camera-card:hover,.camera-card:focus-visible{background:var(--surface-2)}
+.camera-card.selected{border-color:var(--accent-line)}
+.camera-card .thumb{position:relative;display:block;aspect-ratio:16/9;border-radius:9px;overflow:hidden;background:#1d2c26}
+.camera-card .thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.camera-card .thumb img:not([src]){display:none}
+.camera-card .thumb-off{position:absolute;inset:0;display:none;align-items:center;justify-content:center;color:#a2b996;font-size:11px}
+.camera-card.offline .thumb-off{display:flex}
+.camera-card strong{font-size:13px;font-weight:600;padding:0 2px}
+.camera-card small{font-size:11px;color:var(--muted);padding:0 2px;margin-top:-4px}
+@media(max-width:500px){.camera-menu{grid-template-columns:repeat(2,1fr)}}
+.wa-connection{display:grid;gap:8px;padding-bottom:14px;margin-bottom:6px;border-bottom:1px solid var(--line,#e3e8e1)}
+.wa-connection p{margin:0}.wa-connection .connection-line{display:flex;justify-content:space-between;align-items:center}

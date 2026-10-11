@@ -33,7 +33,7 @@ Os modelos locais são usados diretamente; a aplicação não baixa pesos ao ini
 
 1. Em **Configurações**, confira a câmera: `rtsp://192.168.1.103:8554/cam`. O computador precisa alcançar o notebook da cozinha pela rede local.
 2. Clique em **Iniciar câmera** na visão geral. A transmissão MJPEG acompanha as detecções continuamente, com caixas e nomes. O painel mostra os quadros por segundo e o dispositivo de inferência.
-3. Clique em **Conectar WhatsApp**. No celular, abra **Dispositivos conectados → Conectar dispositivo** e escaneie o QR code do painel.
+3. Em **Configurações → Alertas → WhatsApp**, clique em **Conectar WhatsApp**. No celular, abra **Dispositivos conectados → Conectar dispositivo** e escaneie o QR code do painel.
 4. Em **Configurações**, informe o número de destino com DDI e DDD, por exemplo `5511999999999`, e habilite **Enviar vídeos pelo WhatsApp**.
 5. Em **Pessoas**, cadastre quem aparece na casa. O perfil **Meu pai** já existe e pode ser renomeado. Clique em **Cadastrar foto do rosto → Escolher foto**, arraste sobre a imagem para recortar uma pessoa e confirme em **Salvar rosto**. Use fotos nítidas e inclua o rosto inteiro com uma margem. Repita com alguns ângulos e condições de luz da câmera.
 6. Abra um registro encerrado no **Histórico**. Cada pessoa rastreada tem suas próprias imagens. Selecione uma imagem nítida, escolha o nome e clique em **Confirmar e ensinar**. Só a imagem selecionada vira exemplo; repita para adicionar outros ângulos.

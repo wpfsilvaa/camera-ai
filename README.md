@@ -74,7 +74,7 @@ Abra **http://localhost:8000**. Depois:
    **Iniciar câmera** na visão geral.
 2. Em **Pessoas**, cadastre quem aparece em casa (foto nítida do rosto) e, no **Histórico**, confirme os rostos
    para a aplicação aprender.
-3. Em **Configurações → WhatsApp**, escaneie o QR code e informe o número que receberá os vídeos.
+3. Em **Configurações → Alertas → WhatsApp**, clique em **Conectar WhatsApp** e escaneie o QR code e informe o número que receberá os vídeos.
 4. Instale o [totem](docs/totem.md) no notebook da cozinha, se quiser.
 
 **Docker:** `docker compose up -d --build` (GPU NVIDIA: `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build`).

@@ -164,12 +164,11 @@ function renderStatus() {
   $('#live-tag').textContent = online ? `AO VIVO · ${settings.camera_name.toUpperCase()}${camera.restricted_recording ? ' · GRAVANDO ÁREA RESTRITA' : ''}` : 'CÂMERA 01';
   $('#toggle-monitor').innerHTML = settings.enabled ? 'Pausar câmera <span>Ⅱ</span>' : 'Iniciar câmera <span>▶</span>';
   const connected = whatsapp.state === 'connected';
-  $('#wa-dot').className = `dot${connected ? '' : ' gray'}`;
   $('#wa-title').textContent = connected ? 'WhatsApp conectado' : 'Os registros vão até você';
   $('#wa-description').textContent = connected ? (settings.whatsapp_enabled ? `Os vídeos ${settings.father_only ? 'confirmados como seu pai ' : ''}serão enviados para ${settings.recipient || "os familiares cadastrados"}.${settings.additional_recipients?.length ? ` Mais ${settings.additional_recipients.length} familiar(es) recebem somente registros do seu pai.` : ""}` : 'Agora configure o destinatário e ative os envios nas configurações.') : 'Conecte sua conta para receber os vídeos da câmera no WhatsApp.';
   const waLabel = {connected:'Conectado',disconnected:'Desconectado',connecting:'Conectando',qr:'Aguardando QR',unavailable:'Indisponível'}[whatsapp.state] || 'Desconectado';
   $('#wa-status').textContent = waLabel; $('#wa-status').className = `pill ${connected ? 'green' : 'neutral'}`;
-  $('#connect-whatsapp').innerHTML = connected ? 'Configurar envio <span>↗</span>' : 'Conectar WhatsApp <span>↗</span>';
+  $('#connect-whatsapp').classList.toggle('hidden', connected);
   if ($('#whatsapp-dialog').open) {
     $('#qr-image').classList.toggle('hidden', !whatsapp.qr);
     if (whatsapp.qr) $('#qr-image').src = whatsapp.qr;
@@ -357,7 +356,6 @@ $('#toggle-monitor').addEventListener('click', event => action(event.currentTarg
   settings.enabled = result.enabled; renderStatus(); await refresh();
 }));
 $('#connect-whatsapp').addEventListener('click', event => action(event.currentTarget, async () => {
-  if (status?.whatsapp.state === 'connected') {location.hash='settings';return;}
   $('#whatsapp-dialog').showModal();
   $('#qr-message').textContent='Preparando conexão…'; $('#qr-image').classList.add('hidden');
   try {await api('/api/whatsapp/connect',{method:'POST'});await refresh();}
@@ -461,11 +459,13 @@ function renderCameraList() {
       img.src=`/api/snapshot?camera_id=${camera.id}&t=${Date.now()}`;img.hidden=false;img.alt=`Prévia de ${camera.name}`;
     } else {img.removeAttribute('src');img.hidden=true;}
   }
+  window.cameraPickerSync?.();
 }
 async function switchCamera(id) {
   if(id===selectedCamera)return;
   selectedCamera=id;
   $('#camera-select').value=id;
+  window.cameraPickerSync?.();
   $('#live-image').removeAttribute('src');streamActive=false;
   $('#camera-select').disabled=true;
   try {
