@@ -652,6 +652,7 @@ def event_details(event_id: int):
 class Label(BaseModel):
     identity: Literal['father', 'other', 'unknown']
     note: str = Field(default='', max_length=500)
+    person_id: str | None = Field(default=None, max_length=64)
 
 
 @app.patch('/api/events/{event_id}')
@@ -665,7 +666,9 @@ def label_event(event_id: int, label: Label):
         raise HTTPException(409, 'Aguarde o fim deste registro para confirmar quem apareceu.')
     if db.rows('SELECT id FROM person_tracks WHERE event_id=? LIMIT 1', (event_id,)):
         raise HTTPException(409, 'Identifique cada pessoa nas imagens deste registro para ensinar corretamente.')
-    db.execute('UPDATE events SET identity=?,note=? WHERE id=?', (label.identity, label.note, event_id))
+    if label.person_id and not db.rows('SELECT 1 FROM people WHERE id=? AND (is_father=1)=(?=\'father\')', (label.person_id, label.identity)):
+        raise HTTPException(422, 'Pessoa inválida para esta identificação.')
+    db.execute('UPDATE events SET identity=?,note=?,person_id=? WHERE id=?', (label.identity, label.note, label.person_id, event_id))
     return {'ok': True}
 
 

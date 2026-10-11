@@ -151,6 +151,8 @@ class Database:
                                      ('presence_quiet', 'INTEGER NOT NULL DEFAULT 0'), ('muted', "TEXT NOT NULL DEFAULT '[]'")):
                 if name not in push_columns:
                     db.execute(f'ALTER TABLE push_subscriptions ADD COLUMN {name} {definition}')
+            if 'person_id' not in columns:
+                db.execute('ALTER TABLE events ADD COLUMN person_id TEXT')   # Who the family said was in a record that has no individual tracks.
             if 'area' not in {r['name'] for r in db.execute('PRAGMA table_info(restricted_visits)')}:
                 db.execute("ALTER TABLE restricted_visits ADD COLUMN area TEXT NOT NULL DEFAULT ''")
             if db.execute('PRAGMA user_version').fetchone()[0] < 1:
@@ -315,6 +317,7 @@ def attach_details(db, events):
     by_id = {clip['id']: clip for items in clips.values() for clip in items}
     for row in db.execute('SELECT * FROM clip_deliveries WHERE clip_id IN (SELECT value FROM json_each(?)) ORDER BY recipient', (ids_param(by_id),)):
         by_id[row['clip_id']]['deliveries'].append(dict(row))
+    names = {r['id']: r['name'] for r in db.execute('SELECT id,name FROM people')}
     photos = {}
     for row in db.execute('SELECT * FROM event_photos WHERE event_id IN (SELECT value FROM json_each(?)) ORDER BY created', (ids_param(e['id'] for e in events),)):
         photos.setdefault(row['event_id'], []).append(dict(row))
@@ -325,6 +328,7 @@ def attach_details(db, events):
         event['clips'] = clips.get(event['id'], [])
         event['photos'] = photos.get(event['id'], [])
         event['people'] = tracks.get(event['id'], [])
+        event['person_name'] = names.get(event.get('person_id'))
         event['probable_father'] = any(t['suggested_is_father'] and not t['reviewed'] for t in event['people'])
 
 

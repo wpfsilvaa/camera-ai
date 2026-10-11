@@ -264,3 +264,8 @@ label.button{cursor:pointer}
 
 /* Dialogs: the title bar with the close button stays at the top while the content scrolls. */
 dialog .dialog-heading{position:sticky;top:0;z-index:5;background:var(--surface);padding:4px 0 8px;margin-bottom:6px}
+
+/* "Acompanhar" hint: the ? is always visible and the text opens on tap. */
+.tip-always{display:inline-grid;place-items:center}
+.monitor-row>span>small{display:none}
+.monitor-row>span>small.tip-open{display:block;margin-top:6px;padding:8px 10px;border-radius:8px;background:var(--surface-2)}
