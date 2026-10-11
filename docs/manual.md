@@ -298,6 +298,8 @@ ativa a opção "pai ou não reconhecida", então use "qualquer pessoa" para tes
 - **Enviar pelo WhatsApp:** desligue para receber só as **notificações do painel no celular**. O alerta não vai ao WhatsApp
   e os vídeos gravados por esse modo não entram na fila de envio (ficam no histórico). Ligado (padrão), continua como antes.
 
+**Lembrete para o pai (diabetes, por exemplo):** ligue **Lembrar o pai com um som e um aviso na tela** e escreva a frase. Quando ele é reconhecido pelo rosto e entra na área restrita, a tela do notebook toca um sinal suave (volume das mensagens, de dia ou de noite) e mostra o lembrete por cerca de 12 segundos. No máximo um por minuto. O botão **Testar o lembrete na tela** mostra como fica. Funciona sem o alerta à família e sem WhatsApp.
+
 ## Possível queda
 
 Em **Configurações → 06 · Possível queda**, ative **Detectar pessoa deitada fora da cama/sofá**. A detecção passa a usar o modelo **YOLO26 pose** (`yolo26n-pose.pt`), que detecta as mesmas pessoas e também os pontos do corpo.

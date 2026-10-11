@@ -61,7 +61,7 @@ def reading():
 MISSED_AFTER = 300
 RESULT_SECONDS = 10  # How long "call ended / missed" stays on the kiosk screen.
 DEFAULT_CFG = {'slide': 15, 'awake': 30, 'sound': True, 'vol': {'button': 70, 'call': 70, 'help': 100, 'message': 80}, 'calendar': True, 'framecal': 'always', 'rain': True, 'hints': [], 'black': True}
-TEST_SOUNDS = ('press', 'ring', 'help', 'message', 'rain')
+TEST_SOUNDS = ('press', 'ring', 'help', 'message', 'nudge', 'rain')
 VIGIA_STATES = ('off', 'resting', 'analysing', 'scheduled')
 GREET_SECONDS = 10
 BIRTHDAY_SECONDS = 25

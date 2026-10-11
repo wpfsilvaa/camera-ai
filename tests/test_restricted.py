@@ -76,3 +76,44 @@ class RestrictedTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ReminderTests(unittest.TestCase):
+    """The father going into the restricted area makes the kitchen screen remind him (at most once a minute)."""
+
+    class Zone:
+        def __init__(self):
+            self.state = 'start'
+
+        def update(self, now, count):
+            return self.state if count else None
+
+    def worker(self):
+        import numpy as np
+        from app.camera import CameraWorker
+        worker = CameraWorker.__new__(CameraWorker)
+        worker.restricted, worker.camera_id, worker.last_reminder = RestrictedWatch(), 'main', 0.0
+        worker.on_restricted, self.heard = None, []
+        worker.on_reminder = lambda camera, text: self.heard.append((camera, text))
+        return worker, np.zeros((1000, 1000, 3), np.uint8)
+
+    def settings(self, **changes):
+        return CameraSettings(restricted_enabled=True, restricted_zones=FRIDGE, restricted_who='anyone', restricted_reminder=True, **changes)
+
+    def test_only_the_recognised_father_is_reminded(self):
+        worker, frame = self.worker()
+        worker.check_restricted(self.Zone(), [AT_FRIDGE], [7], {'7': SON}, frame, 1000, self.settings())
+        self.assertEqual(self.heard, [])
+        worker.check_restricted(self.Zone(), [AT_FRIDGE], [8], {'8': FATHER}, frame, 1001, self.settings(restricted_reminder_text='Cuidado com o açúcar'))
+        self.assertEqual(self.heard, [('main', 'Cuidado com o açúcar')])
+
+    def test_one_reminder_a_minute_and_only_when_enabled(self):
+        worker, frame = self.worker()
+        worker.check_restricted(self.Zone(), [AT_FRIDGE], [8], {'8': FATHER}, frame, 1000, self.settings())
+        worker.check_restricted(self.Zone(), [AT_FRIDGE], [8], {'8': FATHER}, frame, 1030, self.settings())
+        self.assertEqual(len(self.heard), 1)
+        worker.check_restricted(self.Zone(), [AT_FRIDGE], [8], {'8': FATHER}, frame, 1061, self.settings())
+        self.assertEqual(len(self.heard), 2)
+        off = CameraSettings(restricted_enabled=True, restricted_zones=FRIDGE, restricted_who='anyone')
+        worker.check_restricted(self.Zone(), [AT_FRIDGE], [8], {'8': FATHER}, frame, 2000, off)
+        self.assertEqual(len(self.heard), 2)

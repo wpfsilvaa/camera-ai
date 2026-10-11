@@ -17,3 +17,14 @@ document.addEventListener('click', event => {
   });
 });
 setTimeout(syncVolumeLabels, 2500);
+// "Testar o lembrete" (restricted mode): plays the reminder on the screen with the text as typed, at the message volume.
+document.addEventListener('click', event => {
+  const button = event.target.closest('#test-reminder');
+  if (!button) return;
+  const volume = Number(document.querySelector('input[name="kiosk_vol_message_day"]')?.value || 80);
+  const text = document.querySelector('input[name="restricted_reminder_text"]')?.value.trim() || '';
+  action(button, async () => {
+    await api('/api/kiosk/test', {method: 'POST', body: JSON.stringify({sound: 'nudge', volume, text})});
+    toast('Teste enviado: veja o lembrete na tela do notebook.');
+  });
+});

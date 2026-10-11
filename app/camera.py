@@ -23,7 +23,7 @@ from .falls import FallDetector
 from .overlay import annotate, draw_zones
 from .pacing import DetectionPacing, MotionGate, TouchThrottle
 from .presence import Presence
-from .restricted import PhotoSchedule, RestrictedWatch
+from .restricted import FATHER, PhotoSchedule, RestrictedWatch
 from .tracking import PersonTracker
 from .recorder import Recorder, audio_url
 from .recognition import Recognition
@@ -32,6 +32,7 @@ log = logging.getLogger(__name__)
 # A loop pass above this is logged with its stages; so is waiting this long for a camera frame.
 STALL_SECONDS = .3
 STALL_WAIT_SECONDS = 1.0
+REMINDER_GAP=60  # Seconds between two reminders at least.
 RESTRICTED_COLOR=(60,60,200)  # BGR: restricted areas are red, fall areas blue.
 # Ultralytics initialization touches process-wide configuration; serialize warmup.
 MODEL_LOAD_LOCK = threading.Lock()
@@ -121,6 +122,8 @@ class CameraWorker:
         self.on_presence=None  # Called with (camera_id, camera_name, time) when a presence record starts.
         # Called with (camera_id, camera_name, jpeg bytes, person name) when a restricted area visit starts.
         self.on_restricted=None
+        self.on_reminder=None   # Called with (camera id, text) when the father goes into a restricted area (a sound on the kitchen screen).
+        self.last_reminder=0.0
         self.restricted=RestrictedWatch()
         self.photos=PhotoSchedule()
         self.last_stall_log=0
@@ -185,7 +188,15 @@ class CameraWorker:
         """Update the restricted area visit; alert once when it starts, if enabled."""
         height,width=frame.shape[:2]
         inside=self.restricted.update(boxes,ids,labels,(width,height),settings.restricted_zones,settings.restricted_who)
-        if zone.update(now,len(inside))!='start' or not settings.restricted_alert or not self.on_restricted:
+        started=zone.update(now,len(inside))=='start'
+        if started and settings.restricted_reminder and self.on_reminder and now-self.last_reminder>=REMINDER_GAP \
+                and any(self.restricted.identities.get(key)==FATHER for key in inside):
+            self.last_reminder=now
+            try:
+                self.on_reminder(self.camera_id,settings.restricted_reminder_text)
+            except Exception:
+                log.exception('Falha ao lembrar o pai na área restrita')
+        if not started or not settings.restricted_alert or not self.on_restricted:
             return
         name=next((labels.get(str(k),{}).get('name') for k in inside if labels.get(str(k),{}).get('name')),None)
         snapshot=draw_zones(annotate(frame,boxes,ids,labels),settings.restricted_zones,RESTRICTED_COLOR)

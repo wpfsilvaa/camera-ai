@@ -31,6 +31,7 @@
       ? [0, 0.28, 0.56].forEach(at => tone(880, at, 0.18, 'help'))                      // Urgent: three quick high beeps.
       : [0, 0.55].forEach(at => tone(425, at, 0.4, 'call', 0.8)),                        // Calm "tu-tu" like a phone ringing.
     message: () => [[784, 0], [988, 0.2], [1175, 0.4]].forEach(([f, at]) => tone(f, at, 0.28, 'message')),   // Bright rising chime.
+    nudge: () => [[523, 0], [659, 0.25], [523, 0.8], [659, 1.05]].forEach(([f, at]) => tone(f, at, 0.3, 'message')),   // Soft double "ding-dong" twice: a reminder, not an alarm.
     answered: () => { tone(523, 0, 0.16, 'button', 0.8); tone(784, 0.18, 0.28, 'button', 0.8); },
     over: () => { tone(784, 0, 0.16, 'button', 0.7); tone(523, 0.18, 0.3, 'button', 0.7); },
   };
@@ -46,6 +47,7 @@
         else if (test.sound === 'ring') sounds.ring('call');
         else if (test.sound === 'help') sounds.ring('panic');
         else if (test.sound === 'rain') { rain.testLevel = test.volume > 66 ? 3 : test.volume > 33 ? 2 : 1; rain.testUntil = Date.now() + 15000; updateRain(); }
+        else if (test.sound === 'nudge') showQuotes([{i: '', t: test.text || 'Lembrete.', a: '', vol: test.volume, ms: 12000, sound: 'nudge'}], 0, 'Lembrete', false);
         else if (test.sound === 'message') showQuotes([{i: '', t: test.text || 'Esta é uma mensagem de teste.', a: 'Teste', vol: test.volume, ms: 8000}], 0, 'Mensagem de teste', false);
       } catch { /* no audio device */ }
       testVolume = null;
@@ -193,7 +195,7 @@
     syncSpeaking();
     quoteTimer = setTimeout(nextQuote, item.ms || (single ? 30000 : 20000));
     testVolume = item.vol ?? null;
-    try { sounds.message(); } catch { /* no audio device */ }
+    try { (item.sound === 'nudge' ? sounds.nudge : sounds.message)(); } catch { /* no audio device */ }
     testVolume = null;
     $('quote').classList.remove('attn'); void $('quote').offsetWidth; $('quote').classList.add('attn');
     clearTimeout(chimeTimer);

@@ -1,7 +1,9 @@
 import asyncio
 import json
+import logging
 import re
 import shutil
+import threading
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -71,6 +73,7 @@ push.frame = latest_frame
 notebook.frame = lambda: latest_frame('main')
 
 
+log = logging.getLogger(__name__)
 greeter = Greeter()
 reminders = Reminders(db)
 photos = Photos(db)
@@ -166,6 +169,23 @@ def vigia_for_kitchen():
 
 
 notebook.vigia = vigia_for_kitchen
+
+
+def remind_in_kitchen(camera_id, text):
+    """The father went into a restricted area: a sound and a reminder on the kitchen screen (sent in the background, the camera loop must not wait)."""
+    settings = config.get()
+    night = kiosk_night(settings, datetime.now(TZ).hour)
+    volume = getattr(settings, f'kiosk_vol_message_{"night" if night else "day"}')
+
+    def send():
+        try:
+            notebook.send_test('nudge', volume, text)
+        except Exception:
+            log.warning('Não foi possível lembrar o pai na tela do notebook', exc_info=True)
+    threading.Thread(target=send, daemon=True, name='kitchen-reminder').start()
+
+
+cameras.reminder_handler = remind_in_kitchen
 
 
 def screen_busy():
@@ -443,15 +463,16 @@ def delete_message(message_id: str, request: Request):
 
 
 class KioskTest(BaseModel):
-    sound: str = Field(pattern='^(press|ring|help|message|brightness|screenoff|rain)$')
+    sound: str = Field(pattern='^(press|ring|help|message|nudge|brightness|screenoff|rain)$')
     volume: int = Field(ge=0, le=100)
+    text: str = Field(default='', max_length=160)   # The reminder shown by the "nudge" test.
 
 
 @app.post('/api/kiosk/test')
 def kiosk_test(body: KioskTest, request: Request):
     """Play a sound (or a sample message) on the kitchen screen at the given volume, to tune the settings."""
     user = request.state.user
-    text = f'Esta é uma mensagem de teste.' if body.sound == 'message' else ''
+    text = 'Esta é uma mensagem de teste.' if body.sound == 'message' else body.text.strip() or 'Este é um lembrete de teste.' if body.sound == 'nudge' else ''
     call_service(notebook.send_test, body.sound, body.volume, text)
     return {'ok': True, 'from': first_name(user['name']) if user else ''}
 
