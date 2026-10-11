@@ -29,6 +29,7 @@
     ring: kind => kind === 'panic'
       ? [0, 0.28, 0.56].forEach(at => tone(880, at, 0.18, 0.3))                       // Urgent: three quick high beeps.
       : [0, 0.55].forEach(at => tone(425, at, 0.4, 0.22 * quiet())),                   // Calm "tu-tu" like a phone ringing.
+    message: () => { [[784, 0], [988, 0.2], [1175, 0.4]].forEach(([f, at]) => tone(f, at, 0.28, 0.3 * quiet())); },   // Bright rising chime: someone left you a message.
     answered: () => { tone(523, 0, 0.16, 0.22 * quiet()); tone(784, 0.18, 0.28, 0.22 * quiet()); },
     over: () => { tone(784, 0, 0.16, 0.2 * quiet()); tone(523, 0.18, 0.3, 0.2 * quiet()); },
   };
@@ -123,8 +124,8 @@
   }
   // Messages left for the person being greeted, one after the other, quote-style with the sender underneath.
   // Each message stays 20 s (or until the person taps "Li", which tells the family it was read).
-  let quoteQueue = [], quoteTimer = null, quoteId = '';
-  function hideQuote() { clearTimeout(quoteTimer); quoteQueue = []; quoteId = ''; $('quote').classList.add('hidden'); syncSpeaking(); }
+  let quoteQueue = [], quoteTimer = null, quoteId = '', chimeTimer = null;
+  function hideQuote() { clearTimeout(quoteTimer); clearTimeout(chimeTimer); quoteQueue = []; quoteId = ''; $('quote').classList.add('hidden'); syncSpeaking(); }
   function nextQuote() {
     clearTimeout(quoteTimer);
     const item = quoteQueue.shift();
@@ -138,6 +139,11 @@
     $('quote').classList.remove('hidden'); $('quote').style.animation = 'none'; void $('quote').offsetWidth; $('quote').style.animation = '';
     syncSpeaking();
     quoteTimer = setTimeout(nextQuote, 20000);
+    try { sounds.message(); } catch { /* no audio device */ }
+    $('quote').classList.remove('attn'); void $('quote').offsetWidth; $('quote').classList.add('attn');
+    clearTimeout(chimeTimer);
+    const current = quoteId;
+    chimeTimer = setTimeout(() => { if (current && quoteId === current) { try { sounds.message(); } catch { /* ignore */ } } }, 9000);   // Still unread: once more.
   }
   let quoteHead = {text: '', birthday: false, fresh: false};
   function showQuotes(items, delay, headline = '', birthday = false) {
@@ -162,17 +168,23 @@
         const hour = new Date().getHours(), period = hour >= 5 && hour < 12 ? 'Bom dia' : hour >= 12 && hour < 18 ? 'Boa tarde' : 'Boa noite';
         const text = birthday ? `🎂 Feliz aniversário, ${last.greet.name}!` : `${period}, ${last.greet.name}`;
         const extra = birthday ? `${last.greet.age ? `Hoje você completa ${last.greet.age} anos. ` : ''}${BIRTHDAY_LINES[last.greet.id % BIRTHDAY_LINES.length]}` : '';
-        for (const [headline, sub] of pairs) {
-          $(headline).textContent = text; $(headline).classList.toggle('birthday', birthday); $(headline).classList.remove('hidden');
-          $(sub).textContent = extra; $(sub).classList.toggle('hidden', !birthday);
+        if (msgs.length) {
+          // A message is waiting: no big greeting first, the greeting sits on top of the message card straight away.
+          pairs.flat().forEach(id => $(id).classList.add('hidden'));
+          if (birthday) party(); else $('confetti').classList.add('hidden');
+          clearTimeout(greetTimer);
+          if (birthday) greetTimer = setTimeout(() => { $('confetti').classList.add('hidden'); $('confetti').innerHTML = ''; }, shownFor);
+          showQuotes(msgs, 0, text, birthday);
+        } else {
+          for (const [headline, sub] of pairs) {
+            $(headline).textContent = text; $(headline).classList.toggle('birthday', birthday); $(headline).classList.remove('hidden');
+            $(sub).textContent = extra; $(sub).classList.toggle('hidden', !birthday);
+          }
+          if (birthday) party(); else $('confetti').classList.add('hidden');
+          clearTimeout(greetTimer);
+          greetTimer = setTimeout(hide, shownFor);
+          syncSpeaking();
         }
-        if (birthday) party(); else $('confetti').classList.add('hidden');
-        clearTimeout(greetTimer);
-        // With messages the big greeting only lasts a moment: it then shrinks up into the message card.
-        const bigFor = msgs.length ? (birthday ? 4500 : 2800) : shownFor;
-        greetTimer = setTimeout(() => { pairs.flat().forEach(id => $(id).classList.add('hidden')); if (!msgs.length) { $('confetti').classList.add('hidden'); $('confetti').innerHTML = ''; } syncSpeaking(); }, bigFor);
-        syncSpeaking();
-        if (msgs.length) showQuotes(msgs, bigFor, text, birthday);
       } else if (msgs.length) showQuotes(msgs, 0);
     }
   }

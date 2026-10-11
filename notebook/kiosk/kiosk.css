@@ -170,3 +170,9 @@ html[data-night="1"] .quote-ok{color:#f0948a}
 @keyframes shrinkup{from{transform:translateY(28vh) scale(1.9);opacity:.9}to{transform:none;opacity:1}}
 html[data-night="1"] .quote-head{color:#c8493c}
 @media (prefers-reduced-motion:reduce){.quote-head.rise{animation:none}}
+
+/* A soft amber glow around the edges draws the eye to the notebook when a message arrives */
+.quote::after{content:"";position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 12vmin 2vmin var(--amber);opacity:0}
+.quote.attn::after{animation:attn 1.3s ease-in-out 4}
+@keyframes attn{0%,100%{opacity:0}50%{opacity:.5}}
+@media (prefers-reduced-motion:reduce){.quote.attn::after{animation:none}}
