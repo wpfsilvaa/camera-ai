@@ -273,3 +273,5 @@ dialog .dialog-heading{position:sticky;top:0;z-index:5;background:var(--surface)
 .sample-choice input[type=checkbox]{appearance:auto;width:20px;height:20px;border-radius:4px;background:none;z-index:1}
 .sample-choice input[type=checkbox]::before{content:none}
 .track-names .label-buttons{margin-top:6px}
+.monitor-row>span>strong{display:inline;vertical-align:middle}
+.monitor-row>span>.tip-button{margin-left:8px;vertical-align:middle}
