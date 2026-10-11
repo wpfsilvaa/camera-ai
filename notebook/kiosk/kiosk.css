@@ -192,3 +192,5 @@ html[data-night="1"] .quote-head{color:#c8493c}
 .mc-next li span{display:block;font-size:.78em;color:var(--amber);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
 .mc-next li b{display:block;font-weight:600;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media (prefers-reduced-motion:reduce){.fr-cal{transition:none}}
+
+.big .icon svg{display:block;width:1.15em;height:1.15em}
