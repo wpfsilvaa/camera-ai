@@ -208,3 +208,8 @@ label.button{cursor:pointer}
 .camera-picker-button small{color:var(--muted);font-size:12px;margin-left:-4px}
 .monitor-grid{grid-template-columns:minmax(0,1fr)!important}.monitor-grid .live-panel{max-width:960px}
 .routine-chart{margin-inline:auto}.routine-body .routine-text,#routine-caption{text-align:center}
+.live-panel{overflow:visible}.live-panel .camera-field{gap:0}
+.live-panel .camera-picker-button{min-width:0;padding:7px 10px;border-color:transparent;background:transparent;font-size:15px}
+.live-panel .camera-picker-button:hover,.live-panel .camera-picker-button[aria-expanded=true]{background:var(--surface-2);border-color:var(--border)}
+.live-panel .camera-picker-button strong{font-weight:600}
+.live-panel .camera-menu{top:calc(100% + 6px)}
