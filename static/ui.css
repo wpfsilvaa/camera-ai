@@ -66,8 +66,6 @@ input,select,textarea{background:var(--surface);color:var(--ink);border-color:va
   main{padding-bottom:calc(var(--nav-height) + env(safe-area-inset-bottom) + 12px)}
   .toast{bottom:calc(var(--nav-height) + env(safe-area-inset-bottom) + 14px)}
   .topbar{position:sticky;top:0;z-index:10;background:var(--bg)}
-  .side-panels{display:grid}
-  .side-panels .whatsapp-panel,.side-panels .identity-note{display:none}
   .settings-actions{bottom:calc(var(--nav-height) + env(safe-area-inset-bottom) + 8px)}
   .settings-tabs{width:100%}
   .settings-tab{flex:1;padding:9px 8px}
@@ -190,7 +188,7 @@ label.button{cursor:pointer}
 .camera-picker-button svg{transition:transform .2s}
 .camera-picker-button[aria-expanded=true] svg{transform:rotate(180deg)}
 .camera-picker-button:disabled{opacity:.6;cursor:wait}
-.camera-menu{position:absolute;left:0;top:calc(100% + 8px);z-index:40;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;width:min(560px,calc(100vw - 32px));max-height:70vh;overflow:auto;padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--surface);box-shadow:0 18px 50px #0003}
+.camera-menu{position:absolute;left:0;top:calc(100% + 8px);z-index:40;display:flex;flex-direction:column;gap:12px;width:min(640px,calc(100vw - 32px));max-height:70vh;overflow:auto;padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--surface);box-shadow:0 18px 50px #0003}
 .camera-menu.hidden{display:none}
 .camera-card{display:flex;flex-direction:column;gap:6px;padding:6px;border:2px solid transparent;border-radius:12px;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
 .camera-card:hover,.camera-card:focus-visible{background:var(--surface-2)}
@@ -202,6 +200,10 @@ label.button{cursor:pointer}
 .camera-card.offline .thumb-off{display:flex}
 .camera-card strong{font-size:13px;font-weight:600;padding:0 2px}
 .camera-card small{font-size:11px;color:var(--muted);padding:0 2px;margin-top:-4px}
-@media(max-width:500px){.camera-menu{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:500px){.camera-cards{grid-template-columns:repeat(2,1fr)}}
 .wa-connection{display:grid;gap:8px;padding-bottom:14px;margin-bottom:6px;border-bottom:1px solid var(--line,#e3e8e1)}
 .wa-connection p{margin:0}.wa-connection .connection-line{display:flex;justify-content:space-between;align-items:center}
+.camera-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.camera-actions{display:flex;flex-wrap:wrap;gap:8px;padding-top:12px;border-top:1px solid var(--border)}
+.camera-picker-button small{color:var(--muted);font-size:12px;margin-left:-4px}
+.monitor-grid{grid-template-columns:minmax(0,1fr)!important}.monitor-grid .live-panel{max-width:960px}
