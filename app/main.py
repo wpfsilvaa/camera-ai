@@ -41,6 +41,7 @@ from .proxy import allowed_origins, is_https
 from .push import Push
 from .recognition import Recognition
 from .storage import Storage
+from .street import StreetMode
 from .routes import alerts as alert_routes, auth as auth_routes, backup as backup_routes, intercom as intercom_routes, people as people_routes, photos as photos_routes, push as push_routes, storage as storage_routes
 from .services import call_service
 
@@ -62,6 +63,18 @@ jobs = Jobs(db, config, recognition, alerts, auth, learning, backups, notebook)
 cameras.fall_handler = alerts.fall
 cameras.presence_handler = push.presence
 cameras.restricted_handler = alerts.restricted
+street = StreetMode()
+
+
+def guard_house(camera_id, camera_name, stranger, now, make_jpeg):
+    """A guarded camera reports whether an unknown person is in view; with Street mode on, a lasting stranger raises the alert."""
+    if street.update(camera_id, stranger, now, config.get().street_delay_seconds):
+        jpeg = make_jpeg()
+        if jpeg:
+            alerts.intruder(camera_id, camera_name, jpeg, now)
+
+
+cameras.street_handler = guard_house
 
 
 def latest_frame(camera_id):
@@ -251,7 +264,7 @@ PUBLIC = {
     '/sw.js', '/manifest.webmanifest', '/static/icon-192.png', '/static/icon-512.png', '/static/icon-maskable.png',
 }
 # Family accounts are read-only; these (their own password and devices) are the only changes they may make.
-FAMILY_WRITES = {'/api/auth/logout', '/api/auth/password', '/api/auth/profile', '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/test',
+FAMILY_WRITES = {'/api/street', '/api/auth/logout', '/api/auth/password', '/api/auth/profile', '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/test',
                  '/api/push/presence-status', '/api/push/presence', '/api/push/topics-status', '/api/push/topics', '/api/notebook/call/answer', '/api/notebook/call/end',
                  '/api/intercom/listen', '/api/intercom/talk', '/api/intercom/video', '/api/intercom/face', '/api/intercom/hangup'}
 
@@ -390,6 +403,25 @@ def avatar_media(person_id: str):
     if not avatars.has(person_id):
         raise HTTPException(404)
     return FileResponse(avatars.path(person_id), media_type='image/jpeg', headers={'Cache-Control': 'private, max-age=300'})
+
+
+class StreetSwitch(BaseModel):
+    armed: bool
+
+
+@app.get('/api/street')
+def street_state():
+    settings = config.get()
+    guards = [settings.camera_name] if settings.street_guard else []
+    guards += [c.camera_name for c in settings.cameras if c.street_guard]
+    return {**street.state(), 'guards': guards, 'delay': settings.street_delay_seconds, 'recognition': settings.recognition_enabled}
+
+
+@app.put('/api/street')
+def street_switch(body: StreetSwitch):
+    if body.armed and not street_state()['guards']:
+        raise HTTPException(409, 'Marque ao menos uma câmera para vigiar a casa (Configurações → Câmera → Vigiar a casa no Modo rua).')
+    return street.set(body.armed)
 
 
 @app.get('/api/father/today')

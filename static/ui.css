@@ -279,3 +279,6 @@ dialog .dialog-heading{position:sticky;top:0;z-index:5;background:var(--surface)
 .monitor-row>span{flex:0 1 auto}
 .monitor-row>p{margin:0;line-height:0}
 .monitor-row>span>small.tip-open{flex-basis:100%}
+
+/* Street mode on: a red edge on the panel so nobody forgets it is armed. */
+.street-on .street-panel{border-color:var(--red-ink,#b3402a);box-shadow:0 0 0 2px var(--red-bg)}

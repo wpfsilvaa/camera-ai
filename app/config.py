@@ -70,6 +70,8 @@ class CameraSettings(BaseModel):
     # Restricted mode: send its alert and videos by WhatsApp too. Off = web-app notifications only.
     restricted_whatsapp: bool = True
     # Restricted mode: when the father is recognised going into the area, the kitchen screen plays a sound and shows this reminder.
+    # Street mode: this camera watches the house; an unknown person on it raises the intruder alert while the mode is on.
+    street_guard: bool = False
     restricted_pause_with_family: bool = True   # No alert or reminder while a registered person who is not monitored is in view (they are looking after the father).
     restricted_reminder: bool = False
     restricted_reminder_text: str = Field(default='Atenção com a glicose. Pense antes de pegar algo na geladeira.', max_length=160)
@@ -162,6 +164,7 @@ class Settings(CameraSettings):
     face_hold_seconds: float = Field(default=15, ge=0, le=60)
     send_probable_father: bool = False
     # Propose sharp, confidently recognized faces as new examples; a person approves each one.
+    street_delay_seconds: int = Field(default=45, ge=0, le=300)   # A stranger must stay in view this long before the intruder alert.
     learning_suggestions_enabled: bool = True
     learning_threshold: float = Field(default=.65, ge=.5, le=.95)
     learning_auto_approve: bool = True   # Suggestions at or above learning_auto_threshold are approved without asking; the doubtful ones wait for a person.

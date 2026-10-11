@@ -123,6 +123,7 @@ class CameraWorker:
         self.on_presence=None  # Called with (camera_id, camera_name, time) when a presence record starts.
         # Called with (camera_id, camera_name, jpeg bytes, person name) when a restricted area visit starts.
         self.on_restricted=None
+        self.on_street=None   # Called every analysed frame of a guarded camera: (camera id, name, stranger in view, time, jpeg maker).
         self.on_visit=None   # Called with (camera id, time, name) at the start of every visit to a restricted area.
         self.on_reminder=None   # Called with (camera id, text) when the father goes into a restricted area (a sound on the kitchen screen).
         self.last_reminder=0.0
@@ -198,6 +199,17 @@ class CameraWorker:
                 except Exception:
                     log.exception('Falha ao registrar ida à área restrita')
             self.area_seen[index]=now
+
+    def check_street(self, boxes, ids, labels, frame, now, settings):
+        """Street mode: tell the application whether someone nobody recognised is in view."""
+        stranger=any(key is not None and not labels.get(str(key),{}).get('person_id') for key in ids)
+        def jpeg():
+            encoded,data=cv2.imencode('.jpg',resize_width(draw_zones(annotate(frame,boxes,ids,labels),[],RESTRICTED_COLOR),1280),[cv2.IMWRITE_JPEG_QUALITY,85])
+            return data.tobytes() if encoded else None
+        try:
+            self.on_street(self.camera_id,settings.camera_name,stranger,now,jpeg)
+        except Exception:
+            log.exception('Falha ao avaliar o Modo rua')
 
     def check_restricted(self, zone, boxes, ids, labels, frame, now, settings):
         """Update the restricted area visit; alert once when it starts, if enabled."""
@@ -478,6 +490,8 @@ class CameraWorker:
                             last_recognition=now
                             self.recognition.submit(event_id,original,boxes,ids,now,current)
                         labels=self.recognition.labels(ids,boxes,now,current.face_hold_seconds) if current.recognition_enabled else {}
+                        if current.street_guard and self.on_street:
+                            self.check_street(boxes,ids,labels,original,now,current)
                         if current.restricted_enabled:
                             self.check_restricted(zone,boxes,ids,labels,original,now,current)
                         elif zone.active or zone.candidate is not None:

@@ -140,7 +140,7 @@ class Alerts:
                  f'• A identificar: {today["unknown"]}',
                  f'• Última presença: {last}',
                  f'• Tempo gravado: {elapsed(stats["recorded_seconds_today"])}']
-        problems = self.db.rows("SELECT COUNT(*) AS n FROM alerts WHERE kind IN ('camera_offline','inactivity','routine','fall','notebook_battery','notebook_unplugged','notebook_offline','panic') AND created>=?",
+        problems = self.db.rows("SELECT COUNT(*) AS n FROM alerts WHERE kind IN ('camera_offline','inactivity','routine','fall','notebook_battery','notebook_unplugged','notebook_offline','panic','intruder') AND created>=?",
                                 (local.replace(hour=0, minute=0, second=0, microsecond=0).timestamp(),))[0]['n']
         if problems:
             lines.append(f'• Alertas enviados hoje: {problems}')
@@ -154,6 +154,16 @@ class Alerts:
         return self.raise_alert(alert_id, 'fall',
                                 f'🚨 Possível queda na câmera {camera_name}: uma pessoa está deitada fora da cama/sofá '
                                 f'há {round(seconds)} s ({clock(now)}). Ligue ou peça para alguém verificar agora.',
+                                now, image=True, camera_id=camera_id)
+
+    def intruder(self, camera_id, camera_name, jpeg, now=None):
+        """Street mode is on and an unknown person is in a guarded camera: alert right away, with the photo."""
+        now = now or time.time()
+        alert_id = f'intruder-{camera_id}-{int(now)}'
+        (IMAGES / f'{alert_id}.jpg').write_bytes(jpeg)
+        return self.raise_alert(alert_id, 'intruder',
+                                f'🚨 Alguém entrou em casa? Uma pessoa desconhecida apareceu na câmera {camera_name} às {clock(now)} '
+                                f'com o Modo rua ligado. Confira a foto e ligue para quem estiver por perto.',
                                 now, image=True, camera_id=camera_id)
 
     def restricted(self, camera_id, camera_name, jpeg, name, now=None, whatsapp=True):
