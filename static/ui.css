@@ -206,7 +206,7 @@ label.button{cursor:pointer}
 .camera-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
 .camera-actions{display:flex;flex-wrap:wrap;gap:8px;padding-top:12px;border-top:1px solid var(--border)}
 .camera-picker-button small{color:var(--muted);font-size:12px;margin-left:-4px}
-.monitor-grid{grid-template-columns:minmax(0,1fr)!important}.monitor-grid .live-panel{max-width:960px}
+.monitor-grid{grid-template-columns:minmax(0,1fr)!important}
 .routine-chart{margin-inline:auto}.routine-body .routine-text,#routine-caption{text-align:center}
 .live-panel{overflow:visible}.live-panel .camera-field{gap:0}
 .live-panel .camera-picker-button{min-width:0;padding:7px 10px;border-color:transparent;background:transparent;font-size:15px}
