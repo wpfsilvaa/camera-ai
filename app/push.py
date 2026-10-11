@@ -32,6 +32,7 @@ URGENT = {'fall', 'routine', 'inactivity', 'call', 'panic'}
 IMMEDIATE = URGENT | {'presence', 'restricted', 'notebook_battery', 'notebook_unplugged', 'notebook_offline'}
 # A person walking in and out restarts the record; one notification per camera in this window is enough.
 PRESENCE_COOLDOWN = 60
+FATHER_COOLDOWN = 15 * 60   # "Pai apareceu" at most once per camera in this time: he walks through the kitchen all day.
 # Presence photos live next to the alert photos (served, behind login, by /alert-media/) for a day.
 PHOTOS = DATA / 'alerts'
 PHOTO_DAYS = 1
@@ -80,6 +81,7 @@ class Push:
         self.pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix='push')
         self.lock = threading.Lock()
         self.last_presence = {}
+        self.last_father = {}
         self.frame = None  # Set by the application: camera_id -> latest JPEG (with boxes and names) or None.
         self.people = None  # camera_id -> visible tracks [{'id', 'person_id', 'name'}], for the presence filter.
         self.quiet = None  # now -> True during the configured quiet hours.
@@ -92,7 +94,8 @@ class Push:
         keys = subscription.get('keys') or {}
         if not endpoint.startswith('https://') or not keys.get('p256dh') or not keys.get('auth'):
             raise ValueError('Inscrição de notificação inválida.')
-        self.db.execute('''INSERT INTO push_subscriptions(endpoint,user_id,keys,agent,created) VALUES(?,?,?,?,?)
+        # New devices hear only when the father is recognised; "anyone" is a choice for who wants every appearance.
+        self.db.execute('''INSERT INTO push_subscriptions(endpoint,user_id,keys,agent,created,presence_filter) VALUES(?,?,?,?,?,'father')
             ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id,keys=excluded.keys,agent=excluded.agent''',
                         (endpoint, user_id, json.dumps(keys), agent[:200], time.time()))
 
@@ -173,8 +176,11 @@ class Push:
                     recognized.add(track['id'])
                 if track.get('person_id') == FATHER and not father_told:
                     father_told = True
-                    self.notify(self.presence_alert(camera_id, now, 'father',
-                                                    f'{track.get("name") or "Seu pai"} apareceu na câmera {camera_name} às {clock(now)}.'))
+                    if now - self.last_father.get(camera_id, 0) >= FATHER_COOLDOWN:
+                        self.last_father[camera_id] = now
+                        who = ' '.join((track.get('name') or 'pai').split()[1:] if (track.get('name') or '').lower().startswith(('meu ', 'minha ')) else (track.get('name') or 'pai').split())
+                        self.notify(self.presence_alert(camera_id, now, 'father',
+                                                        f'{who[:1].upper()}{who[1:]} apareceu na câmera {camera_name} às {clock(now)}.'))
             if now >= deadline:
                 break
             self.sleep(1)

@@ -145,6 +145,10 @@ class Database:
                                      ('presence_quiet', 'INTEGER NOT NULL DEFAULT 0'), ('muted', "TEXT NOT NULL DEFAULT '[]'")):
                 if name not in push_columns:
                     db.execute(f'ALTER TABLE push_subscriptions ADD COLUMN {name} {definition}')
+            if db.execute('PRAGMA user_version').fetchone()[0] < 1:
+                # "Someone appeared" for every presence was too noisy: devices move to "only when the father is recognised" once (they can switch back).
+                db.execute("UPDATE push_subscriptions SET presence_filter='father' WHERE presence_filter='all'")
+                db.execute('PRAGMA user_version = 1')
             if 'image' not in {r['name'] for r in db.execute('PRAGMA table_info(alerts)')}:
                 db.execute('ALTER TABLE alerts ADD COLUMN image INTEGER NOT NULL DEFAULT 0')
             message_columns = {r['name'] for r in db.execute('PRAGMA table_info(person_messages)')}

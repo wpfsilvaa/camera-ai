@@ -92,7 +92,9 @@ class PushTests(unittest.TestCase):
     def test_presence_goes_only_to_devices_that_opted_in_and_opens_the_camera(self):
         self.push.subscribe('u1', {'endpoint': 'https://push/a', 'keys': KEYS})
         self.push.subscribe('u2', {'endpoint': 'https://push/b', 'keys': KEYS})
-        self.assertEqual(self.push.presence_settings('https://push/b'), {'enabled': True, 'audience': 'all', 'quiet': False})
+        self.assertEqual(self.push.presence_settings('https://push/b'), {'enabled': True, 'audience': 'father', 'quiet': False})   # New devices hear only the father.
+        self.push.set_presence('https://push/a', True, 'all')
+        self.push.set_presence('https://push/b', True, 'all')
         self.push.set_presence('https://push/b', False)
         self.assertFalse(self.push.presence_settings('https://push/b')['enabled'])
         self.push.notify = self.push.send_all  # Send inline instead of in the background pool.
@@ -111,6 +113,7 @@ class PushTests(unittest.TestCase):
 
     def test_presence_waits_a_minute_per_camera(self):
         self.push.subscribe('u1', {'endpoint': 'https://push/a', 'keys': KEYS})
+        self.push.set_presence('https://push/a', True, 'all')
         self.push.notify = self.push.send_all
         self.assertTrue(self.push.presence('main', 'Cozinha', now=1000))
         self.assertFalse(self.push.presence('main', 'Cozinha', now=1030))
@@ -120,6 +123,7 @@ class PushTests(unittest.TestCase):
 
     def test_presence_and_fall_notifications_carry_a_photo(self):
         self.push.subscribe('u1', {'endpoint': 'https://push/a', 'keys': KEYS})
+        self.push.set_presence('https://push/a', True, 'all')
         self.push.notify = self.push.send_all
         self.push.frame = lambda camera_id: b'JPEG-' + camera_id.encode()
         self.push.presence('main', 'Cozinha', now=2_000_000)
@@ -185,10 +189,26 @@ class PushTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.push.set_presence('https://push/all', True, 'vizinho')
 
+    def test_the_father_notice_comes_once_per_quarter_hour_with_his_name(self):
+        self.push.subscribe('u1', {'endpoint': 'https://push/dad', 'keys': KEYS})
+        father = {'id': 1, 'person_id': 'father', 'name': 'Meu pai'}
+        start = self.watch([[father]] * 20)
+        self.push.presence('main', 'Cozinha', now=start)
+        self.assertEqual(len(self.sent), 1)
+        self.assertTrue(self.sent[0][1]['body'].startswith('Pai apareceu na câmera Cozinha'))
+        start = self.watch([[father]] * 20)
+        self.push.presence('main', 'Cozinha', now=start + PRESENCE_COOLDOWN + 1)   # Walks by again a few minutes later.
+        self.assertEqual(len(self.sent), 1)
+        self.push.last_father['main'] -= 16 * 60
+        start = self.watch([[father]] * 20)
+        self.push.presence('main', 'Cozinha', now=start + 200)
+        self.assertEqual(len(self.sent), 2)
+
     def test_presence_quiet_hours_are_per_device(self):
         self.push.subscribe('u1', {'endpoint': 'https://push/quiet', 'keys': KEYS})
         self.push.subscribe('u2', {'endpoint': 'https://push/always', 'keys': KEYS})
         self.push.set_presence('https://push/quiet', True, 'all', quiet=True)
+        self.push.set_presence('https://push/always', True, 'all')
         self.push.notify = self.push.send_all
         self.push.quiet = lambda now: True
         self.push.presence('main', 'Cozinha', now=6_000_000)
