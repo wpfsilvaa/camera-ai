@@ -61,7 +61,23 @@ class LearningSuggestions:
                     continue
                 added += db.execute('INSERT OR IGNORE INTO learning_suggestions(sample_id,person_id,score,created) VALUES(?,?,?,?)',
                                     (row['id'], row['person_id'], score, now)).rowcount
+        self.auto_approve(settings)
         return added
+
+    def auto_approve(self, settings):
+        """Approve the suggestions that are confident enough, leaving the doubtful ones for a person."""
+        if not settings.learning_auto_approve:
+            return 0
+        approved = 0
+        for item in self.pending():
+            if item['score'] < settings.learning_auto_threshold:
+                continue
+            try:
+                self.decide(item['sample_id'], True)
+                approved += 1
+            except (KeyError, ValueError):
+                continue   # E.g. the record is still open; it is tried again on the next scan.
+        return approved
 
     @staticmethod
     def qualifies(row, gallery, settings):

@@ -20,7 +20,7 @@ class LearningTests(unittest.TestCase):
         path = Path(self.tmp.name)
         self.db = Database(path / 'history.sqlite3')
         self.config = Config(path / 'settings.json')
-        self.config.save(Settings())
+        self.config.save(Settings(learning_auto_approve=False))
         self.recognition = Recognition(self.db, path / 'people')
         self.learning = LearningSuggestions(self.db, self.recognition, self.config)
         self.now = time.time()
@@ -70,6 +70,18 @@ class LearningTests(unittest.TestCase):
         self.track(self.event(), suggested=self.other, faces=[((.9, .1, .42), 300)])  # Matches someone else.
         self.track(self.event(ended=False), faces=[((.9, .1, .42), 300)])    # Record still open.
         self.assertEqual(self.learning.scan(self.now), 0)
+
+    def test_auto_approves_only_the_confident_suggestions(self):
+        track, _ = self.track(self.event(), faces=[((.97, .2, .1), 90), ((.9, .1, .42), 200)])
+        self.learning.scan(self.now)
+        score = self.learning.pending()[0]['score']
+        self.config.save(Settings(learning_auto_approve=True, learning_auto_threshold=min(.99, score + .05)))
+        self.assertEqual(self.learning.auto_approve(self.config.get()), 0)   # Doubtful: it stays for a person.
+        self.assertEqual(len(self.learning.pending()), 1)
+        self.config.save(Settings(learning_auto_approve=True, learning_auto_threshold=max(.5, score - .05)))
+        self.assertEqual(self.learning.auto_approve(self.config.get()), 1)
+        self.assertEqual(self.learning.pending(), [])
+        self.assertEqual(self.db.rows('SELECT person_id FROM person_tracks WHERE id=?', (track,))[0]['person_id'], 'father')
 
     def test_approve_teaches_and_reject_is_remembered(self):
         track, (sample,) = self.track(self.event(), faces=[((.9, .1, .42), 200)])

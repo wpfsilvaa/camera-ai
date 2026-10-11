@@ -163,6 +163,8 @@ class Settings(CameraSettings):
     # Propose sharp, confidently recognized faces as new examples; a person approves each one.
     learning_suggestions_enabled: bool = True
     learning_threshold: float = Field(default=.65, ge=.5, le=.95)
+    learning_auto_approve: bool = True   # Suggestions at or above learning_auto_threshold are approved without asking; the doubtful ones wait for a person.
+    learning_auto_threshold: float = Field(default=.75, ge=.5, le=.99)
     retention_days: int = Field(default=7, ge=1, le=90)
     cameras: list[ExtraCamera] = Field(default_factory=list, max_length=15)
     fall_detection_enabled: bool = False
