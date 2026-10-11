@@ -53,8 +53,9 @@ A cor do texto muda para escura quando a foto está clara naquela região.
 **Quando alguém toca ou mexe o mouse:** os botões voltam por alguns segundos
 (*Chamar a família* e *Preciso de ajuda*, com confirmação), ao lado do calendário.
 
-**À noite:** a tela fica preta (ou em tons de vermelho escuro, para não atrapalhar a visão noturna). Chamadas
-e pedidos de ajuda sempre acendem a tela.
+**À noite:** a tela fica preta (ou em tons de vermelho escuro, para não atrapalhar a visão noturna) e o brilho pode
+cair ao mínimo. Tocar na tela ou mexer o mouse mostra os botões e o calendário por alguns segundos; chamadas e
+pedidos de ajuda sempre acendem a tela. Se você prefere ver as informações à noite, use "tons de vermelho".
 
 **Quando uma pessoa cadastrada é reconhecida:** "Bom dia, Nome" (só o primeiro nome; a mesma pessoa só é
 saudada de novo após 30 min). No dia do aniversário, uma festa com a idade e confete. Se houver recado, o
@@ -84,6 +85,31 @@ Qualquer conta envia fotos em **Configurações → Totem → Moldura de fotos**
 cria miniaturas e as sincroniza com o notebook. Cada pessoa remove as suas; administradores removem qualquer
 uma. O nome de quem enviou acompanha a conta se ela for renomeada em **Minha conta → Meu perfil**.
 
+## Brilho da tela (noite)
+
+Em **Configurações → Totem → Brilho da tela** (desligado por padrão): de dia a tela usa o brilho que você escolher;
+à noite fica no mínimo e **sobe quando alguém aparece na câmera ou toca na tela**, voltando a escurecer depois de
+alguns segundos. A subida por toque é imediata; por presença, depende da consulta do painel (até 0,5 s com gente
+na imagem). Os botões **Testar** aplicam o brilho por 6 segundos e voltam ao anterior, mesmo sem salvar.
+
+- Funciona em notebooks com brilho controlável (`/sys/class/backlight`). O monitor usa o `logind` (o mesmo caminho do
+  `brightnessctl`), então **não precisa de root nem de regra do udev**. Em computadores sem esse controle, não faz nada.
+- Se o painel ficar mais de 90 s sem falar com o monitor, a tela volta ao brilho que estava antes.
+- Combine com **Noite → tons de vermelho**: a tela continua legível, só que discreta.
+
+## Servidor separado do totem
+
+O monitor do notebook é um microsserviço independente: o painel só precisa alcançá-lo por HTTP com o token.
+Se o servidor do painel e o notebook são computadores diferentes, defina no `.env` do servidor:
+
+```bash
+NOTEBOOK_URL=http://192.168.1.103:8765     # endereço do notebook (o padrão é o host do RTSP)
+```
+
+e mantenha o mesmo token nos dois lados (`data/notebook.token` no servidor e `~/.config/casa-monitor/token`
+no notebook). Tudo que o totem faz (fotos, recados, sons, chamadas, brilho, testes) passa por esse serviço; as decisões
+ficam no servidor e os efeitos (tela, som, brilho) acontecem onde está o hardware.
+
 ## Configurações (aba Totem)
 
 | Painel | Opções |
@@ -91,6 +117,7 @@ uma. O nome de quem enviou acompanha a conta se ela for renomeada em **Minha con
 | Tela do notebook | botão de chamar, "Preciso de ajuda", saudação, mensagem de aniversário, calendário ao lado dos botões |
 | Noite | horário próprio, e se a tela fica preta, em tons de vermelho ou igual ao dia |
 | Sons e volumes | chave geral e volume (0 a 100) de **dia e de noite** para botões e sinais, chamando, pedido de ajuda e recado novo; botão **Testar** que toca na hora no notebook, mesmo antes de salvar |
+| Brilho da tela | liga/desliga, brilho de dia, de noite sem ninguém e de noite com alguém por perto, tempo que fica claro, botões Testar |
 | Moldura de fotos | liga/desliga, segundos por foto, tempo até os botões voltarem à moldura, calendário sobre as fotos (sempre, a cada minuto ou nunca), envio e lista de fotos |
 | Lembretes e mensagens | deixar lembretes e as mensagens fixas da moldura |
 

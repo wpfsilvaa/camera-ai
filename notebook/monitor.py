@@ -64,6 +64,8 @@ GREET_SECONDS = 10
 BIRTHDAY_SECONDS = 25
 LINK_SECONDS = 30  # The panel polls every few seconds; silence longer than this means calls would go nowhere.
 KINDS = ('call', 'panic')
+BACKLIGHT = Path(os.environ.get('MONITOR_BACKLIGHT_DIR', '/sys/class/backlight'))
+STALE_BRIGHTNESS = 90   # Without news from the dashboard for this long, the screen goes back to how it was.
 
 
 def parse_birthdays(text):
@@ -162,6 +164,116 @@ def build():
     """Changes whenever a kiosk file changes, so an open screen reloads itself after an update."""
     times = [int((KIOSK / name).stat().st_mtime) for name in ('index.html', 'kiosk.css', 'kiosk.js') if (KIOSK / name).is_file()]
     return str(max(times, default=0))
+
+
+class Backlight:
+    """Panel brightness without root: logind's SetBrightness on the graphical session (what brightnessctl does).
+
+    Reads the level from /sys/class/backlight; setting it needs the session id, found with `loginctl`.
+    """
+
+    def __init__(self, root=BACKLIGHT, runner=None):
+        devices = sorted(root.glob('*')) if root.is_dir() else []
+        self.device = devices[0] if devices else None
+        self.max = int(read(self.device / 'max_brightness') or 0) if self.device else 0
+        self.runner = runner or self._logind
+        self.session = None
+
+    @property
+    def available(self):
+        return bool(self.device and self.max > 0)
+
+    def percent(self):
+        raw = read(self.device / 'brightness')
+        return round(100 * int(raw) / self.max) if raw and raw.isdigit() else None
+
+    def set_percent(self, percent):
+        """Never fully off (some panels go black at 0): the minimum is one step."""
+        self.runner(self.device.name, max(1, round(self.max * min(max(percent, 0), 100) / 100)))
+
+    def _logind(self, name, raw):
+        import subprocess
+        if self.session is None:
+            shown = subprocess.run(['loginctl', 'show-user', str(os.getuid()), '--property=Display', '--value'], capture_output=True, text=True, timeout=5)
+            self.session = shown.stdout.strip() or None
+        if self.session:
+            subprocess.run(['busctl', 'call', 'org.freedesktop.login1', f'/org/freedesktop/login1/session/{self.session}', 'org.freedesktop.login1.Session',
+                            'SetBrightness', 'ssu', 'backlight', name, str(raw)], capture_output=True, timeout=5)
+
+
+class Dimmer:
+    """Keeps the panel at the brightness the dashboard asks for, fading between levels.
+
+    The dashboard sends the wanted level with every poll (dim at night, brighter when someone is around);
+    a touch on the screen raises it at once for a while. Without news the screen returns to its original level.
+    """
+
+    def __init__(self, backlight, clock=time.time, sleep=time.sleep):
+        self.backlight, self.clock, self.sleep = backlight, clock, sleep
+        self.target = None      # percent from the dashboard, or None to leave the screen alone
+        self.wake_level, self.hold, self.wake_until = None, 45, 0
+        self.news_at = 0
+        self.original = None    # brightness before the first change, restored when the dashboard stops asking
+        self.current = None
+        self.test = None        # (percent, until)
+        self.lock = threading.Lock()
+
+    def configure(self, target, wake_level=None, hold=45):
+        with self.lock:
+            self.target, self.wake_level, self.hold, self.news_at = target, wake_level, hold, self.clock()
+
+    def wake(self):
+        with self.lock:
+            if self.wake_level is not None:
+                self.wake_until = self.clock() + self.hold
+
+    def try_level(self, percent, seconds=6):
+        with self.lock:
+            self.test = (percent, self.clock() + seconds)
+
+    def desired(self):
+        """Percent to show now, or None for "leave it as the user had it"."""
+        with self.lock:
+            now = self.clock()
+            if self.test and now < self.test[1]:
+                return self.test[0]
+            if self.target is None or now - self.news_at > STALE_BRIGHTNESS:
+                return None
+            level = self.target
+            if self.wake_level is not None and now < self.wake_until:
+                level = max(level, self.wake_level)
+            return level
+
+    def step(self):
+        if not self.backlight.available:
+            return
+        want = self.desired()
+        if want is None:
+            if self.original is not None:
+                self.fade(self.original)
+                self.original = None
+            return
+        if self.original is None:
+            self.original = self.backlight.percent()
+        if self.current is None:
+            self.current = self.backlight.percent()
+        if self.current is None or abs(self.current - want) >= 1:
+            self.fade(want)
+
+    def fade(self, to, steps=6):
+        start = self.current if self.current is not None else self.backlight.percent()
+        for i in range(1, steps + 1):
+            self.backlight.set_percent(start + (to - start) * i / steps if start is not None else to)
+            self.sleep(0.12)
+        self.current = to
+
+    def run(self, stop):
+        while not stop.is_set():
+            try:
+                self.step()
+            except Exception:
+                pass
+            stop.wait(0.4)
 
 
 class Desk:
@@ -294,8 +406,17 @@ class Desk:
 class Handler(BaseHTTPRequestHandler):
     token = ''
     desk = Desk()
+    dimmer = Dimmer(Backlight())
     kiosk_files = {'/': ('index.html', 'text/html; charset=utf-8'), '/kiosk.css': ('kiosk.css', 'text/css'),
                    '/kiosk.js': ('kiosk.js', 'text/javascript'), '/favicon.svg': ('favicon.svg', 'image/svg+xml')}
+
+    def dim_from(self, query):
+        """Brightness wanted by the dashboard: bright=<0-100> (absent: leave the screen alone), bright_wake, bright_hold."""
+        def number(name, low, high):
+            value = (query.get(name) or [''])[0]
+            return min(max(int(value), low), high) if value.isdigit() else None
+        target = number('bright', 0, 100)
+        self.dimmer.configure(target, number('bright_wake', 0, 100), number('bright_hold', 5, 3600) or 45)
 
     def local(self):
         return self.client_address[0] in ('127.0.0.1', '::1')
@@ -326,6 +447,7 @@ class Handler(BaseHTTPRequestHandler):
             self.desk.configure(query.get('call') == ['1'], query.get('panic') == ['1'], (query.get('vigia') or [None])[0],
                                 query.get('night') == ['1'], (query.get('greet') or [''])[0], (query.get('greet_id') or [''])[0],
                                 (query.get('greet_kind') or [''])[0], (query.get('age') or [''])[0], (query.get('bdays') or [''])[0], (query.get('reminders') or [''])[0], query.get('frame') == ['1'], (query.get('cfg') or [''])[0], (query.get('greet_msgs') or [''])[0], query.get('greet_quiet') == ['1'], (query.get('acked') or [''])[0])
+            self.dim_from(query)
             self.desk.touch()   # Anything new for the screen goes out immediately to the waiting /state request.
             return self.reply(200, {**reading(), 'call': self.desk.snapshot(), 'acks': list(self.desk.acks)})
         if url.path == '/photos' and self.authorized():
@@ -394,8 +516,14 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         url = urlsplit(self.path)
         if url.path == '/test' and self.authorized():
+            spec = self.body()
+            if spec.get('sound') == 'brightness':   # Hardware: handled here, not by the page.
+                if not isinstance(spec.get('volume'), int):
+                    return self.reply(422, {'error': 'Teste inválido.'})
+                self.dimmer.try_level(min(max(spec['volume'], 1), 100))
+                return self.reply(200, {'ok': True, 'available': self.dimmer.backlight.available})
             try:
-                return self.reply(200, {'id': self.desk.queue_test(self.body())})
+                return self.reply(200, {'id': self.desk.queue_test(spec)})
             except ValueError as error:
                 return self.reply(422, {'error': str(error)})
         if url.path in ('/call/answer', '/call/end') and self.authorized():
@@ -417,6 +545,9 @@ class Handler(BaseHTTPRequestHandler):
                 call = self.desk.end()
                 self.desk.bump()
                 return self.reply(200, call)
+            if url.path == '/wake':
+                self.dimmer.wake()
+                return self.reply(200, {'ok': True})
             if url.path == '/ack':
                 self.desk.ack(str(self.body().get('id', '')))
                 self.desk.bump()
@@ -433,6 +564,8 @@ def main():
     Handler.token = read(TOKEN_FILE) or ''
     if len(Handler.token) < 32:
         sys.exit(f'Token ausente ou curto em {TOKEN_FILE}.')
+    stop = threading.Event()
+    threading.Thread(target=Handler.dimmer.run, args=(stop,), daemon=True).start()
     ThreadingHTTPServer(('0.0.0.0', PORT), Handler).serve_forever()
 
 

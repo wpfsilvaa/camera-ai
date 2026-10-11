@@ -188,6 +188,12 @@ class Settings(CameraSettings):
     kiosk_vol_message_day: int = Field(default=80, ge=0, le=100)
     kiosk_vol_message_night: int = Field(default=35, ge=0, le=100)
     kiosk_calendar_enabled: bool = True
+    # Screen brightness (laptop backlight): dim at night, brighter while someone is around. Off by default.
+    kiosk_dim_enabled: bool = False
+    kiosk_bright_day: int = Field(default=60, ge=5, le=100)
+    kiosk_bright_night: int = Field(default=3, ge=1, le=100)
+    kiosk_bright_wake: int = Field(default=40, ge=1, le=100)
+    kiosk_bright_hold: int = Field(default=45, ge=10, le=600)
     kiosk_frame_calendar: str = 'always'                             # On the photo frame: always visible, pulse (12 s a minute) or off.
     kiosk_birthdays_enabled: bool = True
     kiosk_hints: list[str] = Field(default_factory=list, max_length=10)   # Extra messages cycled on the photo frame.

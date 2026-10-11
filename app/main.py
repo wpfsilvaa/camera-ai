@@ -73,6 +73,7 @@ photos = Photos(db)
 person_messages = PersonMessages(db)
 greeted = {'id': None}   # Last greeting sent to the screen: its messages go out once.
 message_planner = MessagePlanner(person_messages)
+bright_state = {'until': 0}   # Until when the screen stays bright after someone was in view (night dimming).
 
 
 def vigia_for_kitchen():
@@ -86,6 +87,14 @@ def vigia_for_kitchen():
             'cfg': json.dumps({'slide': settings.kiosk_slide_seconds, 'awake': settings.kiosk_awake_seconds, 'sound': settings.kiosk_sound_on,
                                'vol': {name: getattr(settings, f'kiosk_vol_{name}_{"night" if info_night else "day"}') for name in ('button', 'call', 'help', 'message')},
                                'calendar': settings.kiosk_calendar_enabled, 'framecal': settings.kiosk_frame_calendar, 'hints': settings.kiosk_hints, 'black': settings.kiosk_night_mode == 'black'}, ensure_ascii=False)}
+    if settings.kiosk_dim_enabled:
+        # Day: the day level. Night: very dim, but brighter while someone is in view (kept for a while after they leave).
+        if camera.get('people') or notebook.call.get('state') in ('ringing', 'answered'):
+            bright_state['until'] = now + settings.kiosk_bright_hold
+        around = now < bright_state['until']
+        info['bright'] = settings.kiosk_bright_day if not info['night'] else (settings.kiosk_bright_wake if around else settings.kiosk_bright_night)
+        info['bright_wake'] = settings.kiosk_bright_wake if info['night'] else settings.kiosk_bright_day
+        info['bright_hold'] = settings.kiosk_bright_hold
     notes = reminders.active(now)
     if notes:
         info['reminders'] = json.dumps([{'i': n['id'][:8], 'a': first_name(n['author']), 't': n['text'], 'e': round(n['expires'])} for n in notes[:10]], ensure_ascii=False)
@@ -326,7 +335,7 @@ def delete_message(message_id: str, request: Request):
 
 
 class KioskTest(BaseModel):
-    sound: str = Field(pattern='^(press|ring|help|message)$')
+    sound: str = Field(pattern='^(press|ring|help|message|brightness)$')
     volume: int = Field(ge=0, le=100)
 
 

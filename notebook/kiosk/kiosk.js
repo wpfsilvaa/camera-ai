@@ -259,7 +259,12 @@
   let slideMs = 0, monthTimer = null, monthFirst = null, monthPopping = false;
   let awakeUntil = 0, swallowClick = false, order = [], active = 'a', slideTimer = null, hintTimer = null, hintIndex = 0, lastMove = 0;
 
-  function wake() { awakeUntil = Date.now() + cfg().awake * 1000; render(); }
+  let lastWakePost = 0;
+  function wake() {
+    awakeUntil = Date.now() + cfg().awake * 1000; render();
+    // At night the screen is dimmed: tell the monitor so it brightens the panel right away (not after the next poll).
+    if (Date.now() - lastWakePost > 2000) { lastWakePost = Date.now(); fetch('/wake', {method: 'POST', headers: {'X-Kiosk': '1', 'Content-Type': 'application/json'}, body: '{}'}).catch(() => {}); }
+  }
   document.addEventListener('pointerdown', event => {
     if (screen.dataset.mode !== 'ui' && $('quote').classList.contains('hidden')) { swallowClick = true; event.preventDefault(); event.stopPropagation(); }
     wake();

@@ -200,6 +200,85 @@ class MessagePlannerTests(unittest.TestCase):
         self.assertIsNotNone(self.planner.pick([track], 1010 + 1801))
 
 
+class FakeBacklight:
+    available = True
+
+    def __init__(self, percent=50):
+        self.level, self.sets = percent, []
+
+    def percent(self):
+        return self.level
+
+    def set_percent(self, value):
+        self.level = round(value)
+        self.sets.append(round(value))
+
+
+class DimmerTests(unittest.TestCase):
+    def setUp(self):
+        self.now = [1000.0]
+        self.screen = FakeBacklight(50)
+        self.dimmer = monitor.Dimmer(self.screen, clock=lambda: self.now[0], sleep=lambda s: None)
+
+    def test_follows_the_dashboard_and_touches_raise_it_for_a_while(self):
+        self.dimmer.configure(3, wake_level=40, hold=45)
+        self.dimmer.step()
+        self.assertEqual(self.screen.level, 3)                         # Night: very dim.
+        self.assertEqual(self.dimmer.desired(), 3)
+        self.dimmer.wake()                                              # Someone touches the screen.
+        self.dimmer.step()
+        self.assertEqual(self.screen.level, 40)
+        self.now[0] += 50                                               # The hold is over.
+        self.dimmer.configure(3, wake_level=40, hold=45)
+        self.dimmer.step()
+        self.assertEqual(self.screen.level, 3)
+
+    def test_fades_in_steps_and_remembers_the_original_level(self):
+        self.dimmer.configure(10)
+        self.dimmer.step()
+        self.assertGreater(len(self.screen.sets), 3)                    # A fade, not a jump.
+        self.assertEqual(self.screen.sets, sorted(self.screen.sets, reverse=True))
+        self.assertEqual(self.dimmer.original, 50)
+
+    def test_goes_back_to_the_original_when_the_dashboard_goes_quiet_or_dimming_stops(self):
+        self.dimmer.configure(5)
+        self.dimmer.step()
+        self.assertEqual(self.screen.level, 5)
+        self.now[0] += 120                                              # No poll for 2 minutes.
+        self.dimmer.step()
+        self.assertEqual(self.screen.level, 50)
+        self.assertIsNone(self.dimmer.original)
+
+    def test_leaves_the_screen_alone_when_dimming_is_off(self):
+        self.dimmer.configure(None)
+        self.dimmer.step()
+        self.assertEqual(self.screen.sets, [])
+
+    def test_a_brightness_test_overrides_for_a_few_seconds(self):
+        self.dimmer.configure(3)
+        self.dimmer.try_level(80, seconds=6)
+        self.assertEqual(self.dimmer.desired(), 80)
+        self.now[0] += 7
+        self.assertEqual(self.dimmer.desired(), 3)
+
+
+class BacklightTests(unittest.TestCase):
+    def test_reads_percent_and_never_sets_zero(self):
+        with tempfile.TemporaryDirectory() as folder:
+            device = Path(folder) / 'intel_backlight'
+            device.mkdir()
+            (device / 'max_brightness').write_text('937\n')
+            (device / 'brightness').write_text('468\n')
+            calls = []
+            light = monitor.Backlight(Path(folder), runner=lambda name, raw: calls.append((name, raw)))
+            self.assertTrue(light.available)
+            self.assertEqual(light.percent(), 50)
+            light.set_percent(0)
+            light.set_percent(100)
+            self.assertEqual(calls, [('intel_backlight', 1), ('intel_backlight', 937)])
+            self.assertFalse(monitor.Backlight(Path(folder) / 'missing').available)
+
+
 class MonitorDisplayTests(unittest.TestCase):
     def test_display_carries_state_and_expires_with_the_link(self):
         clock = [1000.0]
