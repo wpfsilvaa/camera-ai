@@ -44,6 +44,7 @@ class CameraSettings(BaseModel):
     # Watch mode: within the hours below, and while nobody is around, the camera is read at a low frame
     # rate and only motion wakes the analysis. People are still confirmed by the detector before any notice.
     sentinel_enabled: bool = False
+    sentinel_always: bool = False   # Watch mode all day long, not only within the hours below.
     sentinel_start_hour: int = Field(default=22, ge=0, le=23)
     sentinel_end_hour: int = Field(default=6, ge=0, le=23)
     sentinel_fps: int = Field(default=5, ge=1, le=15)
@@ -177,6 +178,7 @@ class Settings(CameraSettings):
     kiosk_night_start_hour: int = Field(default=22, ge=0, le=23)
     kiosk_night_end_hour: int = Field(default=6, ge=0, le=23)
     kiosk_night_mode: str = 'black'                                  # black screen, red tones, panel off, or no night look.
+    kiosk_screen_off_day: bool = False                                # Panel off by day too (on again when someone shows up).
     kiosk_screen_off_after: int = Field(default=45, ge=10, le=600)    # Panel-off mode: seconds on after the last presence or touch.
     kiosk_sound_on: bool = True                                      # Master switch for the screen's sounds.
     # Volume (0-100) of each sound by day and by night: buttons, ringing, help call, message chime.

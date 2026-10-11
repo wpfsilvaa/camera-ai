@@ -23,7 +23,7 @@ from . import detectors, resources
 from .sources import supports_light_video, usb_cameras
 from .config import CLIPS, DATA, ROOT, WA_URL, CameraSettings, ExtraCamera, Settings, config
 from .db import TZ, Database
-from .pacing import Greeter, first_name, kiosk_night, vigia_state
+from .pacing import Greeter, first_name, kiosk_night, screen_power_saving, vigia_state
 from .jobs import Jobs
 from .learning import LearningSuggestions
 from .notebook import NotebookMonitor
@@ -86,7 +86,7 @@ def vigia_for_kitchen():
     hour = datetime.fromtimestamp(now, TZ).hour
     camera = next((c for c in cameras.snapshots() if c['id'] == 'main'), {})
     info_night = kiosk_night(settings, hour)
-    info = {'vigia': vigia_state(settings.sentinel_enabled, settings.sentinel_start_hour, settings.sentinel_end_hour, hour, bool(camera.get('sentinel'))),
+    info = {'vigia': vigia_state(settings.sentinel_enabled, settings.sentinel_start_hour, settings.sentinel_end_hour, hour, bool(camera.get('sentinel')), settings.sentinel_always),
             'night': int(kiosk_night(settings, hour)),
             # Only the "red tones" choice recolours the screen; with the panel off (or black) it shows its normal colours when on.
             'red': int(kiosk_night(settings, hour) and settings.kiosk_night_mode == 'red'),
@@ -101,11 +101,11 @@ def vigia_for_kitchen():
         info['bright'] = settings.kiosk_bright_day if not info['night'] else (settings.kiosk_bright_wake if around else settings.kiosk_bright_night)
         info['bright_wake'] = settings.kiosk_bright_wake if info['night'] else settings.kiosk_bright_day
         info['bright_hold'] = settings.kiosk_bright_hold
-    if settings.kiosk_night_mode == 'off':
-        # Night with the panel switched off: on while someone is in view, on a call, or for a while after.
+    if screen_power_saving(settings, bool(info['night'])):
+        # Panel switched off (at night with that look, or by day with the daytime option): on while someone is in view, on a call, or for a while after.
         if camera.get('people') or notebook.call.get('state') in ('ringing', 'answered'):
             screen_state['until'] = now + settings.kiosk_screen_off_after
-        info['screen'] = 'off' if info['night'] and now >= screen_state['until'] else 'on'
+        info['screen'] = 'off' if now >= screen_state['until'] else 'on'
         info['screen_hold'] = settings.kiosk_screen_off_after
     forecast = weather.current(settings)
     if forecast:

@@ -86,7 +86,7 @@ def in_window(hour, start, end):
     return start <= hour < end if start < end else hour >= start or hour < end
 
 
-def vigia_state(enabled, start, end, hour, resting):
+def vigia_state(enabled, start, end, hour, resting, always=False):
     """Watch-mode state shown on the dashboard and the kitchen screen.
 
     off: switched off; resting: reading at the low rate; analysing: inside its hours but someone/something
@@ -96,7 +96,7 @@ def vigia_state(enabled, start, end, hour, resting):
         return 'off'
     if resting:
         return 'resting'
-    return 'analysing' if in_window(hour, start, end) else 'scheduled'
+    return 'analysing' if always or in_window(hour, start, end) else 'scheduled'
 
 
 def kiosk_night(settings, hour):
@@ -159,3 +159,9 @@ class Greeter:
         if self.current and now < self.current['until']:
             return {k: v for k, v in self.current.items() if k != 'until'}
         return None
+
+
+def screen_power_saving(settings, night):
+    """Whether the panel is switched off while nobody is around in this period: by night with the "panel off" look,
+    by day when the daytime option is on."""
+    return settings.kiosk_night_mode == 'off' if night else settings.kiosk_screen_off_day

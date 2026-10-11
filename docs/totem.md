@@ -108,6 +108,20 @@ com os botões à mostra, um resumo fica ao lado do relógio. A previsão també
   painel, que atualiza a cada 20 min; a tela do notebook não acessa a internet. Sem internet, a previsão some depois
   de 3 h em vez de mostrar dados velhos.
 
+## Economia de energia, de dia também
+
+Três peças, que você liga separadamente (todas funcionam dia e noite):
+
+| Peça | Onde | O que poupa |
+|---|---|---|
+| **Modo vigia, "Valer o dia todo"** | Configurações → Câmera → Modo vigia | A câmera é lida em ritmo baixo e só o movimento acorda a análise (no notebook da cozinha, de ~70% para ~40% de um núcleo parado). |
+| **Desligar a tela também de dia** | Configurações → Totem → Noite | Com a casa vazia a tela apaga e liga quando alguém aparece, toca ou mexe o mouse. |
+| **Brilho** | Configurações → Totem → Brilho da tela | Brilho de dia e de noite, subindo com presença. |
+
+Com o vigia e a tela desligada juntos, o notebook só trabalha de verdade quando há gente por perto. A economia exata
+depende do aparelho (o painel de um notebook costuma ser uma das maiores cargas). Para a tela apagada de dia usar o mesmo
+tempo de "Desligar a tela depois de" e o mesmo modo de ligar por presença da noite.
+
 ## Tela desligada à noite
 
 Em **Configurações → Totem → Noite → Como a tela fica à noite**, a opção **"Desligar a tela (liga quando alguém

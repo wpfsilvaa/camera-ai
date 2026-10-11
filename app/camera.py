@@ -301,7 +301,7 @@ class CameraWorker:
                         reason='settings_changed'
                         break
                     # Watch mode keeps the analysis armed during its hours even when it was paused by hand.
-                    night=current.sentinel_enabled and in_window(datetime.now(TZ).hour,current.sentinel_start_hour,current.sentinel_end_hour)
+                    night=current.sentinel_enabled and (current.sentinel_always or in_window(datetime.now(TZ).hour,current.sentinel_start_hour,current.sentinel_end_hour))
                     sentinel=bool(live and analysis_active and night and event_id is None and manual_event is None
                         and not presence.active and presence.candidate is None and not detected_boxes and pacing.idle(time.time()))
                     if sentinel!=sentinel_on:

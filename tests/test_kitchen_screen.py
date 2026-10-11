@@ -9,7 +9,7 @@ TEMP = tempfile.TemporaryDirectory()
 os.environ['CAMERA_DATA_DIR'] = TEMP.name
 
 from app.db import Database
-from app.pacing import Greeter, birthday_today, first_name, kiosk_night, vigia_state
+from app.pacing import Greeter, birthday_today, first_name, kiosk_night, screen_power_saving, vigia_state
 from app.config import Settings
 from app.recognition import Recognition
 from app.messages import MessagePlanner, PersonMessages
@@ -25,6 +25,20 @@ class VigiaTests(unittest.TestCase):
         self.assertEqual(vigia_state(True, 22, 6, 23, True), 'resting')
         self.assertEqual(vigia_state(True, 22, 6, 23, False), 'analysing')
         self.assertEqual(vigia_state(True, 22, 6, 12, False), 'scheduled')
+
+    def test_watch_mode_can_cover_the_whole_day(self):
+        self.assertEqual(vigia_state(True, 22, 6, 12, False), 'scheduled')                # Outside its hours: waiting.
+        self.assertEqual(vigia_state(True, 22, 6, 12, False, always=True), 'analysing')   # "All day": hours do not matter.
+        self.assertEqual(vigia_state(True, 22, 6, 12, True, always=True), 'resting')
+        self.assertEqual(vigia_state(False, 22, 6, 12, False, always=True), 'off')
+
+    def test_the_panel_can_be_switched_off_by_day_and_or_by_night(self):
+        both = Settings(kiosk_night_mode='off', kiosk_screen_off_day=True)
+        only_night = Settings(kiosk_night_mode='off')
+        only_day = Settings(kiosk_night_mode='black', kiosk_screen_off_day=True)
+        self.assertEqual([screen_power_saving(s, night) for s in (both, only_night, only_day) for night in (True, False)],
+                         [True, True, True, False, False, True])
+        self.assertFalse(screen_power_saving(Settings(), True) or screen_power_saving(Settings(), False))   # Off by default.
 
     def test_kiosk_night_uses_its_own_hours_and_mode(self):
         settings = Settings(kiosk_night_start_hour=21, kiosk_night_end_hour=6)

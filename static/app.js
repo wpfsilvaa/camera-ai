@@ -115,8 +115,9 @@ function renderVigia(camera) {
   if (!badge || !settings) return;
   const on = !!settings.sentinel_enabled, hour = Number(new Date().toLocaleString('en-GB', {timeZone: 'America/Sao_Paulo', hour: '2-digit', hourCycle: 'h23'}));
   const start = settings.sentinel_start_hour, end = settings.sentinel_end_hour;
-  const inside = start === end ? false : start < end ? hour >= start && hour < end : hour >= start || hour < end;
-  const hours = `${String(start).padStart(2, '0')}h às ${String(end).padStart(2, '0')}h`;
+  const always = !!settings.sentinel_always;
+  const inside = always || (start === end ? false : start < end ? hour >= start && hour < end : hour >= start || hour < end);
+  const hours = always ? 'o dia todo' : `${String(start).padStart(2, '0')}h às ${String(end).padStart(2, '0')}h`;
   const state = !on ? 'off' : camera.sentinel ? 'resting' : inside ? 'analysing' : 'scheduled';
   badge.className = `vigia-badge ${state}`;
   badge.querySelector('.vigia-shield').classList.toggle('hidden', state === 'analysing');
