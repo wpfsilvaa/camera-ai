@@ -18,7 +18,7 @@ from .sources import local_device
 
 log = logging.getLogger(__name__)
 
-POLL_INTERVAL = 5
+POLL_INTERVAL = 2   # Short, so a recognised face reaches the kitchen screen quickly.
 TOKEN = DATA / 'notebook.token'
 PORT = 8765
 KINDS = ('notebook_battery', 'notebook_unplugged', 'notebook_power_back', 'notebook_offline', 'notebook_online')

@@ -150,7 +150,7 @@ html[data-night="1"] .frame{filter:brightness(.5) sepia(1) hue-rotate(-35deg) sa
 .frame.speaking .frame-reminder,.frame.speaking .fr-month,.frame.speaking .fr-foot,.frame.speaking .fr-credit{opacity:0!important;pointer-events:none;transition:opacity .4s}
 .fr-foot{transition:color .9s,opacity .4s}
 /* Messages for a person: a quote, the sender's name small underneath */
-.quote{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:8vh 8vw;background:radial-gradient(ellipse at center,#000b,#000e);animation:quotein .9s ease-out}
+.quote{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:16vh 8vw 8vh;background:radial-gradient(ellipse at center,#000b,#000e);animation:quotein .9s ease-out}
 .quote figure{margin:0;max-width:min(84vw,1400px)}
 .quote blockquote{margin:0;font-family:Georgia,"Times New Roman",serif;font-style:italic;font-weight:400;font-size:clamp(32px,5.4vw,82px);line-height:1.28;color:#fff;text-align:center}
 .quote blockquote::before{content:"“";display:block;font-size:2.2em;line-height:.5;color:var(--amber);margin-bottom:.15em}
@@ -162,3 +162,11 @@ html[data-night="1"] .quote blockquote{color:#c8493c}
 .quote-ok{position:absolute;left:50%;bottom:7vh;transform:translateX(-50%);border:0;border-radius:999px;background:var(--green);color:#fff;font:inherit;font-weight:700;font-size:clamp(26px,3.6vw,52px);padding:1.4vh 5vw;cursor:pointer;touch-action:manipulation}
 .quote-ok:active{transform:translateX(-50%) scale(.97)}
 html[data-night="1"] .quote-ok{color:#f0948a}
+
+/* The greeting shrinks and moves up while the message takes the stage */
+.quote-head{position:absolute;top:5vh;left:4vw;right:4vw;text-align:center;font-size:clamp(28px,4.4vw,68px);font-weight:700;color:#fff;text-shadow:0 .2vmin 1.4vmin #000}
+.quote-head.birthday{color:var(--amber)}
+.quote-head.rise{animation:shrinkup .9s cubic-bezier(.2,.7,.2,1)}
+@keyframes shrinkup{from{transform:translateY(28vh) scale(1.9);opacity:.9}to{transform:none;opacity:1}}
+html[data-night="1"] .quote-head{color:#c8493c}
+@media (prefers-reduced-motion:reduce){.quote-head.rise{animation:none}}

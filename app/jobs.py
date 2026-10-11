@@ -202,7 +202,7 @@ class Jobs:
                         step(client)
                     except Exception:
                         log.exception('Falha na fila do WhatsApp')
-                self.stop_event.wait(3)
+                self.stop_event.wait(1)   # Also paces the kitchen screen's poll: a recognised face should show up fast.
 
     def alert_step(self, client):
         if not self.alerts:

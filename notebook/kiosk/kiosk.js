@@ -132,11 +132,18 @@
     quoteId = item.i || '';
     $('quote-text').textContent = item.t; $('quote-by').textContent = item.a || '';
     $('quote-ok').classList.toggle('hidden', !quoteId);
+    const head = $('quote-head');
+    head.textContent = quoteHead.text; head.classList.toggle('hidden', !quoteHead.text); head.classList.toggle('birthday', quoteHead.birthday);
+    head.classList.remove('rise'); if (quoteHead.fresh) { void head.offsetWidth; head.classList.add('rise'); quoteHead.fresh = false; }   // Moves up once.
     $('quote').classList.remove('hidden'); $('quote').style.animation = 'none'; void $('quote').offsetWidth; $('quote').style.animation = '';
     syncSpeaking();
     quoteTimer = setTimeout(nextQuote, 20000);
   }
-  function showQuotes(items, delay) { hideQuote(); quoteQueue = [...items]; quoteTimer = setTimeout(nextQuote, delay); }
+  let quoteHead = {text: '', birthday: false, fresh: false};
+  function showQuotes(items, delay, headline = '', birthday = false) {
+    hideQuote(); quoteQueue = [...items]; quoteHead = {text: headline, birthday, fresh: Boolean(headline)};
+    quoteTimer = setTimeout(nextQuote, delay);
+  }
   $('quote-ok').onclick = async () => {
     try { sounds.press(); } catch { /* ignore */ }
     if (quoteId) await fetch('/ack', {method: 'POST', headers: {'X-Kiosk': '1', 'Content-Type': 'application/json'}, body: JSON.stringify({id: quoteId})}).catch(() => {});
@@ -161,10 +168,12 @@
         }
         if (birthday) party(); else $('confetti').classList.add('hidden');
         clearTimeout(greetTimer);
-        greetTimer = setTimeout(hide, shownFor);
+        // With messages the big greeting only lasts a moment: it then shrinks up into the message card.
+        const bigFor = msgs.length ? (birthday ? 4500 : 2800) : shownFor;
+        greetTimer = setTimeout(() => { pairs.flat().forEach(id => $(id).classList.add('hidden')); if (!msgs.length) { $('confetti').classList.add('hidden'); $('confetti').innerHTML = ''; } syncSpeaking(); }, bigFor);
         syncSpeaking();
-      }
-      if (msgs.length) showQuotes(msgs, last.greet.quiet ? 0 : shownFor + 500);
+        if (msgs.length) showQuotes(msgs, bigFor, text, birthday);
+      } else if (msgs.length) showQuotes(msgs, 0);
     }
   }
 
