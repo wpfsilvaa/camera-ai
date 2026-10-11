@@ -275,3 +275,7 @@ dialog .dialog-heading{position:sticky;top:0;z-index:5;background:var(--surface)
 .track-names .label-buttons{margin-top:6px}
 .monitor-row>span>strong{display:inline;vertical-align:middle}
 .monitor-row>span>.tip-button{margin-left:8px;vertical-align:middle}
+.monitor-row{display:flex;align-items:center;justify-content:flex-start;gap:12px;flex-wrap:wrap}
+.monitor-row>span{flex:0 1 auto}
+.monitor-row>p{margin:0;line-height:0}
+.monitor-row>span>small.tip-open{flex-basis:100%}
