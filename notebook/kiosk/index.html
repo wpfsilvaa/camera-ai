@@ -10,6 +10,7 @@
   <script src="/kiosk.js" defer></script>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><symbol id="ic-phone" viewBox="0 0 24 24"><path d="M5 4h3.5l1.8 4.5-2.3 1.5a11 11 0 0 0 6 6l1.5-2.3L20 15.5V19a1.5 1.5 0 0 1-1.5 1.5A15.5 15.5 0 0 1 3.5 5.5 1.5 1.5 0 0 1 5 4z"/></symbol><symbol id="ic-battery" viewBox="0 0 24 24"><rect x="3" y="7.5" width="16" height="9" rx="2"/><path d="M21.5 10.5v3M6.5 10.5v3"/></symbol><symbol id="ic-bolt" viewBox="0 0 24 24"><path d="M13 2.5 5 13.5h6l-1 8 8-11h-6z" fill="currentColor"/></symbol></defs></svg>
   <div id="frame" class="frame hidden" aria-live="polite">
     <div class="slide" id="slide-a"><div class="back"></div><img alt=""></div>
     <div class="slide" id="slide-b"><div class="back"></div><img alt=""></div>
@@ -32,6 +33,7 @@
   </div>
   <canvas id="rain" class="rain hidden" aria-hidden="true"></canvas>
   <div id="quote" class="quote hidden" aria-live="polite"><div id="quote-head" class="quote-head hidden"></div><figure><blockquote id="quote-text"></blockquote><figcaption id="quote-by"></figcaption></figure><button id="quote-ok" type="button" class="quote-ok hidden">Li ✓</button><div id="quote-timer" class="quote-timer hidden"><span>Visualização única · some em 30 segundos</span><b><i></i></b></div></div>
+  <div id="nightlight" class="nightlight hidden" aria-hidden="true"><time id="nightlight-clock">--:--</time></div>
   <div class="glow" aria-hidden="true"></div>
   <main id="screen" data-view="idle" data-mode="ui">
     <header>
@@ -46,7 +48,7 @@
       <section id="reminders" class="reminders hidden" aria-live="polite"><div class="rem-label">Lembrete</div><p id="rem-text"></p><small id="rem-meta"></small><div id="rem-dots" class="rem-dots"></div></section>
       <div class="idle-row">
         <div class="actions">
-          <button id="btn-call" class="big call" type="button"><span class="icon" aria-hidden="true">📞</span>Chamar a família</button>
+          <button id="btn-call" class="big call" type="button"><span class="icon" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-phone"/></svg></span>Chamar a família</button>
           <button id="btn-panic" class="big panic" type="button"><span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em"><circle cx="12" cy="12" r="10.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 6.5v7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><circle cx="12" cy="17.2" r="1.6" fill="currentColor"/></svg></span>Preciso de ajuda</button>
           <p id="note" class="note hidden"></p>
         </div>
@@ -62,7 +64,7 @@
     </section>
 
     <section id="view-ringing" class="view">
-      <div class="pulse" aria-hidden="true">📞</div>
+      <div class="pulse" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-phone"/></svg></div>
       <h1 id="ringing-title">Chamando a família…</h1>
       <p>Aguarde, alguém já vai atender.</p>
       <button id="btn-cancel" class="big neutral" type="button">Cancelar</button>

@@ -230,3 +230,11 @@ label.button{cursor:pointer}
 @media(max-width:600px){.form-fields .switch-row:has(.tip-open){align-items:flex-start}}
 .listen-hint{left:auto;right:17px;top:46px;transform:none;width:30px;height:30px;padding:0;display:grid;place-items:center;font-size:15px;line-height:1}
 @media(max-width:500px){.listen-hint{right:12px;top:40px}}
+/* Ícones SVG (mesmo desenho em qualquer aparelho) */
+.ic{width:1em;height:1em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-.14em;flex-shrink:0}
+.ic.lead{margin-right:.4em}.button span .ic,.nav-link>span .ic,.stat-icon .ic,.brand-mark .ic,.home-icon .ic{vertical-align:middle}
+.brand-mark .ic{width:.8em;height:.8em}.stat-icon .ic{width:.8em;height:.8em}
+.journal-heading{margin-top:34px}.journal-title{display:flex;align-items:center;gap:10px;font-size:22px;font-weight:550;margin:0}
+.journal-list .journal-day{display:block;padding:14px 0 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:650;border-top:0}
+.journal-tag{display:inline-block;margin-bottom:2px;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:650;background:var(--surface-2);color:var(--muted)}
+.journal-tag.tag-saude{background:var(--red-bg);color:var(--red-ink)}.journal-tag.tag-humor{background:var(--amber-bg);color:var(--amber-ink)}.journal-tag.tag-remedio{background:var(--green-bg);color:var(--green-ink)}

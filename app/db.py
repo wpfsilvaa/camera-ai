@@ -105,6 +105,11 @@ class Database:
                     id TEXT PRIMARY KEY, author TEXT NOT NULL, user_id TEXT, text TEXT NOT NULL,
                     created REAL NOT NULL, expires REAL NOT NULL
                 );
+                -- Family logbook: dated notes written in the dashboard.
+                CREATE TABLE IF NOT EXISTS journal (
+                    id TEXT PRIMARY KEY, author TEXT NOT NULL, user_id TEXT, text TEXT NOT NULL, tag TEXT NOT NULL DEFAULT 'geral', created REAL NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_journal_created ON journal(created);
                 CREATE TABLE IF NOT EXISTS face_enrollments (
                     id TEXT PRIMARY KEY, person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
                     created REAL NOT NULL, feature BLOB NOT NULL, model TEXT NOT NULL, quality REAL NOT NULL

@@ -27,6 +27,7 @@ from .pacing import Greeter, first_name, kiosk_night, screen_power_saving, vigia
 from .jobs import Jobs
 from .learning import LearningSuggestions
 from .notebook import NotebookMonitor
+from .journal import Journal
 from .messages import MessagePlanner, PersonMessages
 from .photos import Photos
 from .weather import Weather, search as search_cities
@@ -73,10 +74,12 @@ greeter = Greeter()
 reminders = Reminders(db)
 photos = Photos(db)
 person_messages = PersonMessages(db)
+journal = Journal(db)
 weather = Weather(config)
 greeted = {'id': None}   # Last greeting sent to the screen: its messages go out once.
 message_planner = MessagePlanner(person_messages)
 screen_state = {'until': 0}   # Until when the panel stays on after someone was in view (night, panel-off mode).
+light_state = {'until': 0}    # Until when the night light stays on after someone was in view.
 bright_state = {'until': 0}   # Until when the screen stays bright after someone was in view (night dimming).
 
 
@@ -86,13 +89,19 @@ def vigia_for_kitchen():
     hour = datetime.fromtimestamp(now, TZ).hour
     camera = next((c for c in cameras.snapshots() if c['id'] == 'main'), {})
     info_night = kiosk_night(settings, hour)
+    # Night light: while someone is in view at night (and for a while after), the screen glows softly instead of showing the UI or staying black.
+    night_light = False
+    if info_night and settings.kiosk_nightlight_enabled and notebook.call.get('state') not in ('ringing', 'answered'):
+        if camera.get('people'):
+            light_state['until'] = now + settings.kiosk_screen_off_after
+        night_light = now < light_state['until']
     info = {'vigia': vigia_state(settings.sentinel_enabled, settings.sentinel_start_hour, settings.sentinel_end_hour, hour, bool(camera.get('sentinel')), settings.sentinel_always),
             'night': int(kiosk_night(settings, hour)),
             # Only the "red tones" choice recolours the screen; with the panel off (or black) it shows its normal colours when on.
             'red': int(kiosk_night(settings, hour) and settings.kiosk_night_mode == 'red'),
             'cfg': json.dumps({'slide': settings.kiosk_slide_seconds, 'awake': settings.kiosk_awake_seconds, 'sound': settings.kiosk_sound_on,
                                'vol': {name: getattr(settings, f'kiosk_vol_{name}_{"night" if info_night else "day"}') for name in ('button', 'call', 'help', 'message')},
-                               'calendar': settings.kiosk_calendar_enabled, 'framecal': settings.kiosk_frame_calendar, 'rain': settings.kiosk_weather_rain, 'hints': settings.kiosk_hints, 'black': settings.kiosk_night_mode == 'black'}, ensure_ascii=False)}
+                               'calendar': settings.kiosk_calendar_enabled, 'framecal': settings.kiosk_frame_calendar, 'rain': settings.kiosk_weather_rain, 'hints': settings.kiosk_hints, 'black': settings.kiosk_night_mode == 'black', 'light': bool(night_light)}, ensure_ascii=False)}
     if settings.kiosk_dim_enabled:
         # Day: the day level. Night: very dim, but brighter while someone is in view (kept for a while after they leave).
         if camera.get('people') or notebook.call.get('state') in ('ringing', 'answered'):
@@ -101,6 +110,9 @@ def vigia_for_kitchen():
         info['bright'] = settings.kiosk_bright_day if not info['night'] else (settings.kiosk_bright_wake if around else settings.kiosk_bright_night)
         info['bright_wake'] = settings.kiosk_bright_wake if info['night'] else settings.kiosk_bright_day
         info['bright_hold'] = settings.kiosk_bright_hold
+    if night_light:   # The light sets its own brightness, whatever the dimming choice.
+        info['bright'] = info['bright_wake'] = settings.kiosk_nightlight_bright
+        info['bright_hold'] = settings.kiosk_screen_off_after
     if screen_power_saving(settings, bool(info['night'])):
         # Panel switched off (at night with that look, or by day with the daytime option): on while someone is in view, on a call, or for a while after.
         if camera.get('people') or notebook.call.get('state') in ('ringing', 'answered'):
@@ -116,7 +128,7 @@ def vigia_for_kitchen():
     people = {r['id']: r for r in db.rows("SELECT id,name,birthday FROM people WHERE birthday IS NOT NULL")}
     if people:   # Names and month-day only: the screen marks them on its calendar.
         info['bdays'] = json.dumps([{'n': first_name(p['name']), 'd': p['birthday'][5:]} for p in people.values()][:20], ensure_ascii=False)
-    night_black = bool(info['night']) and settings.kiosk_night_mode == 'black'
+    night_black = night_light or (bool(info['night']) and settings.kiosk_night_mode == 'black')
     if not night_black:   # A dark screen cannot show a greeting or a message, so nothing is consumed then.
         greeting = greeter.update(camera.get('tracks') or [], now, {i: p['birthday'] for i, p in people.items()} if settings.kiosk_birthdays_enabled else None, datetime.fromtimestamp(now, TZ).date())
         if greeting:
@@ -225,7 +237,7 @@ async def protect(request: Request, call_next):
             return JSONResponse({'detail': 'Entre novamente para continuar.'}, status_code=401)
         user = request.state.user
         if user and user['role'] != 'admin':
-            if request.method not in ('GET', 'HEAD', 'OPTIONS') and path not in FAMILY_WRITES and not path.startswith(('/api/reminders', '/api/photos', '/api/messages')) or path.startswith(('/api/users', '/api/backup', '/api/learning', '/api/storage')):
+            if request.method not in ('GET', 'HEAD', 'OPTIONS') and path not in FAMILY_WRITES and not path.startswith(('/api/reminders', '/api/photos', '/api/messages', '/api/journal')) or path.startswith(('/api/users', '/api/backup', '/api/learning', '/api/storage')):
                 return JSONResponse({'detail': 'Seu acesso é somente para visualização. Peça a um administrador.'}, status_code=403)
     # Prevent other sites from changing local settings through the browser.
     if request.method not in ('GET', 'HEAD', 'OPTIONS'):
@@ -306,6 +318,41 @@ def delete_reminder(reminder_id: str, request: Request):
     user = request.state.user
     try:
         reminders.delete(reminder_id, user['id'] if user else None, bool(user) and user['role'] == 'admin' or not user)
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc))
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
+    return {'ok': True}
+
+
+class JournalIn(BaseModel):
+    text: str = Field(min_length=1, max_length=500)
+    tag: str = Field(default='geral', pattern='^(geral|saude|humor|remedio)$')
+
+
+def journal_view(row, user):
+    return {'id': row['id'], 'author': row['author'], 'text': row['text'], 'tag': row['tag'], 'created': row['created'],
+            'mine': not user or user['role'] == 'admin' or user['id'] == row['user_id']}
+
+
+@app.get('/api/journal')
+def list_journal(request: Request, before: float | None = None):
+    rows = journal.list(before)
+    return {'notes': [journal_view(r, request.state.user) for r in rows], 'more': len(rows) >= 50}
+
+
+@app.post('/api/journal')
+def add_journal(body: JournalIn, request: Request):
+    user = request.state.user
+    call_service(journal.add, user['name'] if user else 'Casa', user['id'] if user else None, body.text, body.tag)
+    return {'notes': [journal_view(r, user) for r in journal.list()]}
+
+
+@app.delete('/api/journal/{note_id}')
+def delete_journal(note_id: str, request: Request):
+    user = request.state.user
+    try:
+        journal.delete(note_id, user['id'] if user else None, not user or user['role'] == 'admin')
     except PermissionError as exc:
         raise HTTPException(403, str(exc))
     except KeyError as exc:

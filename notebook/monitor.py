@@ -152,7 +152,7 @@ def parse_cfg(text):
                       for name in DEFAULT_CFG['vol']}
     if data.get('framecal') in ('always', 'pulse', 'off'):
         cfg['framecal'] = data['framecal']
-    for key in ('calendar', 'black', 'sound', 'rain'):
+    for key in ('calendar', 'black', 'sound', 'rain', 'light'):
         if isinstance(data.get(key), bool):
             cfg[key] = data[key]
     if isinstance(data.get('hints'), list):

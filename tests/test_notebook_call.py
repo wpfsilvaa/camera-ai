@@ -27,6 +27,12 @@ class Clock:
         return self.now
 
 
+class ScreenConfigTests(unittest.TestCase):
+    def test_night_light_flag_is_accepted_only_as_a_boolean(self):
+        self.assertIs(agent.parse_cfg('{"light": true}')['light'], True)
+        self.assertNotIn('light', agent.parse_cfg('{"light": "sim"}'))
+
+
 class DeskTests(unittest.TestCase):
     def setUp(self):
         self.clock = Clock()

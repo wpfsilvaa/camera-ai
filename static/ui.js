@@ -3,11 +3,11 @@
   const $ = selector => document.querySelector(selector);
 
   // Theme -------------------------------------------------------------------
-  const icons = {auto: '◐', light: '☀', dark: '☾'};
+  const icons = {auto: 'contrast', light: 'sun', dark: 'moon'};
   const names = {auto: 'automática (segue o aparelho)', light: 'clara', dark: 'escura'};
   function paintTheme() {
     const mode = casaTheme.get(), button = $('#theme-toggle');
-    button.firstElementChild.textContent = icons[mode];
+    button.firstElementChild.innerHTML = ic(icons[mode]);
     button.setAttribute('aria-label', `Aparência: ${names[mode]}. Toque para trocar.`);
     button.title = `Aparência ${names[mode]}`;
   }

@@ -215,3 +215,12 @@ body:has(#screen[data-mode=black]) .rain{display:none}
 
 /* Long messages: the text shrinks to fit (see fitQuote) so the card, the button and the countdown always stay on screen */
 .quote blockquote{overflow-wrap:anywhere}
+.ic{width:1em;height:1em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-.14em;flex-shrink:0}
+
+/* Luz de passagem: brilho quente e suave com a hora, enquanto alguém circula de madrugada. */
+#screen[data-mode=light]{visibility:hidden}
+body:has(#screen[data-mode=light]){background:radial-gradient(ellipse at 50% 55%,#ffd9a0 0%,#f2a95c 55%,#b86a2a 100%)}
+body:has(#screen[data-mode=light]) .glow,body:has(#screen[data-mode=light]) .rain{display:none}
+.nightlight{position:fixed;inset:0;display:grid;place-items:center;z-index:5;pointer-events:none}
+.nightlight time{font-size:clamp(70px,16vw,220px);font-weight:300;letter-spacing:-.04em;color:#4a2a0e;opacity:.85;font-variant-numeric:tabular-nums}
+.nightlight.hidden{display:none}

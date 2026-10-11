@@ -88,12 +88,13 @@
     $('clock').textContent = now.toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'});
     $('date').textContent = now.toLocaleDateString('pt-BR', {weekday: 'long', day: 'numeric', month: 'long'});
     $('frame-clock').textContent = $('clock').textContent;
+    $('nightlight-clock').textContent = $('clock').textContent;
   }
 
   function render() {
     const {call, linked, enabled, battery, plugged} = last;
     $('battery').classList.toggle('hidden', battery == null);
-    $('battery').textContent = battery == null ? '' : `${plugged ? '⚡' : '🔋'} ${battery}%`;
+    $('battery').innerHTML = battery == null ? '' : `<svg class="ic" aria-hidden="true"><use href="#ic-${plugged ? 'bolt' : 'battery'}"/></svg> ${Number(battery)}%`;
     let view = 'idle';
     if (call.state === 'ringing') view = 'ringing';
     else if (call.state === 'answered') view = 'answered';
@@ -332,7 +333,7 @@
     const names = date => eventsOn(events, date).map(ev => ev.name.replace(/</g, '&lt;'));
     const hour = now.getHours(), period = hour >= 5 && hour < 12 ? 'Bom dia' : hour >= 12 && hour < 18 ? 'Boa tarde' : 'Boa noite';
     const todayLine = names(today).length ? `Hoje: ${names(today).join(' · ')}` : names(tomorrow).length ? `Amanhã: ${names(tomorrow).join(' · ')}` : period;
-    const battery = last.battery != null && (last.plugged === false || last.battery < 20) ? `<span class="fr-pill low">🔋 ${last.battery}%${last.plugged === false ? ' sem carregador' : ''}</span>` : '';
+    const battery = last.battery != null && (last.plugged === false || last.battery < 20) ? `<span class="fr-pill low"><svg class="ic" aria-hidden="true"><use href="#ic-battery"/></svg> ${last.battery}%${last.plugged === false ? ' sem carregador' : ''}</span>` : '';
     const vigia = VIGIA[last.vigia] ? `<span class="fr-pill ${last.vigia}">${last.vigia === 'analysing' ? ICON_EYE : ICON_SHIELD}${VIGIA[last.vigia]}</span>` : '';
     const key = `${now.toDateString()}|${now.getHours()}|${todayLine}|${last.vigia}|${battery}|${JSON.stringify(bdays)}`;
     if (key === infoKey) return;
@@ -461,6 +462,8 @@
     const awake = Date.now() < awakeUntil, photos = (last.photos || []).map(p => p.id);
     let mode = 'ui';
     if (view === 'idle' && last.frame && !awake) mode = last.night && cfg().black ? 'black' : photos.length ? 'frame' : 'ui';
+    if (view === 'idle' && last.night && cfg().light && !awake) mode = 'light';   // Night light: a soft glow while someone walks by.
+    $('nightlight').classList.toggle('hidden', mode !== 'light');
     if (slideTimer && slideMs !== cfg().slide * 1000) startFrame(false);   // The interval changed in the settings.
     screen.dataset.mode = mode;
     $('frame').classList.toggle('hidden', mode !== 'frame');

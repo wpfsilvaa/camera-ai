@@ -10,7 +10,8 @@
     if (!live) { mine = null; return; }
     const panic = call.kind === 'panic', ringing = call.state === 'ringing', answeredByMe = mine === call.id;
     banner.classList.toggle('panic', panic);
-    $('#call-title').textContent = ringing ? (panic ? '🚨 Pedido de ajuda do seu pai' : '📞 Seu pai está chamando') : answeredByMe ? '📞 Em chamada com o notebook' : `📞 ${call.answered_by} atendeu`;
+    $('#call-title').textContent = ringing ? (panic ? 'Pedido de ajuda do seu pai' : 'Seu pai está chamando') : answeredByMe ? 'Em chamada com o notebook' : `${call.answered_by} atendeu`;
+    $('#call-title').insertAdjacentHTML('afterbegin', ic(panic && ringing ? 'alert' : 'phone', 'lead'));
     $('#call-detail').textContent = ringing ? `Notebook da cozinha · desde as ${time(call.since)}` : answeredByMe ? 'Ele ouve você e vê o seu rosto, se a câmera estiver liberada.' : 'Outra pessoa da família já está falando com ele.';
     $('#call-answer').classList.toggle('hidden', !ringing);
     $('#call-end').classList.toggle('hidden', ringing ? false : !answeredByMe && !isAdmin());
