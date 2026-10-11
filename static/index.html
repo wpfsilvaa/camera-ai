@@ -23,6 +23,7 @@
       <a href="#overview" class="nav-link active" data-page="overview"><span>▦</span>Visão geral</a>
       <a href="#history" class="nav-link" data-page="history"><span>◷</span>Histórico <span class="nav-count" id="nav-count">0</span></a>
       <a href="#people" class="nav-link" data-page="people"><span>♧</span>Pessoas</a>
+      <a href="#messages" class="nav-link" data-page="messages"><span>✉</span>Recados</a>
       <a href="#settings" class="nav-link admin-only" data-page="settings"><span>⚙</span>Configurações</a>
       <a href="#users" class="nav-link admin-only" data-page="users"><span>☺</span>Usuários</a>
     </nav>
@@ -122,6 +123,21 @@
         </form>
       </section>
 
+      <section id="page-messages" class="page hidden">
+        <div class="page-heading"><div><div class="eyebrow">DE QUEM AMA</div><h1>Recados<span class="green-period">.</span></h1><p>Escreva uma mensagem para uma pessoa da família. Quando ela for reconhecida na tela do notebook, o recado aparece em destaque, com o seu nome embaixo.</p></div></div>
+        <div class="messages-grid">
+          <article class="panel"><div class="panel-heading"><h2>Novo recado</h2></div><div class="panel-body form-fields">
+            <label>Para quem<select id="msg-to"></select></label>
+            <label>Mensagem<textarea id="msg-text" maxlength="240" rows="4" placeholder="Ex.: Te amo, pai. Lembre de tomar o remédio das 14h."></textarea><small id="msg-count">0 de 240 letras</small></label>
+            <div class="form-row"><label>Mostrar<select id="msg-once"><option value="1">Até a pessoa tocar em "Li" na tela</option><option value="0">Toda vez que a pessoa aparecer</option></select></label><label>Vale por<select id="msg-hours"><option value="12">12 horas</option><option value="24">1 dia</option><option value="72" selected>3 dias</option><option value="168">7 dias</option><option value="720">30 dias</option><option value="2160">90 dias</option></select></label></div>
+            <div class="quote-preview" aria-label="Pré-visualização"><blockquote id="msg-preview-text">Sua mensagem aparece assim na tela.</blockquote><div id="msg-preview-by" class="quote-by"></div></div>
+            <button type="button" id="msg-send" class="button primary">Deixar recado</button>
+            <small class="muted">A pessoa toca em "Li ✓" na tela do notebook para confirmar, e você vê aqui quando foi lido. Com a tela preta (noite) o recado espera a próxima vez. Se o reconhecimento errar a pessoa, o recado pode aparecer para outra, então evite segredos.</small>
+          </div></article>
+          <article class="panel"><div class="panel-heading"><h2>Recados ativos</h2><span class="muted small" id="msg-total"></span></div><div class="panel-body"><ul id="messages-list" class="messages-list"></ul></div></article>
+        </div>
+      </section>
+
       <section id="page-users" class="page hidden">
         <div class="page-heading"><div><div class="eyebrow">QUEM ACOMPANHA</div><h1>Usuários<span class="green-period">.</span></h1><p>Cada pessoa entra com seu próprio usuário e senha.</p></div></div>
         <div id="users-first" class="inline-note hidden">Ainda não há usuários: o painel está aberto para quem acessa este computador. Crie o primeiro administrador para exigir login.</div>
@@ -190,6 +206,7 @@
   <script src="/static/resources.js" defer></script>
   <script src="/static/reminders.js" defer></script>
   <script src="/static/photos.js" defer></script>
+  <script src="/static/messages.js" defer></script>
   <script src="/static/rtc.js" defer></script>
   <script src="/static/live-video.js" defer></script>
   <script src="/static/intercom.js" defer></script>

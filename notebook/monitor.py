@@ -80,6 +80,21 @@ def parse_birthdays(text):
     return found
 
 
+def parse_quotes(text):
+    """[{'t', 'a'}]: messages left for the person being greeted (text, sender's first name)."""
+    try:
+        items = json.loads(text) if text else []
+    except ValueError:
+        return []
+    found = []
+    for item in items[:5] if isinstance(items, list) else []:
+        if isinstance(item, dict):
+            body = ''.join(ch for ch in str(item.get('t', '')) if ch.isprintable())[:240].strip()
+            if body:
+                found.append({'i': str(item.get('i', ''))[:40], 't': body, 'a': ''.join(ch for ch in str(item.get('a', '')) if ch.isprintable())[:30].strip()})
+    return found
+
+
 def parse_reminders(text):
     """[{'i', 'a', 't', 'e'}] from the dashboard's JSON: id, author, text, expiry (epoch seconds)."""
     try:
@@ -156,11 +171,12 @@ class Desk:
         self.vigia = None   # (state, night, received_at) from the dashboard's last poll.
         self.greet = None   # {'name', 'id', 'until', 'birthday', 'age'}: shown once per id.
         self.bdays = []     # [{'n': first name, 'd': 'MM-DD'}] for the calendar.
+        self.acks = []   # Message ids confirmed with "Li" on this screen, until the dashboard stores them.
         self.cfg = dict(DEFAULT_CFG)   # Screen settings from the dashboard.
         self.frame = False   # Photo frame switched on in the dashboard's settings.
         self.reminders = []  # [{'i', 'a', 't', 'e'}]: notes cycled on the screen until their expiry.
 
-    def configure(self, call, panic, vigia=None, night=False, greet='', greet_id='', kind='', age='', bdays='', reminders='', frame=False, cfg=''):
+    def configure(self, call, panic, vigia=None, night=False, greet='', greet_id='', kind='', age='', bdays='', reminders='', frame=False, cfg='', msgs='', quiet=False, acked=''):
         with self.lock:
             now = self.last_poll = self.clock()
             self.enabled = {'call': call, 'panic': panic}
@@ -169,11 +185,20 @@ class Desk:
             if name and (not self.greet or self.greet['id'] != greet_id):
                 birthday = kind == 'birthday'
                 self.greet = {'name': name, 'id': greet_id, 'until': now + (BIRTHDAY_SECONDS if birthday else GREET_SECONDS),
-                              'birthday': birthday, 'age': int(age) if age.isdigit() and 0 < int(age) < 130 else 0}
+                              'birthday': birthday, 'age': int(age) if age.isdigit() and 0 < int(age) < 130 else 0,
+                              'msgs': parse_quotes(msgs), 'quiet': bool(quiet)}
             self.bdays = parse_birthdays(bdays)
+            done = {i for i in acked.split(',') if i}
+            self.acks = [a for a in self.acks if a not in done]   # The dashboard stored these already.
             self.reminders = parse_reminders(reminders)
             self.frame = bool(frame)
             self.cfg = parse_cfg(cfg)
+
+    def ack(self, message_id):
+        if re.fullmatch(r'[a-f0-9]{32}', message_id or ''):
+            with self.lock:
+                if message_id not in self.acks:
+                    self.acks = (self.acks + [message_id])[-50:]
 
     def display(self):
         """Watch-mode state, night tone and greeting for the kitchen screen; stale data is dropped."""
@@ -182,7 +207,7 @@ class Desk:
             fresh = vigia is not None and now - vigia[2] < LINK_SECONDS
             greet = self.greet if self.greet and now < self.greet['until'] else None
             return {'vigia': vigia[0] if fresh else None, 'night': bool(vigia[1]) if fresh else False,
-                    'greet': {k: greet[k] for k in ('name', 'id', 'birthday', 'age')} if greet else None,
+                    'greet': {k: greet[k] for k in ('name', 'id', 'birthday', 'age', 'msgs', 'quiet')} if greet else None,
                     'bdays': self.bdays if fresh else [],
                     'reminders': [r for r in self.reminders if r['e'] > now] if fresh else [],
                     'cfg': self.cfg if fresh else dict(DEFAULT_CFG), 'frame': self.frame if fresh else False, 'photos': photo_list() if fresh and self.frame else []}
@@ -260,8 +285,8 @@ class Handler(BaseHTTPRequestHandler):
             query = parse_qs(url.query)
             self.desk.configure(query.get('call') == ['1'], query.get('panic') == ['1'], (query.get('vigia') or [None])[0],
                                 query.get('night') == ['1'], (query.get('greet') or [''])[0], (query.get('greet_id') or [''])[0],
-                                (query.get('greet_kind') or [''])[0], (query.get('age') or [''])[0], (query.get('bdays') or [''])[0], (query.get('reminders') or [''])[0], query.get('frame') == ['1'], (query.get('cfg') or [''])[0])
-            return self.reply(200, {**reading(), 'call': self.desk.snapshot()})
+                                (query.get('greet_kind') or [''])[0], (query.get('age') or [''])[0], (query.get('bdays') or [''])[0], (query.get('reminders') or [''])[0], query.get('frame') == ['1'], (query.get('cfg') or [''])[0], (query.get('greet_msgs') or [''])[0], query.get('greet_quiet') == ['1'], (query.get('acked') or [''])[0])
+            return self.reply(200, {**reading(), 'call': self.desk.snapshot(), 'acks': list(self.desk.acks)})
         if url.path == '/photos' and self.authorized():
             return self.reply(200, {'ids': photo_ids(), 'authors': {p['id']: p['a'] for p in photo_list()}})
         if not self.local():
@@ -336,6 +361,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(201, self.desk.press(str(self.body().get('kind'))))
             if url.path == '/cancel':
                 return self.reply(200, self.desk.end())
+            if url.path == '/ack':
+                self.desk.ack(str(self.body().get('id', '')))
+                return self.reply(200, {'ok': True})
         except ValueError as error:
             return self.reply(409, {'error': str(error)})
         self.send_error(404)

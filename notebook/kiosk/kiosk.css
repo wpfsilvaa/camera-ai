@@ -134,9 +134,9 @@ body:has(#screen[data-mode=black]){background:#000}
 .fr-month{position:absolute;right:3vw;bottom:15vh;width:min(30vw,420px);background:#0008;border:.15vmin solid #fff3;border-radius:2vmin;padding:1.6vmin 1.8vmin;font-size:clamp(12px,1.35vw,20px);transform:translateX(120%);opacity:0;transition:transform .8s ease,opacity .8s ease;color:#fff}
 .fr-month.show{transform:none;opacity:1}
 .fr-month .cal-day{color:#fff}.fr-month .cal-day.today{background:#fff;color:#111}.fr-month .cal-day.holiday{color:#ff8f80}.fr-month .cal-title{color:#fff}.fr-month .cal-next li b{color:#fff}
-.frame-greeting{position:absolute;top:26vh;left:0;right:0;margin:0;text-align:center;color:#fff;font-size:clamp(48px,9vw,130px);font-weight:700;text-shadow:0 .3vmin 2vmin #000;animation:greet .8s ease-out}
+.frame-greeting{position:absolute;top:40vh;left:0;right:0;margin:0;text-align:center;color:#fff;font-size:clamp(48px,9vw,130px);font-weight:700;text-shadow:0 .3vmin 2vmin #000;animation:greet .8s ease-out}
 .frame-greeting.birthday{color:var(--amber)}
-.frame-greeting-sub{position:absolute;top:calc(26vh + 11vw);left:0;right:0;margin:0;text-align:center;color:#fff;font-size:clamp(26px,4.2vw,60px);font-weight:600;text-shadow:0 .2vmin 1.4vmin #000}
+.frame-greeting-sub{position:absolute;top:calc(40vh + 11vw);left:0;right:0;margin:0;text-align:center;color:#fff;font-size:clamp(26px,4.2vw,60px);font-weight:600;text-shadow:0 .2vmin 1.4vmin #000}
 .frame-reminder{position:absolute;left:3vw;top:34vh;width:min(50vw,820px);background:#0007;border:.15vmin solid #ffffff40;border-left:.7vmin solid var(--amber);border-radius:2vmin;padding:1.6vmin 3vmin;text-align:left;animation:slidein .7s ease-out}
 @keyframes slidein{from{opacity:0;transform:translateY(3vh)}to{opacity:1;transform:none}}
 .frame-reminder .rem-label{text-align:left}
@@ -144,3 +144,19 @@ body:has(#screen[data-mode=black]){background:#000}
 .frame-reminder small{color:#ddd;font-size:clamp(14px,1.8vw,24px)}
 html[data-night="1"] .frame{filter:brightness(.5) sepia(1) hue-rotate(-35deg) saturate(3)}
 @media (prefers-reduced-motion:reduce){.slide.on img,.slide.leaving img,.fr-pill,.frame-reminder,.fr-progress i.run{animation:none!important}.fr-month{transition:none}}
+
+/* While someone is greeted (or a message is shown) the other overlays step aside */
+.frame.speaking .frame-reminder,.frame.speaking .fr-month{opacity:0!important;pointer-events:none;transition:opacity .4s}
+/* Messages for a person: a quote, the sender's name small underneath */
+.quote{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:8vh 8vw;background:radial-gradient(ellipse at center,#000b,#000e);animation:quotein .9s ease-out}
+.quote figure{margin:0;max-width:min(84vw,1400px)}
+.quote blockquote{margin:0;font-family:Georgia,"Times New Roman",serif;font-style:italic;font-weight:400;font-size:clamp(32px,5.4vw,82px);line-height:1.28;color:#fff;text-align:center}
+.quote blockquote::before{content:"“";display:block;font-size:2.2em;line-height:.5;color:var(--amber);margin-bottom:.15em}
+.quote figcaption{margin-top:3.2vh;text-align:right;font-family:Georgia,"Times New Roman",serif;font-size:clamp(20px,2.6vw,38px);color:var(--muted);letter-spacing:.06em}
+.quote figcaption::before{content:"— "}
+html[data-night="1"] .quote blockquote{color:#c8493c}
+@keyframes quotein{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.quote{animation:none}}
+.quote-ok{position:absolute;left:50%;bottom:7vh;transform:translateX(-50%);border:0;border-radius:999px;background:var(--green);color:#fff;font:inherit;font-weight:700;font-size:clamp(26px,3.6vw,52px);padding:1.4vh 5vw;cursor:pointer;touch-action:manipulation}
+.quote-ok:active{transform:translateX(-50%) scale(.97)}
+html[data-night="1"] .quote-ok{color:#f0948a}

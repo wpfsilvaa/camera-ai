@@ -93,12 +93,13 @@ function fillSettings() {
 }
 function route() {
   const requested = location.hash.slice(1) || 'overview';
-  activePage = ['overview','history','people','settings','users'].includes(requested) && (isAdmin() || !['users','settings'].includes(requested)) ? requested : 'overview';
+  activePage = ['overview','history','people','messages','settings','users'].includes(requested) && (isAdmin() || !['users','settings'].includes(requested)) ? requested : 'overview';
   $$('.page').forEach(page => page.classList.toggle('hidden', page.id !== `page-${activePage}`));
   $$('.nav-link').forEach(link => link.classList.toggle('active', link.dataset.page === activePage));
-  $('#page-name').textContent = {overview:'Visão geral',history:'Histórico',people:'Pessoas',settings:'Configurações',users:'Usuários'}[activePage];
+  $('#page-name').textContent = {overview:'Visão geral',history:'Histórico',people:'Pessoas',messages:'Recados',settings:'Configurações',users:'Usuários'}[activePage];
   if (activePage === 'history') {loadHistory().catch(error => toast(error.message, true));loadHistoryCameras().catch(error=>toast(error.message,true));}
   if (activePage === 'people') { renderProfiles(); loadLearning().catch(error => toast(error.message, true)); }
+  if (activePage === 'messages') window.loadMessages?.().catch(error => toast(error.message, true));
   if (activePage === 'settings') renderZoneEditor();
   if (activePage === 'users') loadUsers().catch(error => toast(error.message, true));
   updateStream();

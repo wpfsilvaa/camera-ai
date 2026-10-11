@@ -27,6 +27,7 @@ from .pacing import Greeter, first_name, kiosk_night, vigia_state
 from .jobs import Jobs
 from .learning import LearningSuggestions
 from .notebook import NotebookMonitor
+from .messages import PersonMessages
 from .photos import Photos
 from .reminders import Reminders
 from .offline import OfflineAnalysis
@@ -69,6 +70,8 @@ notebook.frame = lambda: latest_frame('main')
 greeter = Greeter()
 reminders = Reminders(db)
 photos = Photos(db)
+person_messages = PersonMessages(db)
+greeted = {'id': None}   # Last greeting sent to the screen: its messages go out once.
 
 
 def vigia_for_kitchen():
@@ -86,17 +89,39 @@ def vigia_for_kitchen():
     people = {r['id']: r for r in db.rows("SELECT id,name,birthday FROM people WHERE birthday IS NOT NULL")}
     if people:   # Names and month-day only: the screen marks them on its calendar.
         info['bdays'] = json.dumps([{'n': first_name(p['name']), 'd': p['birthday'][5:]} for p in people.values()][:20], ensure_ascii=False)
-    if config.get().notebook_greeting_enabled:
+    night_black = bool(info['night']) and settings.kiosk_night_mode == 'black'
+    if not night_black:   # A dark screen cannot show a greeting or a message, so nothing is consumed then.
         greeting = greeter.update(camera.get('tracks') or [], now, {i: p['birthday'] for i, p in people.items()} if settings.kiosk_birthdays_enabled else None, datetime.fromtimestamp(now, TZ).date())
         if greeting:
             info.update(greet=greeting['name'], greet_id=greeting['id'])
-            if greeting.get('birthday'):
+            if not config.get().notebook_greeting_enabled:
+                info['greet_quiet'] = 1
+            if greeting.get('birthday') and config.get().notebook_greeting_enabled:
                 info.update(greet_kind='birthday', age=greeting['age'])
+            if greeting['id'] != greeted['id']:
+                waiting = person_messages.for_person(greeting['person'], now)
+                if waiting:
+                    info['greet_msgs'] = json.dumps([{'i': r['id'], 't': r['text'], 'a': first_name(r['author'])} for r in waiting[:5]], ensure_ascii=False)
+                    info['_deliver'] = [r['id'] for r in waiting[:5]]
+                    greeted['pending'] = greeting['id']   # Counted as sent only once the screen accepted them.
+                else:
+                    greeted['id'] = greeting['id']
+            if info.get('greet_quiet') and 'greet_msgs' not in info:
+                info.pop('greet'), info.pop('greet_id'), info.pop('greet_quiet')   # Greeting off and nothing to say.
     return info
 
 
 notebook.vigia = vigia_for_kitchen
 notebook.photos = photos
+
+
+def messages_delivered(ids):
+    person_messages.mark_shown(ids)
+    greeted['id'] = greeted.get('pending')
+
+
+notebook.delivered = messages_delivered
+notebook.read = person_messages.mark_read
 push.people = lambda camera_id: cameras.get(camera_id).snapshot()['tracks']
 
 
@@ -150,7 +175,7 @@ async def protect(request: Request, call_next):
             return JSONResponse({'detail': 'Entre novamente para continuar.'}, status_code=401)
         user = request.state.user
         if user and user['role'] != 'admin':
-            if request.method not in ('GET', 'HEAD', 'OPTIONS') and path not in FAMILY_WRITES and not path.startswith(('/api/reminders', '/api/photos')) or path.startswith(('/api/users', '/api/backup', '/api/learning', '/api/storage')):
+            if request.method not in ('GET', 'HEAD', 'OPTIONS') and path not in FAMILY_WRITES and not path.startswith(('/api/reminders', '/api/photos', '/api/messages')) or path.startswith(('/api/users', '/api/backup', '/api/learning', '/api/storage')):
                 return JSONResponse({'detail': 'Seu acesso é somente para visualização. Peça a um administrador.'}, status_code=403)
     # Prevent other sites from changing local settings through the browser.
     if request.method not in ('GET', 'HEAD', 'OPTIONS'):
@@ -230,6 +255,43 @@ def delete_reminder(reminder_id: str, request: Request):
     user = request.state.user
     try:
         reminders.delete(reminder_id, user['id'] if user else None, bool(user) and user['role'] == 'admin' or not user)
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc))
+    except KeyError as exc:
+        raise HTTPException(404, str(exc))
+    return {'ok': True}
+
+
+class MessageIn(BaseModel):
+    to_person: str = Field(min_length=1, max_length=64)
+    text: str = Field(min_length=1, max_length=240)
+    hours: int = Field(ge=1, le=24 * 90)
+    once: bool = True
+
+
+def message_view(row, user):
+    return {'id': row['id'], 'to_person': row['to_person'], 'to_name': row['to_name'], 'author': row['author'], 'text': row['text'], 'created': row['created'],
+            'expires': row['expires'], 'once': bool(row['once']), 'shown': row['shown'], 'last_shown': row['last_shown'], 'read_at': row['read_at'],
+            'mine': bool(user) and (user['role'] == 'admin' or user['id'] == row['user_id'])}
+
+
+@app.get('/api/messages')
+def list_messages(request: Request):
+    return {'messages': [message_view(r, request.state.user) for r in person_messages.active()]}
+
+
+@app.post('/api/messages')
+def add_message(body: MessageIn, request: Request):
+    user = request.state.user
+    call_service(person_messages.add, user['name'] if user else 'Casa', user['id'] if user else None, body.to_person, body.text, body.hours, body.once)
+    return {'messages': [message_view(r, user) for r in person_messages.active()]}
+
+
+@app.delete('/api/messages/{message_id}')
+def delete_message(message_id: str, request: Request):
+    user = request.state.user
+    try:
+        person_messages.delete(message_id, user['id'] if user else None, not user or user['role'] == 'admin')
     except PermissionError as exc:
         raise HTTPException(403, str(exc))
     except KeyError as exc:

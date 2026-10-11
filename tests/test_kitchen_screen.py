@@ -12,6 +12,7 @@ from app.db import Database
 from app.pacing import Greeter, birthday_today, first_name, kiosk_night, vigia_state
 from app.config import Settings
 from app.recognition import Recognition
+from app.messages import PersonMessages
 from app.reminders import Reminders
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'notebook'))
@@ -106,6 +107,49 @@ class ReminderTests(unittest.TestCase):
             self.reminders.delete('nope', 'u1', True)
 
 
+class PersonMessageTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = Database(Path(self.tmp.name) / 'h.sqlite3')
+        self.messages = PersonMessages(self.db)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_once_messages_stay_until_the_person_confirms(self):
+        once = self.messages.add('Waldemar', 'u1', 'father', 'Te amo, pai.', 24, True, now=1000)
+        every = self.messages.add('Lorena', 'u2', 'father', 'Boa tarde!', 24, False, now=1001)
+        self.assertEqual([m['id'] for m in self.messages.for_person('father', 1100)], [once, every])
+        self.messages.mark_shown([once, every], 1100)
+        self.assertEqual(len(self.messages.for_person('father', 1200)), 2)         # Shown is not read: both come back.
+        self.messages.mark_read([once], 1300)
+        self.assertEqual([m['id'] for m in self.messages.for_person('father', 1400)], [every])   # "Once" is spent only when read.
+        self.messages.mark_read([every], 1301)
+        self.assertEqual([m['id'] for m in self.messages.for_person('father', 1500)], [every])   # "Every time" keeps coming back.
+        self.assertEqual(self.messages.for_person('father', 1000 + 25 * 3600), [])                # Expired.
+
+    def test_validation_permissions_and_listing(self):
+        with self.assertRaises(ValueError):
+            self.messages.add('Ana', 'u1', 'father', '  ', 24)
+        with self.assertRaises(ValueError):
+            self.messages.add('Ana', 'u1', 'father', 'x', 0)
+        with self.assertRaises(KeyError):
+            self.messages.add('Ana', 'u1', 'nobody', 'oi', 24)
+        message = self.messages.add('Ana', 'u1', 'father', 'x' * 500, 24)
+        listed = self.messages.active()
+        self.assertEqual((len(listed[0]['text']), listed[0]['to_name']), (240, 'Meu pai'))
+        with self.assertRaises(PermissionError):
+            self.messages.delete(message, 'u2', False)
+        self.messages.delete(message, 'u1', False)
+        self.assertEqual(self.messages.active(), [])
+
+    def test_read_messages_leave_the_list_after_a_week(self):
+        message = self.messages.add('Ana', 'u1', 'father', 'oi', 24 * 30, True, now=1000)
+        self.messages.mark_read([message], 1000)
+        self.assertEqual(len(self.messages.active(1000 + 6 * 86400)), 1)
+        self.assertEqual(self.messages.active(1000 + 8 * 86400), [])
+
+
 class MonitorDisplayTests(unittest.TestCase):
     def test_display_carries_state_and_expires_with_the_link(self):
         clock = [1000.0]
@@ -114,7 +158,7 @@ class MonitorDisplayTests(unittest.TestCase):
                        '[{"n":"Beto","d":"10-12"},{"n":"","d":"x"}]', '[{"i":"a","a":"Ana","t":"Leite","e":1500},{"i":"b","a":"X","t":"velho","e":900}]')
         shown = desk.display()
         self.assertEqual((shown['vigia'], shown['night']), ('resting', True))
-        self.assertEqual(shown['greet'], {'name': 'Ana', 'id': '77', 'birthday': True, 'age': 70})
+        self.assertEqual(shown['greet'], {'name': 'Ana', 'id': '77', 'birthday': True, 'age': 70, 'msgs': [], 'quiet': False})
         self.assertEqual(shown['bdays'], [{'n': 'Beto', 'd': '10-12'}])
         self.assertEqual([r['t'] for r in shown['reminders']], ['Leite'])          # The expired one is dropped.
         clock[0] += 26
@@ -122,6 +166,23 @@ class MonitorDisplayTests(unittest.TestCase):
         clock[0] += 10
         self.assertEqual(desk.display()['vigia'], None)                              # No poll for over 30 s: stale.
         self.assertEqual(desk.display()['reminders'], [])
+
+    def test_greeting_carries_messages_for_the_person(self):
+        desk = monitor.Desk(clock=lambda: 1000.0)
+        desk.configure(True, True, 'resting', False, 'Ana', '5', '', '', '', '', False, '', '[{"t":"Te amo","a":"Waldemar"},{"t":"","a":"x"}]', False)
+        greet = desk.display()['greet']
+        self.assertEqual(greet['msgs'], [{'i': '', 't': 'Te amo', 'a': 'Waldemar'}])
+        self.assertFalse(greet['quiet'])
+        self.assertEqual(monitor.parse_quotes('not json'), [])
+
+    def test_acks_wait_until_the_dashboard_confirms_them(self):
+        desk = monitor.Desk()
+        good, other = 'a' * 32, 'b' * 32
+        for message_id in (good, good, 'not-an-id', other):
+            desk.ack(message_id)
+        self.assertEqual(desk.acks, [good, other])                       # Deduplicated, malformed ids dropped.
+        desk.configure(True, True, 'resting', False, acked=good)        # The dashboard stored the first one.
+        self.assertEqual(desk.acks, [other])
 
     def test_screen_settings_are_validated_and_clamped(self):
         self.assertEqual(monitor.parse_cfg(''), monitor.DEFAULT_CFG)

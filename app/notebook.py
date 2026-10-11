@@ -48,6 +48,9 @@ class NotebookMonitor:
     def __init__(self, alerts, config=default_config, token=notebook_token):
         self.alerts, self.config, self.token = alerts, config, token
         self.frame = None  # Callable returning the camera's current JPEG (attached to call alerts).
+        self.read = None  # Called with message ids the person confirmed on the screen.
+        self.confirmed = []  # Acks already stored: tell the screen it can forget them.
+        self.delivered = None  # Called with message ids once the screen accepted them.
         self.photos = None  # Photos object whose files are copied to the screen's frame.
         self.vigia = None  # Callable returning extra query parameters for the kitchen screen (watch mode, night, greeting).
         self.call = {'state': 'idle'}
@@ -69,7 +72,7 @@ class NotebookMonitor:
         if not (settings.notebook_alerts_enabled or settings.notebook_call_enabled):
             self.reset()
             return
-        reading = None
+        reading, deliver = None, []
         token = self.token()
         url = notebook_url(settings.camera_source)
         if url and token:
@@ -78,12 +81,22 @@ class NotebookMonitor:
                 if self.vigia:
                     try:
                         params.update(self.vigia())
+                        deliver = params.pop('_deliver', [])
                     except Exception:
                         log.exception('Falha ao montar o estado da tela do notebook')
                     params['frame'] = int(settings.notebook_photo_frame_enabled)
+                if self.confirmed:
+                    params['acked'] = ','.join(self.confirmed)
                 response = client.get(f'{url}/status', headers={'Authorization': f'Bearer {token}'}, timeout=5, params=params)
                 if response.status_code == 200:
                     reading = response.json()
+                    self.confirmed = []
+                    acks = [a for a in reading.get('acks', []) if isinstance(a, str)]
+                    if acks and self.read:
+                        self.read(acks)
+                        self.confirmed = acks
+                    if deliver and self.delivered:
+                        self.delivered(deliver)
                     self.sync_photos(client, url, {'Authorization': f'Bearer {token}'}, settings)
             except (httpx.HTTPError, ValueError):
                 pass

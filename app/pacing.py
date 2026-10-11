@@ -150,7 +150,7 @@ class Greeter:
             if person and name and now - self.last.get(person, -self.cooldown) >= self.cooldown:
                 self.last[person] = now
                 age = birthday_today((birthdays or {}).get(person), today) if today and birthdays else None
-                self.current = {'name': name, 'id': int(now), 'until': now + (BIRTHDAY_SECONDS if age is not None else self.seconds)}
+                self.current = {'name': name, 'id': int(now), 'person': person, 'until': now + (BIRTHDAY_SECONDS if age is not None else self.seconds)}
                 if age is not None:
                     self.current.update(birthday=True, age=age)
                 break

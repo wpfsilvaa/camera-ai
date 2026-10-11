@@ -154,3 +154,14 @@ label.button{cursor:pointer}
 .reminder-box{display:flex;flex-direction:column;gap:8px}
 .settings-panel .reminders-list{margin-top:6px}
 #resources-minutes{width:auto;min-width:170px}
+
+/* Messages page */
+.messages-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px;align-items:start}
+@media(max-width:900px){.messages-grid{grid-template-columns:1fr}}
+.messages-grid textarea{width:100%;resize:vertical;border:1px solid var(--border);background:var(--surface);color:var(--ink);border-radius:8px;padding:10px 12px;font:inherit;font-size:13px}
+.quote-preview{border:1px solid var(--border);border-radius:12px;background:#10191a;color:#fff;padding:18px 22px}
+.quote-preview blockquote{margin:0;font-family:Georgia,"Times New Roman",serif;font-style:italic;font-size:18px;line-height:1.35}
+.quote-preview blockquote::before{content:"“";display:block;font-size:34px;line-height:.5;color:#d9a13a}
+.quote-by{text-align:right;margin-top:10px;font-family:Georgia,serif;font-size:13px;color:#b9c4bd}.quote-by:not(:empty)::before{content:"— "}
+.messages-list{list-style:none;margin:0;padding:0}.messages-list li{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:12px 0;border-top:1px solid var(--border)}
+.messages-list li:first-child{border-top:0}.messages-list p{margin:4px 0;color:var(--ink);font-size:13px}.messages-list small{color:var(--muted);font-size:11px}

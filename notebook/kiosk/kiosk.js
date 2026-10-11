@@ -121,22 +121,50 @@
     box.innerHTML = Array.from({length: 46}, (_, i) => `<i style="left:${(i * 2.2 + Math.random() * 2).toFixed(1)}vw;background:hsl(${(i * 47) % 360} 85% 60%);animation-duration:${(4 + Math.random() * 5).toFixed(1)}s;animation-delay:${(Math.random() * 3).toFixed(1)}s"></i>`).join('');
     box.classList.remove('hidden');
   }
+  // Messages left for the person being greeted, one after the other, quote-style with the sender underneath.
+  // Each message stays 20 s (or until the person taps "Li", which tells the family it was read).
+  let quoteQueue = [], quoteTimer = null, quoteId = '';
+  function hideQuote() { clearTimeout(quoteTimer); quoteQueue = []; quoteId = ''; $('quote').classList.add('hidden'); syncSpeaking(); }
+  function nextQuote() {
+    clearTimeout(quoteTimer);
+    const item = quoteQueue.shift();
+    if (!item) { quoteId = ''; $('quote').classList.add('hidden'); syncSpeaking(); return; }
+    quoteId = item.i || '';
+    $('quote-text').textContent = item.t; $('quote-by').textContent = item.a || '';
+    $('quote-ok').classList.toggle('hidden', !quoteId);
+    $('quote').classList.remove('hidden'); $('quote').style.animation = 'none'; void $('quote').offsetWidth; $('quote').style.animation = '';
+    syncSpeaking();
+    quoteTimer = setTimeout(nextQuote, 20000);
+  }
+  function showQuotes(items, delay) { hideQuote(); quoteQueue = [...items]; quoteTimer = setTimeout(nextQuote, delay); }
+  $('quote-ok').onclick = async () => {
+    try { sounds.press(); } catch { /* ignore */ }
+    if (quoteId) await fetch('/ack', {method: 'POST', headers: {'X-Kiosk': '1', 'Content-Type': 'application/json'}, body: JSON.stringify({id: quoteId})}).catch(() => {});
+    nextQuote();
+  };
+  const syncSpeaking = () => $('frame').classList.toggle('speaking', !$('quote').classList.contains('hidden') || !$('frame-greeting').classList.contains('hidden'));
+
   function greet(view) {
     const pairs = [['greeting', 'greeting-sub'], ['frame-greeting', 'frame-greeting-sub']];
-    const hide = () => { pairs.flat().forEach(id => $(id).classList.add('hidden')); $('confetti').classList.add('hidden'); $('confetti').innerHTML = ''; };
-    if (view !== 'idle') { hide(); return; }
+    const hide = () => { pairs.flat().forEach(id => $(id).classList.add('hidden')); $('confetti').classList.add('hidden'); $('confetti').innerHTML = ''; syncSpeaking(); };
+    if (view !== 'idle') { hide(); hideQuote(); return; }
     if (last.greet && last.greet.id !== greetedId) {
       greetedId = last.greet.id;
-      const hour = new Date().getHours(), period = hour >= 5 && hour < 12 ? 'Bom dia' : hour >= 12 && hour < 18 ? 'Boa tarde' : 'Boa noite', birthday = !!last.greet.birthday;
-      const text = birthday ? `🎂 Feliz aniversário, ${last.greet.name}!` : `${period}, ${last.greet.name}`;
-      const extra = birthday ? `${last.greet.age ? `Hoje você completa ${last.greet.age} anos. ` : ''}${BIRTHDAY_LINES[last.greet.id % BIRTHDAY_LINES.length]}` : '';
-      for (const [headline, sub] of pairs) {
-        $(headline).textContent = text; $(headline).classList.toggle('birthday', birthday); $(headline).classList.remove('hidden');
-        $(sub).textContent = extra; $(sub).classList.toggle('hidden', !birthday);
+      const msgs = last.greet.msgs || [], birthday = !!last.greet.birthday, shownFor = birthday ? 25000 : 10000;
+      if (!last.greet.quiet) {
+        const hour = new Date().getHours(), period = hour >= 5 && hour < 12 ? 'Bom dia' : hour >= 12 && hour < 18 ? 'Boa tarde' : 'Boa noite';
+        const text = birthday ? `🎂 Feliz aniversário, ${last.greet.name}!` : `${period}, ${last.greet.name}`;
+        const extra = birthday ? `${last.greet.age ? `Hoje você completa ${last.greet.age} anos. ` : ''}${BIRTHDAY_LINES[last.greet.id % BIRTHDAY_LINES.length]}` : '';
+        for (const [headline, sub] of pairs) {
+          $(headline).textContent = text; $(headline).classList.toggle('birthday', birthday); $(headline).classList.remove('hidden');
+          $(sub).textContent = extra; $(sub).classList.toggle('hidden', !birthday);
+        }
+        if (birthday) party(); else $('confetti').classList.add('hidden');
+        clearTimeout(greetTimer);
+        greetTimer = setTimeout(hide, shownFor);
+        syncSpeaking();
       }
-      if (birthday) party(); else $('confetti').classList.add('hidden');
-      clearTimeout(greetTimer);
-      greetTimer = setTimeout(hide, birthday ? 25000 : 10000);
+      if (msgs.length) showQuotes(msgs, last.greet.quiet ? 0 : shownFor + 500);
     }
   }
 
@@ -192,7 +220,7 @@
 
   function wake() { awakeUntil = Date.now() + cfg().awake * 1000; render(); }
   document.addEventListener('pointerdown', event => {
-    if (screen.dataset.mode !== 'ui') { swallowClick = true; event.preventDefault(); event.stopPropagation(); }
+    if (screen.dataset.mode !== 'ui' && $('quote').classList.contains('hidden')) { swallowClick = true; event.preventDefault(); event.stopPropagation(); }
     wake();
   }, true);
   document.addEventListener('click', event => { if (swallowClick) { swallowClick = false; event.preventDefault(); event.stopPropagation(); } }, true);
