@@ -80,6 +80,8 @@ class Jobs:
                 if pending:
                     transcode(self.db, pending[0])
                 if self.learning and time.time() - self.learning.last_scan >= LEARNING_INTERVAL:
+                    if self.recognition:
+                        self.recognition.merge_fragments(time.time() - 3 * 86400)
                     self.learning.scan()
                 if self.backups and self.backups.due():
                     try:

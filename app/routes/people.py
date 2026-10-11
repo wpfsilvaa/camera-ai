@@ -29,6 +29,10 @@ class PersonBirthday(BaseModel):
     birthday: str | None = Field(default=None, max_length=10)
 
 
+class TrackMerge(BaseModel):
+    into: int
+
+
 class PersonConfirmation(BaseModel):
     person_id: str | None = None
     sample_id: str | None = None
@@ -133,6 +137,16 @@ def build(recognition, learning, on_forget=None):
     @router.patch('/api/person-tracks/{track_id}')
     def confirm_person(track_id: int, body: PersonConfirmation):
         call_service(recognition.confirm, track_id, body.person_id, body.sample_id)
+        return {'ok': True}
+
+    @router.delete('/api/person-tracks/{track_id}')
+    def ignore_person(track_id: int):
+        call_service(recognition.ignore_track, track_id)
+        return {'ok': True}
+
+    @router.post('/api/person-tracks/{track_id}/merge')
+    def merge_person(track_id: int, body: TrackMerge):
+        call_service(recognition.merge_tracks, track_id, body.into)
         return {'ok': True}
 
     @router.get('/people-media/{filename}')

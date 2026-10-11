@@ -15,6 +15,9 @@ from .config import PEOPLE
 from .faces import FaceEncoder, normalized
 
 
+MERGE_GAP = 10   # Seconds between two tracker numbers of one person for them to count as the same person.
+
+
 def match_person(feature, gallery, threshold=.50, margin=.08):
     vector = normalized(feature)
     grouped = {}
@@ -312,6 +315,87 @@ class Recognition:
                     (SELECT id FROM person_samples WHERE person_id=? ORDER BY created DESC LIMIT 100)''', (person_id,person_id))
             recompute_identity(db,track['event_id'])
             self.invalidate(db)
+
+    def _open_track(self, db, track_id):
+        track = db.execute('''SELECT t.*,e.ended FROM person_tracks t JOIN events e ON e.id=t.event_id WHERE t.id=?''', (track_id,)).fetchone()
+        if track is None:
+            raise KeyError('Pessoa do registro não encontrada.')
+        if track['ended'] is None:
+            raise ValueError('Aguarde o fim do registro para alterar as pessoas.')
+        return track
+
+    def ignore_track(self, track_id):
+        """The detection was not a person (or a duplicate): drop it and the unconfirmed photos it collected."""
+        with self.lock, self.db.connect() as db:
+            track = self._open_track(db, track_id)
+            if track['reviewed']:
+                raise ValueError('Esta pessoa já foi identificada. Use “Não sei / desfazer” antes de ignorar.')
+            samples = [r['id'] for r in db.execute('SELECT id FROM person_samples WHERE track_id=?', (track_id,))]
+            if db.execute('SELECT 1 FROM person_samples WHERE track_id=? AND person_id IS NOT NULL', (track_id,)).fetchone():
+                raise ValueError('Há exemplos ensinados nesta pessoa. Use “Não sei / desfazer” antes de ignorar.')
+            db.execute('DELETE FROM person_samples WHERE track_id=?', (track_id,))
+            db.execute('DELETE FROM person_tracks WHERE id=?', (track_id,))
+            recompute_identity(db, track['event_id'])
+        for sample in samples:
+            (self.directory / f'{sample}.jpg').unlink(missing_ok=True)
+
+    def merge_tracks(self, source_id, target_id):
+        """Two numbers of the same record were the same person: move everything of `source` into `target`."""
+        if source_id == target_id:
+            raise ValueError('Escolha outra pessoa para juntar.')
+        with self.lock, self.db.connect() as db:
+            source, target = self._open_track(db, source_id), self._open_track(db, target_id)
+            if source['event_id'] != target['event_id']:
+                raise ValueError('As duas pessoas precisam ser do mesmo registro.')
+            if source['reviewed'] and target['reviewed'] and source['person_id'] != target['person_id']:
+                raise ValueError('As duas já foram identificadas como pessoas diferentes.')
+            db.execute('UPDATE person_samples SET track_id=? WHERE track_id=?', (target_id, source_id))
+            db.execute('UPDATE person_tracks SET started=MIN(started,?),last_seen=MAX(last_seen,?) WHERE id=?', (source['started'], source['last_seen'], target_id))
+            if source['reviewed'] and not target['reviewed']:
+                db.execute('UPDATE person_tracks SET person_id=?,reviewed=1,suggested_id=NULL,similarity=NULL WHERE id=?', (source['person_id'], target_id))
+            elif not target['reviewed'] and source['suggested_id'] and (not target['suggested_id'] or (source['similarity'] or 0) > (target['similarity'] or 0)):
+                db.execute('UPDATE person_tracks SET suggested_id=?,similarity=?,recognition_kind=?,recognized_at=? WHERE id=?',
+                           (source['suggested_id'], source['similarity'], source['recognition_kind'], source['recognized_at'], target_id))
+            db.execute('DELETE FROM person_tracks WHERE id=?', (source_id,))
+            recompute_identity(db, target['event_id'])
+
+    def merge_fragments(self, since):
+        """Records with one person at a time whose tracker handed out several numbers: join the ones that follow each other.
+
+        Only unconfirmed numbers that start soon after the previous one ended (and do not suggest different people) are joined.
+        Returns how many were joined.
+        """
+        joined = 0
+        events = self.db.rows('''SELECT e.id FROM events e WHERE e.ended IS NOT NULL AND e.started>=? AND e.max_people<=1
+            AND (SELECT COUNT(*) FROM person_tracks t WHERE t.event_id=e.id AND t.reviewed=0)>1''', (since,))
+        for event in events:
+            tracks = self.db.rows('SELECT id,started,last_seen,suggested_id FROM person_tracks WHERE event_id=? AND reviewed=0 ORDER BY started,id', (event['id'],))
+            group = [tracks[0]]
+            for track in tracks[1:]:
+                gap = track['started'] - max(t['last_seen'] for t in group)
+                suggested = {t['suggested_id'] for t in group if t['suggested_id']}
+                if -1 <= gap <= MERGE_GAP and (not track['suggested_id'] or not suggested or {track['suggested_id']} == suggested):
+                    group.append(track)
+                else:
+                    joined += self._join(group)
+                    group = [track]
+            joined += self._join(group)
+        return joined
+
+    def _join(self, group):
+        if len(group) < 2:
+            return 0
+        counts = {t['id']: self.db.rows('SELECT COUNT(*) AS n FROM person_samples WHERE track_id=?', (t['id'],))[0]['n'] for t in group}
+        keep = max(group, key=lambda t: (counts[t['id']], bool(t['suggested_id']), -t['started']))
+        done = 0
+        for track in group:
+            if track['id'] != keep['id']:
+                try:
+                    self.merge_tracks(track['id'], keep['id'])
+                    done += 1
+                except (KeyError, ValueError):
+                    continue
+        return done
 
     def load_gallery(self):
         revision = self.db.rows('SELECT revision FROM recognition_meta WHERE id=1')[0]['revision']

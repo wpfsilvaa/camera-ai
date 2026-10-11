@@ -83,6 +83,30 @@ class LearningTests(unittest.TestCase):
         self.assertEqual(self.learning.pending(), [])
         self.assertEqual(self.db.rows('SELECT person_id FROM person_tracks WHERE id=?', (track,))[0]['person_id'], 'father')
 
+    def test_ignore_and_merge_tracks_of_a_finished_record(self):
+        event = self.event()
+        first, (kept,) = self.track(event, faces=[((.97, .2, .1), 90)])
+        second, (moved,) = self.track(event, faces=[((.9, .1, .42), 80)])
+        ghost, _ = self.track(event, suggested=None)
+        self.recognition.ignore_track(ghost)
+        self.recognition.merge_tracks(second, first)
+        tracks = self.db.rows('SELECT id FROM person_tracks WHERE event_id=?', (event,))
+        self.assertEqual([t['id'] for t in tracks], [first])
+        self.assertEqual({r['id'] for r in self.db.rows('SELECT id FROM person_samples WHERE track_id=?', (first,))}, {kept, moved})
+        with self.assertRaises(ValueError):
+            self.recognition.merge_tracks(first, first)
+        with self.assertRaises(ValueError):
+            self.recognition.ignore_track(self.db.rows('SELECT id FROM person_tracks WHERE reviewed=1')[0]['id'])   # Taught: refused.
+
+    def test_fragments_of_a_single_person_record_are_joined_automatically(self):
+        event = self.event()
+        a, _ = self.track(event, suggested=None, faces=[((.97, .2, .1), 90)])
+        b, _ = self.track(event, suggested=None)
+        self.db.execute('UPDATE person_tracks SET started=?,last_seen=? WHERE id=?', (self.now - 60, self.now - 50, a))
+        self.db.execute('UPDATE person_tracks SET started=?,last_seen=? WHERE id=?', (self.now - 46, self.now - 31, b))
+        self.assertEqual(self.recognition.merge_fragments(self.now - 3600), 1)
+        self.assertEqual([t['id'] for t in self.db.rows('SELECT id FROM person_tracks WHERE event_id=?', (event,))], [a])
+
     def test_approve_teaches_and_reject_is_remembered(self):
         track, (sample,) = self.track(self.event(), faces=[((.9, .1, .42), 200)])
         self.learning.scan(self.now)
