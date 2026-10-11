@@ -51,8 +51,11 @@ def build(recognition, learning):
         return learning.pending()
 
     @router.post('/api/learning/{sample_id}/{decision}')
-    def decide_suggestion(sample_id: str, decision: Literal['approve', 'reject']):
-        call_service(learning.decide, sample_id, decision == 'approve')
+    def decide_suggestion(sample_id: str, decision: Literal['approve', 'reject', 'discard']):
+        if decision == 'discard':
+            call_service(learning.discard, sample_id)   # Deletes the photo: it was too poor to learn from.
+        else:
+            call_service(learning.decide, sample_id, decision == 'approve')
         return {'ok': True}
 
     @router.get('/api/people')

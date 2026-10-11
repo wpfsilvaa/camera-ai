@@ -86,6 +86,24 @@ class LearningTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             self.learning.decide(second, True)
 
+    def test_discarding_deletes_the_photo_and_keeps_everything_else(self):
+        people = self.recognition.directory
+        people.mkdir(exist_ok=True)
+        track, (blurry, other) = self.track(self.event(), faces=[((.9, .1, .42), 200), ((.5, .5, .5), 20)])
+        (people / f'{blurry}.jpg').write_bytes(b'jpg')
+        self.learning.scan(self.now)
+        self.assertEqual([p['sample_id'] for p in self.learning.pending()], [blurry])
+        self.learning.discard(blurry)
+        self.assertFalse((people / f'{blurry}.jpg').exists())
+        self.assertEqual(self.db.rows('SELECT COUNT(*) AS n FROM person_samples WHERE id=?', (blurry,))[0]['n'], 0)
+        self.assertEqual(self.db.rows('SELECT COUNT(*) AS n FROM learning_suggestions WHERE sample_id=?', (blurry,))[0]['n'], 0)
+        self.assertEqual(self.db.rows('SELECT COUNT(*) AS n FROM person_samples WHERE id=?', (other,))[0]['n'], 1)   # Other faces stay.
+        self.assertEqual(self.db.rows('SELECT COUNT(*) AS n FROM person_samples WHERE person_id=?', ('father',))[0]['n'], 2)   # Confirmed examples too.
+        with self.assertRaises(KeyError):
+            self.learning.discard(blurry)                                      # Already gone.
+        with self.assertRaises(KeyError):
+            self.learning.discard(other)                                       # Never suggested: not this action's job.
+
     def test_can_be_turned_off(self):
         settings = self.config.get(); settings.learning_suggestions_enabled = False; self.config.save(settings)
         self.track(self.event(), faces=[((.9, .1, .42), 200)])

@@ -91,3 +91,16 @@ class LearningSuggestions:
             # The same path as a manual confirmation in the history: teaches this face and names the person.
             self.recognition.confirm(rows[0]['track_id'], rows[0]['person_id'], sample_id)
         self.db.execute('UPDATE learning_suggestions SET state=? WHERE sample_id=?', ('approved' if approve else 'rejected', sample_id))
+
+    def discard(self, sample_id):
+        """A bad photo (blurred, cut off, someone else's back): delete it so nothing is ever learned from it.
+
+        The unconfirmed sample and its file go away; the record, the other faces of the track and every
+        confirmed example stay untouched.
+        """
+        rows = self.db.rows("""SELECT s.id FROM learning_suggestions l JOIN person_samples s ON s.id=l.sample_id
+            WHERE l.sample_id=? AND l.state='pending' AND s.person_id IS NULL""", (sample_id,))
+        if not rows:
+            raise KeyError('Sugestão não encontrada ou já decidida.')
+        self.db.execute('DELETE FROM person_samples WHERE id=? AND person_id IS NULL', (sample_id,))   # The suggestion goes with it (cascade).
+        (self.recognition.directory / f'{sample_id}.jpg').unlink(missing_ok=True)
