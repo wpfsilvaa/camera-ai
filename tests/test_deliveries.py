@@ -51,6 +51,18 @@ class DeliveriesTests(unittest.TestCase):
         self.assertCountEqual(self.sent,[(a,PRIMARY),(b,PRIMARY),(a,SISTER),(a,OTHER)])
         self.assertEqual(self.db.rows('SELECT delivery FROM clips WHERE id=?',(a,))[0]['delivery'],'sent')
 
+    def test_restricted_mode_videos_stay_out_of_whatsapp_when_it_is_switched_off(self):
+        quiet, a = self.clip('a')
+        loud, b = self.clip('b', started=200)
+        plain, c = self.clip('c', started=300)
+        self.db.execute('UPDATE events SET camera_settings=? WHERE id=?', (json.dumps({'restricted_enabled': True, 'restricted_whatsapp': False}), quiet))
+        self.db.execute('UPDATE events SET camera_settings=? WHERE id=?', (json.dumps({'restricted_enabled': True, 'restricted_whatsapp': True}), loud))
+        self.db.execute('UPDATE events SET camera_settings=? WHERE id=?', (json.dumps({'restricted_enabled': False, 'restricted_whatsapp': False}), plain))
+        self.drain(12)
+        sent_clips = {clip for clip, _ in self.sent}
+        self.assertEqual(sent_clips, {b, c})                                              # Only the web-app-only restricted clip is held back.
+        self.assertEqual(self.db.rows('SELECT delivery FROM clips WHERE id=?', (a,))[0]['delivery'], 'skipped')
+
     def test_failure_and_selective_retry_do_not_repeat_successful_deliveries(self):
         _,clip=self.clip();self.fail[SISTER]=500;self.drain()
         self.assertEqual(len(self.sent),3)

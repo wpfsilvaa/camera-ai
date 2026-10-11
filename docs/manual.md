@@ -287,6 +287,17 @@ Com **Usar a rotina aprendida** (padrão), após 7 dias com registros o sistema 
 
 A visão geral mostra a rotina e um gráfico da média de registros por hora nos últimos 28 dias. São estatísticas simples (mediana e percentil 90), recalculadas a cada 10 minutos, sem enviar dados para fora.
 
+## Modo restrito (a geladeira, um armário)
+
+Em **Configurações → Câmera → Modo restrito**, desenhe uma área na imagem e escolha **quem a ativa**: o pai, o pai ou uma pessoa
+não reconhecida, ou qualquer pessoa. Com o modo ligado, o **vídeo só é gravado enquanto uma pessoa vigiada está dentro da
+área**; nas demais presenças ficam só registros com fotos. Quem já foi reconhecido como outra pessoa (por exemplo, você) não
+ativa a opção "pai ou não reconhecida", então use "qualquer pessoa" para testar.
+
+- **Enviar alerta ao entrar na área:** foto e notificação, uma por visita.
+- **Enviar pelo WhatsApp:** desligue para receber só as **notificações do painel no celular**. O alerta não vai ao WhatsApp
+  e os vídeos gravados por esse modo não entram na fila de envio (ficam no histórico). Ligado (padrão), continua como antes.
+
 ## Possível queda
 
 Em **Configurações → 06 · Possível queda**, ative **Detectar pessoa deitada fora da cama/sofá**. A detecção passa a usar o modelo **YOLO26 pose** (`yolo26n-pose.pt`), que detecta as mesmas pessoas e também os pontos do corpo.

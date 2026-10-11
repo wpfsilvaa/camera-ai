@@ -1,3 +1,4 @@
+import json
 import logging
 import threading
 import time
@@ -35,6 +36,15 @@ def caption_for(clip, event, settings, probable):
            else 'Provável presença do pai (reconhecimento facial automático)' if probable
            else 'Presença detectada')
     return f'{who} · {event["camera_name"] or settings.camera_name}\n{when} · {round(clip["duration"])} s\nRegistro #{clip["event_id"]}'
+
+
+def restricted_without_whatsapp(camera_settings):
+    """True for a clip recorded by a camera in restricted mode whose WhatsApp sending was switched off."""
+    try:
+        saved = json.loads(camera_settings or '{}')
+    except ValueError:
+        return False
+    return bool(saved.get('restricted_enabled')) and saved.get('restricted_whatsapp') is False
 
 
 class Jobs:
@@ -102,11 +112,14 @@ class Jobs:
         if not targets:
             return
         with self.db.connect() as db:
-            clips = db.execute("""SELECT id,started FROM clips WHERE state='ready' AND delivery IN ('pending','retry')
+            clips = db.execute("""SELECT clips.id,clips.started,e.camera_settings FROM clips JOIN events e ON e.id=clips.event_id
+                WHERE clips.state='ready' AND clips.delivery IN ('pending','retry')
                 AND NOT EXISTS(SELECT 1 FROM clip_deliveries d WHERE d.clip_id=clips.id)
-                ORDER BY started LIMIT 100""").fetchall()
+                ORDER BY clips.started LIMIT 100""").fetchall()
             for clip in clips:
                 eligible = {phone: policy for phone, policy in targets.items() if clip['started'] >= settings.recipient_since.get(phone, 0)}
+                if restricted_without_whatsapp(clip['camera_settings']):
+                    eligible = {}   # Restricted mode set to web-app notifications only: the video stays in the history.
                 if not eligible:
                     db.execute("UPDATE clips SET delivery='skipped',error=NULL WHERE id=?", (clip['id'],))
                 db.executemany('INSERT OR IGNORE INTO clip_deliveries(clip_id,recipient,father_only) VALUES(?,?,?)',

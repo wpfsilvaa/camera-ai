@@ -66,6 +66,8 @@ class CameraSettings(BaseModel):
     restricted_zones: list[list[float]] = Field(default_factory=list, max_length=10)
     restricted_who: str = 'father'
     restricted_alert: bool = False
+    # Restricted mode: send its alert and videos by WhatsApp too. Off = web-app notifications only.
+    restricted_whatsapp: bool = True
 
     @field_validator('camera_source')
     @classmethod

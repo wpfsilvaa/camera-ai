@@ -156,14 +156,14 @@ class Alerts:
                                 f'há {round(seconds)} s ({clock(now)}). Ligue ou peça para alguém verificar agora.',
                                 now, image=True, camera_id=camera_id)
 
-    def restricted(self, camera_id, camera_name, jpeg, name, now=None):
+    def restricted(self, camera_id, camera_name, jpeg, name, now=None, whatsapp=True):
         """Someone watched entered a restricted area (the fridge, in restricted mode): alert with the photo."""
         now = now or time.time()
         alert_id = f'restricted-{camera_id}-{int(now)}'
         (IMAGES / f'{alert_id}.jpg').write_bytes(jpeg)
         return self.raise_alert(alert_id, 'restricted',
                                 f'⚠️ {name or "Uma pessoa"} entrou na área restrita da câmera {camera_name} ({clock(now)}). '
-                                f'O vídeo fica no histórico.', now, image=True, camera_id=camera_id)
+                                f'O vídeo fica no histórico.', now, image=True, camera_id=camera_id, whatsapp=whatsapp)
 
     def notebook_call(self, call_id, kind, jpeg, since, now=None, reminder=0):
         """The kitchen notebook's button was pressed (kind "call" or "panic"): alert at once, then remind while nobody answers."""
@@ -215,9 +215,9 @@ class Alerts:
     def exists(self, alert_id):
         return bool(self.db.rows('SELECT 1 FROM alerts WHERE id=?', (alert_id,)))
 
-    def raise_alert(self, alert_id, kind, message, now, image=False, camera_id=None):
-        """Record an alert once per id and queue it for every WhatsApp recipient."""
-        recipients = list(self.config.get().delivery_targets())
+    def raise_alert(self, alert_id, kind, message, now, image=False, camera_id=None, whatsapp=True):
+        """Record an alert once per id and queue it for every WhatsApp recipient (or only notify the web app)."""
+        recipients = list(self.config.get().delivery_targets()) if whatsapp else []
         with self.db.connect() as db:
             created = db.execute('INSERT OR IGNORE INTO alerts(id,kind,created,message,image) VALUES(?,?,?,?,?)',
                                  (alert_id, kind, now, message, int(image))).rowcount

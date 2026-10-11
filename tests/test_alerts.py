@@ -74,6 +74,15 @@ class AlertsTests(unittest.TestCase):
         self.alerts.restricted('main', 'Cozinha', b'JPEG', None, now=MORNING + 60)
         self.assertTrue(heard[1]['message'].startswith('⚠️ Uma pessoa entrou'))
 
+    def test_restricted_alert_can_go_to_the_web_app_only(self):
+        heard = []
+        self.alerts.listeners.append(heard.append)
+        self.alerts.restricted('main', 'Cozinha', b'JPEG', 'Meu pai', now=MORNING, whatsapp=False)
+        self.assertEqual(heard[0]['kind'], 'restricted')                                   # Push listeners still hear it.
+        self.assertEqual(self.db.rows('SELECT COUNT(*) AS n FROM alert_deliveries')[0]['n'], 0)   # ...but nothing queued for WhatsApp.
+        self.alerts.restricted('main', 'Cozinha', b'JPEG', 'Meu pai', now=MORNING + 60)
+        self.assertGreater(self.db.rows('SELECT COUNT(*) AS n FROM alert_deliveries')[0]['n'], 0)  # The default still sends it.
+
     def test_quiet_hours_wrap_midnight(self):
         self.assertTrue(in_quiet_hours(23, 22, 7))
         self.assertTrue(in_quiet_hours(3, 22, 7))

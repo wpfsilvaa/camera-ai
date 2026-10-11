@@ -192,7 +192,7 @@ class CameraWorker:
         encoded,jpeg=cv2.imencode('.jpg',resize_width(snapshot,1280),[cv2.IMWRITE_JPEG_QUALITY,85])
         if encoded:
             try:
-                self.on_restricted(self.camera_id,settings.camera_name,jpeg.tobytes(),name)
+                self.on_restricted(self.camera_id,settings.camera_name,jpeg.tobytes(),name,None,settings.restricted_whatsapp)
             except Exception:
                 log.exception('Falha ao registrar visita à área restrita')
 
