@@ -92,6 +92,22 @@ class BirthdayStorageTests(unittest.TestCase):
                 recognition.set_birthday('missing', None)
 
 
+class PhoneStorageTests(unittest.TestCase):
+    def test_set_validate_and_clear(self):
+        with tempfile.TemporaryDirectory() as folder:
+            db = Database(Path(folder) / 'h.sqlite3')
+            recognition = Recognition(db, Path(folder))
+            person = recognition.create_person('Ana')
+            recognition.set_phone(person, '+55 (11) 98888-7777')
+            self.assertEqual(db.rows('SELECT phone FROM people WHERE id=?', (person,))[0]['phone'], '5511988887777')
+            with self.assertRaises(ValueError):
+                recognition.set_phone(person, '123')
+            recognition.set_phone(person, '')
+            self.assertIsNone(db.rows('SELECT phone FROM people WHERE id=?', (person,))[0]['phone'])
+            with self.assertRaises(KeyError):
+                recognition.set_phone('father', '5511988887777')   # The father is the one calling.
+
+
 class ReminderTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

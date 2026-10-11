@@ -197,6 +197,15 @@ class Recognition:
             if not db.execute('UPDATE people SET birthday=? WHERE id=?', (birthday, person_id)).rowcount:
                 raise KeyError('Pessoa não encontrada.')
 
+    def set_phone(self, person_id, phone):
+        """WhatsApp number (country code + area code + number) or None. Persons with a number get a call button on the kitchen screen."""
+        phone = ''.join(c for c in str(phone or '') if c not in ' +()-')
+        if phone and (not phone.isascii() or not phone.isdigit() or not 10 <= len(phone) <= 15):
+            raise ValueError('Use DDI + DDD + número, por exemplo 5511999999999.')
+        with self.lock, self.db.connect() as db:
+            if not db.execute('UPDATE people SET phone=? WHERE id=? AND is_father=0', (phone or None, person_id)).rowcount:
+                raise KeyError('Pessoa não encontrada.')
+
     def rename_person(self, person_id, name):
         with self.lock, self.db.connect() as db:
             if not db.execute('UPDATE people SET name=? WHERE id=?', (name, person_id)).rowcount:

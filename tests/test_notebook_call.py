@@ -122,20 +122,26 @@ class CallAlertTests(unittest.TestCase):
         self.assertEqual([a['kind'] for a in self.heard], ['call', 'call'])
         self.assertIn('Ainda sem resposta', self.heard[1]['message'])
 
-    def test_a_call_to_one_person_rings_only_their_phones_then_the_whole_family(self):
-        self.reading = {**self.reading, 'call': {'id': 'abc', 'kind': 'call', 'state': 'ringing', 'since': 1000.0, 'to': 'u1', 'to_name': 'Lorena'}}
+    def test_a_call_to_one_person_also_sends_them_their_own_whatsapp(self):
+        self.monitor.callee_phone = lambda person: '5511988887777' if person == 'p1' else None
+        self.reading = {**self.reading, 'call': {'id': 'abc', 'kind': 'call', 'state': 'ringing', 'since': 1000.0, 'to': 'p1', 'to_name': 'Lorena'}}
         self.poll(1001)
-        self.assertEqual((self.heard[0]['to_user'], 'chamando Lorena' in self.heard[0]['message']), ('u1', True))
-        self.poll(1000 + 25)
-        self.assertEqual({r['to_user'] for r in self.rang}, {'u1'})
-        self.poll(1000 + 95)
-        self.poll(1000 + 120)
-        everyone = [a for a in self.heard if a['id'] == 'call-abc-all']
-        self.assertEqual(len(everyone), 1)
-        self.assertIsNone(everyone[0]['to_user'])
-        self.poll(1000 + 100)
-        self.assertEqual(len([a for a in self.heard if a['id'] == 'call-abc-all']), 1)   # Said once.
-        self.assertIsNone(self.rang[-1]['to_user'])
+        self.poll(1005)
+        general, personal = self.heard[0], None
+        self.assertIn('chamando Lorena', general['message'])
+        self.assertEqual(len([a for a in self.alerts.recent(10) if a['id'] == 'call-abc-to']), 1)   # Once.
+        rows = self.db.rows('SELECT alert_id,recipient FROM alert_deliveries ORDER BY alert_id')
+        self.assertIn(('call-abc-to', '5511988887777'), [(r['alert_id'], r['recipient']) for r in rows])
+        self.assertEqual([r['recipient'] for r in rows if r['alert_id'] == 'call-abc-to'], ['5511988887777'])
+        self.assertEqual(len(self.heard), 1)   # The personal message does not push to everyone.
+
+    def test_the_family_list_does_not_repeat_the_person_called(self):
+        self.config.save(Settings(recipient='5511999999999', additional_recipients=['5511988887777'], notebook_call_enabled=True))
+        self.monitor.callee_phone = lambda person: '5511988887777'
+        self.reading = {**self.reading, 'call': {'id': 'abc', 'kind': 'call', 'state': 'ringing', 'since': 1000.0, 'to': 'p1', 'to_name': 'Lorena'}}
+        self.poll(1001)
+        general = [r['recipient'] for r in self.db.rows("SELECT recipient FROM alert_deliveries WHERE alert_id='call-abc'")]
+        self.assertEqual(general, ['5511999999999'])
 
     def test_panic_is_urgent_and_reminds_up_to_five_times(self):
         self.ring('panic')

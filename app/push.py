@@ -219,8 +219,8 @@ class Push:
             rows = self.presence_devices(alert.get('audience', 'all'), alert.get('created') or time.time())
         else:
             kind = alert['kind']
-            rows = [row for row in self.db.rows('SELECT endpoint,keys,muted,user_id FROM push_subscriptions')
-                    if (not alert.get('to_user') or row['user_id'] == alert['to_user']) and not any(kind in kinds and key in json.loads(row['muted']) for key, (_, kinds) in TOPICS.items())]
+            rows = [row for row in self.db.rows('SELECT endpoint,keys,muted FROM push_subscriptions')
+                    if not any(kind in kinds and key in json.loads(row['muted']) for key, (_, kinds) in TOPICS.items())]
         sent = 0
         for row in rows:
             if self.send(row['endpoint'], json.loads(row['keys']), payload, urgent=alert['kind'] in IMMEDIATE, ttl=90 if alert.get('ring') or calm else 3600):

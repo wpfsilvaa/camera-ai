@@ -124,7 +124,7 @@ depende do aparelho (o painel de um notebook costuma ser uma das maiores cargas)
 
 ### Chamar uma pessoa pelo nome
 
-Em **Configurações → Totem**, escolha até 4 usuários em **Botões para chamar uma pessoa**. Cada um aparece na tela do notebook como um botão redondo com a foto (cada pessoa envia a própria em **Minha conta → Minha foto**; sem foto, aparece a inicial). Tocar chama só aquela pessoa: a notificação toca só nos aparelhos dela e a tela mostra "Chamando Fulana…". Se ela não atender em **90 segundos**, a família toda é avisada. "Chamar a família" continua existindo.
+Em **Pessoas**, cada pessoa (menos o pai) tem os campos **WhatsApp** e **Foto do botão**. Quem tem WhatsApp cadastrado ganha, na tela do notebook, um botão redondo com a foto (sem foto, aparece a inicial); são no máximo 4, as mais antigas primeiro. Tocar chama aquela pessoa: a família recebe o aviso de sempre ("Seu pai está chamando Fulana") e **a própria pessoa recebe também uma mensagem só dela no WhatsApp**, sem repetir a que a família recebeu. A tela mostra "Chamando Fulana…". "Chamar a família" continua existindo.
 
 ## Luz de passagem à noite
 

@@ -124,7 +124,7 @@ def vigia_for_kitchen():
     if settings.notebook_call_enabled:
         contacts = call_contacts()
         if contacts:
-            info['callto'] = json.dumps([{'i': i, 'n': n} for i, n in contacts], ensure_ascii=False)
+            info['callto'] = json.dumps([{'i': i, 'n': n} for i, n, _ in contacts], ensure_ascii=False)
     forecast = weather.current(settings)
     if forecast:
         info['weather'] = json.dumps(forecast, ensure_ascii=False)
@@ -176,7 +176,8 @@ def screen_busy():
 
 notebook.busy = screen_busy
 notebook.photos = photos
-notebook.avatars = lambda: [(i, avatars.path(i) if avatars.has(i) else None, avatars.rev(i)) for i, _ in call_contacts()]
+notebook.callee_phone = lambda person_id: next((phone for i, _, phone in call_contacts() if i == person_id), None)
+notebook.avatars = lambda: [(i, avatars.path(i) if avatars.has(i) else None, avatars.rev(i)) for i, _, _ in call_contacts()]
 
 
 def messages_delivered(ids):
@@ -226,7 +227,7 @@ PUBLIC = {
     '/sw.js', '/manifest.webmanifest', '/static/icon-192.png', '/static/icon-512.png', '/static/icon-maskable.png',
 }
 # Family accounts are read-only; these (their own password and devices) are the only changes they may make.
-FAMILY_WRITES = {'/api/auth/logout', '/api/auth/password', '/api/auth/profile', '/api/auth/avatar', '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/test',
+FAMILY_WRITES = {'/api/auth/logout', '/api/auth/password', '/api/auth/profile', '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/test',
                  '/api/push/presence-status', '/api/push/presence', '/api/push/topics-status', '/api/push/topics', '/api/notebook/call/answer', '/api/notebook/call/end',
                  '/api/intercom/listen', '/api/intercom/talk', '/api/intercom/video', '/api/intercom/face', '/api/intercom/hangup'}
 
@@ -333,48 +334,38 @@ def delete_reminder(reminder_id: str, request: Request):
 
 
 def call_contacts():
-    """Accounts chosen for their own call button on the kitchen screen: [(id, first name)], in the order chosen."""
-    chosen = config.get().kiosk_call_users
-    names = {u['id']: u['name'] for u in auth.users()}
-    return [(i, first_name(names[i])) for i in chosen if i in names]
+    """People with a WhatsApp number get their own call button on the kitchen screen: [(id, first name, phone)], oldest first."""
+    rows = db.rows('SELECT id,name,phone FROM people WHERE phone IS NOT NULL AND is_father=0 ORDER BY created LIMIT 4')
+    return [(r['id'], first_name(r['name']), r['phone']) for r in rows]
 
 
-@app.get('/api/call-contacts')
-def list_call_contacts(request: Request):
-    me = request.state.user
-    return {'users': [{'id': u['id'], 'name': u['name'], 'avatar': avatars.has(u['id']), 'me': bool(me) and me['id'] == u['id']} for u in auth.users()]}
-
-
-@app.post('/api/auth/avatar')
-async def upload_avatar(request: Request):
-    user = request.state.user
-    if not user:
-        raise HTTPException(409, 'Crie um usuário antes de enviar a foto do perfil.')
+@app.post('/api/people/{person_id}/photo')
+async def upload_person_photo(person_id: str, request: Request):
+    if not db.rows('SELECT 1 FROM people WHERE id=? AND is_father=0', (person_id,)):
+        raise HTTPException(404, 'Pessoa não encontrada.')
     content = bytearray()
     async for chunk in request.stream():
         content.extend(chunk)
         if len(content) > AVATAR_MAX:
             raise HTTPException(413, 'A foto deve ter até 8 MB.')
     try:
-        await run_in_threadpool(avatars.save, user['id'], bytes(content))
+        await run_in_threadpool(avatars.save, person_id, bytes(content))
     except Exception:
         raise HTTPException(422, 'Envie uma foto JPEG ou PNG válida.')
     return {'ok': True}
 
 
-@app.delete('/api/auth/avatar')
-def delete_avatar(request: Request):
-    user = request.state.user
-    if user:
-        avatars.delete(user['id'])
+@app.delete('/api/people/{person_id}/photo')
+def delete_person_photo(person_id: str):
+    avatars.delete(person_id)
     return {'ok': True}
 
 
-@app.get('/avatar-media/{user_id}.jpg')
-def avatar_media(user_id: str):
-    if not avatars.has(user_id):
+@app.get('/avatar-media/{person_id}.jpg')
+def avatar_media(person_id: str):
+    if not avatars.has(person_id):
         raise HTTPException(404)
-    return FileResponse(avatars.path(user_id), media_type='image/jpeg', headers={'Cache-Control': 'private, max-age=300'})
+    return FileResponse(avatars.path(person_id), media_type='image/jpeg', headers={'Cache-Control': 'private, max-age=300'})
 
 
 class JournalIn(BaseModel):
@@ -727,7 +718,7 @@ def author_renamed(user_id, name):
 
 
 app.include_router(auth_routes.build(auth, on_profile=author_renamed))
-app.include_router(people_routes.build(recognition, learning))
+app.include_router(people_routes.build(recognition, learning, on_forget=avatars.delete))
 app.include_router(alert_routes.build(alerts, config))
 app.include_router(backup_routes.build(backups))
 app.include_router(intercom_routes.build(config))

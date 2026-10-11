@@ -19,13 +19,14 @@ function personSummary(event) {
 }
 
 let profilesHtml = '';
+const photoRev = {};   // Changes when a call-button photo is replaced, so the browser fetches the new one.
 function renderProfiles() {
   const recognition = status?.recognition;
   if (!recognition) return;
   profiles = recognition.profiles;
   $('#recognition-status').textContent = !settings.recognition_enabled ? 'Reconhecimento facial desativado nas configurações.' : recognition.error || (settings.body_reid_enabled && recognition.body_error) || (recognition.ready ? `Reconhecimento facial local ativo.${settings.body_reid_enabled ? ` Memória corporal: ${recognition.body_reference_people || 0} pessoa(s), por até ${settings.body_memory_minutes} minutos após reconhecer o rosto.` : ''} Cadastre fotos nítidas do rosto.` : 'O modelo facial será iniciado com a câmera ou ao cadastrar uma foto.');
   // Rebuilt every few seconds: leave it alone while a field inside is being edited (a half-typed date would be lost) and when nothing changed.
-  const html = profiles.map(person => `<article class="panel profile-card"><div class="profile-avatar">${escapeHTML(person.name.slice(0,1).toUpperCase())}</div><h2>${escapeHTML(person.name)}</h2><span class="pill ${person.examples>=1?'green':'amber'}">${person.examples>=1?'Pode receber sugestões':'Precisa de exemplos'}</span><p>${person.examples} rosto(s) cadastrado(s)</p><p class="small muted">Presença confirmada em ${person.records} registro(s)${person.is_father ? ' · Perfil do pai' : ''}</p><label class="small birthday-field">Aniversário<input type="date" data-birthday="${person.id}" value="${person.birthday||''}" max="${new Date().toISOString().slice(0,10)}" aria-label="Aniversário de ${escapeHTML(person.name)}"></label><button type="button" class="button primary compact upload-face" data-face-upload="${person.id}">Cadastrar foto do rosto</button><div class="enrollment-photos">${(person.enrollments||[]).map(face=>`<div><img src="/people-media/${face.id}.jpg" alt="Rosto cadastrado de ${escapeHTML(person.name)}"><button class="text-button" data-remove-face="${face.id}" data-person="${person.id}">Remover</button></div>`).join('')}</div><div class="profile-actions"><button class="text-button" data-review-examples="${person.id}">Revisar exemplos (${person.examples})</button><button class="text-button" data-rename-person="${person.id}">Renomear</button><button class="text-button" data-forget-person="${person.id}">Esquecer exemplos</button>${!person.is_father?`<button class="text-button" data-delete-person="${person.id}">Excluir perfil</button>`:''}</div></article>`).join('');
+  const html = profiles.map(person => `<article class="panel profile-card"><div class="profile-avatar">${escapeHTML(person.name.slice(0,1).toUpperCase())}</div><h2>${escapeHTML(person.name)}</h2><span class="pill ${person.examples>=1?'green':'amber'}">${person.examples>=1?'Pode receber sugestões':'Precisa de exemplos'}</span><p>${person.examples} rosto(s) cadastrado(s)</p><p class="small muted">Presença confirmada em ${person.records} registro(s)${person.is_father ? ' · Perfil do pai' : ''}</p><label class="small birthday-field">Aniversário<input type="date" data-birthday="${person.id}" value="${person.birthday||''}" max="${new Date().toISOString().slice(0,10)}" aria-label="Aniversário de ${escapeHTML(person.name)}"></label>${person.is_father ? '' : `<label class="small birthday-field">WhatsApp (botão de chamar na tela)<input type="tel" inputmode="tel" data-phone="${person.id}" value="${escapeHTML(person.phone||'')}" placeholder="55 11 99999-9999" aria-label="WhatsApp de ${escapeHTML(person.name)}"></label><div class="call-photo"><span class="call-photo-face">${escapeHTML(person.name.slice(0,1).toUpperCase())}<img src="/avatar-media/${person.id}.jpg?r=${photoRev[person.id]||0}" alt="" onerror="this.remove()"></span><label class="text-button">Foto do botão<input type="file" accept="image/*" hidden data-call-photo="${person.id}"></label><button type="button" class="text-button danger" data-remove-call-photo="${person.id}">Remover foto</button></div>`}<button type="button" class="button primary compact upload-face" data-face-upload="${person.id}">Cadastrar foto do rosto</button><div class="enrollment-photos">${(person.enrollments||[]).map(face=>`<div><img src="/people-media/${face.id}.jpg" alt="Rosto cadastrado de ${escapeHTML(person.name)}"><button class="text-button" data-remove-face="${face.id}" data-person="${person.id}">Remover</button></div>`).join('')}</div><div class="profile-actions"><button class="text-button" data-review-examples="${person.id}">Revisar exemplos (${person.examples})</button><button class="text-button" data-rename-person="${person.id}">Renomear</button><button class="text-button" data-forget-person="${person.id}">Esquecer exemplos</button>${!person.is_father?`<button class="text-button" data-delete-person="${person.id}">Excluir perfil</button>`:''}</div></article>`).join('');
   const box = $('#people-profiles');
   if (box.contains(document.activeElement) && document.activeElement !== box || profilesHtml === html) return;
   profilesHtml = html;
@@ -97,7 +98,6 @@ function fillSettings() {
       field.value = name==='additional_recipients' || name==='kiosk_hints' ? value.join('\n') : value;
     }
   }
-  window.fillCallUsers?.(settings.kiosk_call_users || []);
 }
 function route() {
   const requested = location.hash.slice(1) || 'overview';
@@ -328,7 +328,6 @@ $('#settings-form').addEventListener('submit', event => {
       const input = form.elements.namedItem(name); if (!input) continue;
       next[name] = name==='additional_recipients' || name==='kiosk_hints' ? input.value.split(/\r?\n/).map(v=>v.trim()).filter(Boolean) : input.type === 'checkbox' ? input.checked : typeof value === 'number' ? Number(input.value) : input.value;
     }
-    if (window.readCallUsers) next.kiosk_call_users = window.readCallUsers();
     settings = await api(cameraPath('/api/settings'),{method:'PUT',body:JSON.stringify(next)});
     fillSettings(); window.settingsSaved?.(); toast('Configurações salvas.'); await refresh();
   });
@@ -540,4 +539,29 @@ document.addEventListener('change', async event => {
     await api(`/api/people/${input.dataset.birthday}/birthday`, {method: 'PUT', body: JSON.stringify({birthday: input.value || null})});
     toast(input.value ? 'Aniversário salvo.' : 'Aniversário removido.');
   } catch (error) { toast(error.message, true); }
+});
+
+// WhatsApp number of a family member: gives them a "call by name" button on the kitchen screen.
+document.addEventListener('change', async event => {
+  const input = event.target.closest?.('[data-phone]');
+  if (!input) return;
+  try {
+    await api(`/api/people/${input.dataset.phone}/phone`, {method: 'PUT', body: JSON.stringify({phone: input.value.trim() || null})});
+    toast(input.value.trim() ? 'WhatsApp salvo. A pessoa ganha um botão na tela do notebook.' : 'WhatsApp removido.');
+  } catch (error) { toast(error.message, true); }
+});
+document.addEventListener('change', async event => {
+  const input = event.target.closest?.('[data-call-photo]');
+  if (!input || !input.files[0]) return;
+  const file = input.files[0], id = input.dataset.callPhoto;
+  try {
+    await api(`/api/people/${id}/photo`, {method: 'POST', body: file, headers: {'Content-Type': file.type || 'image/jpeg'}});
+    photoRev[id] = Date.now(); profilesHtml = ''; renderProfiles();
+    toast('Foto salva. Ela chega à tela do notebook em instantes.');
+  } catch (error) { toast(error.message, true); }
+  input.value = '';
+});
+document.addEventListener('click', event => {
+  const remove = event.target.closest?.('[data-remove-call-photo]');
+  if (remove) action(remove, async () => { await api(`/api/people/${remove.dataset.removeCallPhoto}/photo`, {method: 'DELETE'}); photoRev[remove.dataset.removeCallPhoto] = Date.now(); profilesHtml = ''; renderProfiles(); });
 });

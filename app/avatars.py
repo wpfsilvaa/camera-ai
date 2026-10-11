@@ -1,4 +1,4 @@
-"""Profile photos of the accounts, used on the kitchen screen's "call this person" buttons: square, small, one file per account."""
+"""Photos of family members for the kitchen screen's "call this person" buttons: square, small, one file per person."""
 import io
 import re
 
@@ -13,7 +13,7 @@ AVATARS.mkdir(exist_ok=True)
 MAX_BYTES = 8 * 1024 * 1024
 MAX_PIXELS = 40_000_000
 SIDE = 192
-USER_ID = re.compile(r'^[a-f0-9]{32}$')
+OWNER_ID = re.compile(r'^[a-f0-9]{32}$')
 
 
 def square(content):
@@ -40,23 +40,26 @@ class Avatars:
         self.directory = directory
         directory.mkdir(exist_ok=True)
 
-    def path(self, user_id):
-        if not USER_ID.match(str(user_id)):
+    def path(self, owner_id):
+        if not OWNER_ID.match(str(owner_id)):
             raise KeyError('Usuário inválido.')
-        return self.directory / f'{user_id}.jpg'
+        return self.directory / f'{owner_id}.jpg'
 
-    def has(self, user_id):
+    def has(self, owner_id):
         try:
-            return self.path(user_id).is_file()
+            return self.path(owner_id).is_file()
         except KeyError:
             return False
 
-    def rev(self, user_id):
+    def rev(self, owner_id):
         """Changes whenever the picture does (the screen compares it to know what to download again)."""
-        return str(int(self.path(user_id).stat().st_mtime)) if self.has(user_id) else ''
+        return str(int(self.path(owner_id).stat().st_mtime)) if self.has(owner_id) else ''
 
-    def save(self, user_id, content):
-        self.path(user_id).write_bytes(square(content))
+    def save(self, owner_id, content):
+        self.path(owner_id).write_bytes(square(content))
 
-    def delete(self, user_id):
-        self.path(user_id).unlink(missing_ok=True)
+    def delete(self, owner_id):
+        try:
+            self.path(owner_id).unlink(missing_ok=True)
+        except KeyError:
+            pass

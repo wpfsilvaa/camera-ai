@@ -239,10 +239,9 @@ label.button{cursor:pointer}
 .journal-tag{display:inline-block;margin-bottom:2px;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:650;background:var(--surface-2);color:var(--muted)}
 .journal-tag.tag-saude{background:var(--red-bg);color:var(--red-ink)}.journal-tag.tag-humor{background:var(--amber-bg);color:var(--amber-ink)}.journal-tag.tag-remedio{background:var(--green-bg);color:var(--green-ink)}
 
-/* Fotos e botões de chamar pessoas */
-.avatar-edit{display:flex;gap:14px;align-items:center}.avatar-preview,.call-user-face{display:grid;place-items:center;overflow:hidden;border-radius:50%;background:var(--accent-bg);color:var(--green-ink);font-weight:700}
-.avatar-preview{width:64px;height:64px;font-size:26px;flex-shrink:0}.avatar-preview img,.call-user-face img{width:100%;height:100%;object-fit:cover}
-.avatar-actions{display:flex;gap:10px;align-items:center;margin-top:8px}.avatar-pick{cursor:pointer}
-.call-users-field{display:flex;flex-direction:column;gap:8px}.call-users{display:flex;flex-wrap:wrap;gap:10px}
-.call-user{display:flex!important;flex-direction:row!important;align-items:center;gap:8px!important;padding:6px 12px 6px 8px;border:1px solid var(--border);border-radius:999px;cursor:pointer;flex:0 0 auto!important;font-weight:550}
-.call-user input{margin:0}.call-user-face{width:30px;height:30px;font-size:13px}
+/* Foto do botão de chamar, na ficha da pessoa */
+.call-photo{display:flex;align-items:center;gap:12px;margin-top:8px;font-size:12px}
+.call-photo-face{position:relative;display:grid;place-items:center;width:44px;height:44px;border-radius:50%;overflow:hidden;background:var(--accent-bg);color:var(--green-ink);font-weight:700;flex-shrink:0}
+.call-photo-face img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.call-photo label.text-button{cursor:pointer}
+.birthday-field+.birthday-field{margin-top:10px}.profile-card .birthday-field{display:block}

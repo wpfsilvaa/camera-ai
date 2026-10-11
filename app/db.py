@@ -152,6 +152,8 @@ class Database:
                 db.execute('ALTER TABLE person_messages ADD COLUMN read_at REAL')   # When the person tapped "Li" on the screen.
             if 'single' not in message_columns:
                 db.execute('ALTER TABLE person_messages ADD COLUMN single INTEGER NOT NULL DEFAULT 0')   # View-once: shown 30 s, then gone.
+            if 'phone' not in {r['name'] for r in db.execute('PRAGMA table_info(people)')}:
+                db.execute('ALTER TABLE people ADD COLUMN phone TEXT')   # WhatsApp number (digits with country code) of a family member the screen can call by name.
             if 'birthday' not in {r['name'] for r in db.execute('PRAGMA table_info(people)')}:
                 db.execute('ALTER TABLE people ADD COLUMN birthday TEXT')   # ISO date (YYYY-MM-DD), used for the kitchen screen's greeting.
             track_columns = {r['name'] for r in db.execute('PRAGMA table_info(person_tracks)')}

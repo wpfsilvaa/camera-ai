@@ -21,6 +21,10 @@ class PersonName(BaseModel):
     name: str = Field(min_length=1, max_length=60)
 
 
+class PersonPhone(BaseModel):
+    phone: str | None = Field(default=None, max_length=30)
+
+
 class PersonBirthday(BaseModel):
     birthday: str | None = Field(default=None, max_length=10)
 
@@ -42,7 +46,7 @@ def decode_photo(content):
     return image
 
 
-def build(recognition, learning):
+def build(recognition, learning, on_forget=None):
     """People profiles, face enrollment, identity confirmation and suggested examples."""
     router = APIRouter()
 
@@ -81,9 +85,16 @@ def build(recognition, learning):
         call_service(recognition.set_birthday, person_id, body.birthday or None)
         return {'ok': True}
 
+    @router.put('/api/people/{person_id}/phone')
+    def set_phone(person_id: str, body: PersonPhone):
+        call_service(recognition.set_phone, person_id, body.phone or None)
+        return {'ok': True}
+
     @router.delete('/api/people/{person_id}')
     def delete_person(person_id: str):
         call_service(recognition.forget, person_id, True)
+        if on_forget:
+            on_forget(person_id)
         return {'ok': True}
 
     @router.post('/api/people/{person_id}/forget')
