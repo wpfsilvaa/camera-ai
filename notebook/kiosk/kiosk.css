@@ -117,23 +117,13 @@ body:has(#screen[data-mode=black]){background:#000}
 .fr-pill.resting{color:#47b98a;animation:vpulse 3.2s ease-in-out infinite}.fr-pill.analysing{color:#e9b64a;animation:vpulse 1s ease-in-out infinite}.fr-pill.off{color:#e86a5c}
 .fr-pill.low{color:#ffb86b}
 .fr-foot{position:absolute;left:3vw;right:3vw;bottom:3vh;color:var(--fg-bot);text-shadow:var(--sh-bot);transition:color .9s;display:flex;flex-direction:column;gap:2vh}
-.fr-week{display:flex;gap:.8vw;align-items:flex-end}
-.fr-week .d{display:flex;flex-direction:column;align-items:center;min-width:3.2vw;padding:.5vh .5vw;border-radius:1.2vmin;font-size:clamp(14px,1.6vw,24px);font-variant-numeric:tabular-nums;line-height:1.25}
-.fr-week .d b{font-weight:500;font-size:.72em;opacity:.8}
-.fr-week .d.today{background:#ffffffe6;color:#111;text-shadow:none}
-.fr-week .d.holiday span{color:#ff8f80}.fr-week .d.today.holiday span{color:#c03a2b}
-.fr-week .d i{width:.4em;height:.4em;border-radius:50%;background:var(--amber);margin-top:.15em}.fr-week .d.holiday i{background:#ff6a5a}.fr-week .d.bday i{background:#ff7eb6}
-.frame-hint{margin:0;font-size:clamp(22px,3.2vw,48px);font-weight:500;text-shadow:inherit;transition:opacity .6s}
+.frame-hint{margin:0;color:inherit;font-size:clamp(22px,3.2vw,48px);font-weight:500;text-shadow:inherit;transition:opacity .6s}
 .fr-credit{position:absolute;right:3vw;bottom:12vh;margin:0;font-size:clamp(12px,1.4vw,20px);color:var(--fg-bot);text-shadow:var(--sh-bot);opacity:0;transition:opacity .8s}
 .fr-credit.on{opacity:.85}
 .fr-progress{position:absolute;left:0;right:0;bottom:0;height:.5vh;background:#fff2}
 .fr-progress i{display:block;height:100%;width:0;background:#fffb}
 .fr-progress i.run{animation:progress var(--slide,15s) linear forwards}
 @keyframes progress{to{width:100%}}
-/* The month card slides in for a few seconds each minute */
-.fr-month{position:absolute;right:3vw;bottom:15vh;width:min(30vw,420px);background:#0008;border:.15vmin solid #fff3;border-radius:2vmin;padding:1.6vmin 1.8vmin;font-size:clamp(12px,1.35vw,20px);transform:translateX(120%);opacity:0;transition:transform .8s ease,opacity .8s ease;color:#fff}
-.fr-month.show{transform:none;opacity:1}
-.fr-month .cal-day{color:#fff}.fr-month .cal-day.today{background:#fff;color:#111}.fr-month .cal-day.holiday{color:#ff8f80}.fr-month .cal-title{color:#fff}.fr-month .cal-next li b{color:#fff}
 .frame-greet-box{position:absolute;top:37vh;left:4vw;right:4vw;display:flex;flex-direction:column;align-items:center;gap:2.5vh;text-align:center;pointer-events:none}
 .frame-greeting{margin:0;color:#fff;font-size:clamp(44px,8vw,120px);line-height:1.08;font-weight:700;text-shadow:0 .3vmin 2vmin #000;animation:greet .8s ease-out}
 .frame-greeting.birthday{color:var(--amber);font-size:clamp(38px,6.2vw,92px)}
@@ -144,10 +134,10 @@ body:has(#screen[data-mode=black]){background:#000}
 .frame-reminder p{color:#fff;font-size:clamp(26px,4vw,58px);font-weight:600;margin:.2em 0;line-height:1.15}
 .frame-reminder small{color:#ddd;font-size:clamp(14px,1.8vw,24px)}
 html[data-night="1"] .frame{filter:brightness(.5) sepia(1) hue-rotate(-35deg) saturate(3)}
-@media (prefers-reduced-motion:reduce){.slide.on img,.slide.leaving img,.fr-pill,.frame-reminder,.fr-progress i.run{animation:none!important}.fr-month{transition:none}}
+@media (prefers-reduced-motion:reduce){.slide.on img,.slide.leaving img,.fr-pill,.frame-reminder,.fr-progress i.run{animation:none!important}}
 
 /* While someone is greeted (or a message is shown) the other overlays step aside */
-.frame.speaking .frame-reminder,.frame.speaking .fr-month,.frame.speaking .fr-foot,.frame.speaking .fr-credit{opacity:0!important;pointer-events:none;transition:opacity .4s}
+.frame.speaking .frame-reminder,.frame.speaking .fr-foot,.frame.speaking .fr-credit{opacity:0!important;pointer-events:none;transition:opacity .4s}
 .fr-foot{transition:color .9s,opacity .4s}
 /* Messages for a person: a quote, the sender's name small underneath */
 .quote{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:16vh 8vw 8vh;background:radial-gradient(ellipse at center,#000b,#000e);animation:quotein .9s ease-out}
@@ -183,3 +173,22 @@ html[data-night="1"] .quote-head{color:#c8493c}
 .quote-timer i{display:block;height:100%;width:100%;background:var(--amber);transform-origin:left;animation:drain 30s linear forwards}
 @keyframes drain{to{transform:scaleX(0)}}
 @media (prefers-reduced-motion:reduce){.quote-timer i{animation:none}}
+
+/* Mini month on the photo frame: no box, just text with a soft shadow, bottom left above the message line */
+.fr-cal{display:flex;gap:3.4vw;align-items:flex-start;font-size:clamp(12px,1.45vw,22px);font-variant-numeric:tabular-nums;opacity:0;transform:translateY(1.5vh);transition:opacity .8s ease,transform .8s ease;pointer-events:none}
+.fr-cal.show{opacity:1;transform:none}
+.mc-grid{display:grid;grid-template-columns:repeat(7,2.5em);gap:.15em .1em;text-align:center}
+.mc-title{grid-column:1/-1;text-align:left;font-weight:600;font-size:1.15em;text-transform:capitalize;margin-bottom:.3em}
+.mc-title small{font-weight:400;opacity:.75;margin-left:.4em}
+.mc-grid b{font-weight:500;font-size:.75em;opacity:.7;padding-bottom:.15em}
+.mc-d{position:relative;padding:.18em 0;border-radius:.6em;opacity:.55}
+.mc-d.wk{opacity:1}
+.mc-d.today{background:#ffffffe6;color:#111;text-shadow:none;font-weight:700;opacity:1}
+.mc-d.holiday{color:#ff8f80}.mc-d.today.holiday{color:#c03a2b}
+.mc-d.out{visibility:hidden}
+.mc-d.holiday::after,.mc-d.bday::after,.mc-d.date::after{content:"";position:absolute;left:50%;bottom:-.02em;width:.3em;height:.3em;border-radius:50%;transform:translateX(-50%);background:var(--amber)}
+.mc-d.holiday::after{background:#ff6a5a}.mc-d.bday::after{background:#ff7eb6}
+.mc-next{list-style:none;margin:2.2em 0 0;padding:0;display:flex;flex-direction:column;gap:.5em;max-width:22vw;font-size:.9em}
+.mc-next li span{display:block;font-size:.78em;color:var(--amber);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.mc-next li b{display:block;font-weight:600;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (prefers-reduced-motion:reduce){.fr-cal{transition:none}}

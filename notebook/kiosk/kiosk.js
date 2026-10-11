@@ -252,11 +252,6 @@
     $('frame-date').textContent = dateText.charAt(0).toUpperCase() + dateText.slice(1);
     $('frame-today').textContent = todayLine.replace(/&lt;/g, '<');
     $('frame-status').innerHTML = vigia + battery;
-    const sunday = addDays(today, -today.getDay());
-    $('frame-week').innerHTML = Array.from({length: 7}, (_, i) => {
-      const day = addDays(sunday, i), found = eventsOn(events, day), kind = ['holiday', 'bday', 'date'].find(k => found.some(ev => ev.kind === k));
-      return `<div class="d ${day.getTime() === today.getTime() ? 'today' : ''} ${kind || ''}"><b>${'DSTQQSS'[i]}</b><span>${day.getDate()}</span>${kind ? '<i></i>' : ''}</div>`;
-    }).join('');
   }
 
   // Photo frame --------------------------------------------------------------
@@ -358,11 +353,11 @@
         setTimeout(() => { hintIndex = (hintIndex + 1) % list.length; box.textContent = list[hintIndex]; box.style.opacity = 1; }, 600);
       };
       showHint(); hintTimer = setInterval(showHint, 9000);
-      const month = $('frame-month'), pop = () => { if (cfg().framecal !== 'pulse') return; monthPopping = true; month.classList.add('show'); setTimeout(() => { monthPopping = false; month.classList.remove('show'); }, 12000); };
+      const month = $('frame-cal'), pop = () => { if (cfg().framecal !== 'pulse') return; monthPopping = true; month.classList.add('show'); setTimeout(() => { monthPopping = false; month.classList.remove('show'); }, 12000); };
       monthTimer = setInterval(pop, 60000); monthFirst = setTimeout(pop, 5000);
     } else if (!on && slideTimer) {
       clearInterval(slideTimer); clearInterval(hintTimer); clearInterval(monthTimer); clearTimeout(monthFirst); slideTimer = hintTimer = null;
-      $('frame-month').classList.remove('show');
+      $('frame-cal').classList.remove('show');
     }
   }
 
@@ -374,7 +369,7 @@
     screen.dataset.mode = mode;
     $('frame').classList.toggle('hidden', mode !== 'frame');
     // Month card on the frame: always there, sliding in for 12 s each minute, or never.
-    const month = $('frame-month'), how = cfg().framecal;
+    const month = $('frame-cal'), how = cfg().framecal;
     if (mode === 'frame') month.classList.toggle('show', how === 'always' || (how === 'pulse' && monthPopping));
     startFrame(mode === 'frame');
   }
@@ -422,6 +417,23 @@
     return `<div class="cal-title"><span>${now.toLocaleDateString('pt-BR', {month: 'long'})}</span><small>${year}</small></div><div class="cal-grid">${cells}</div><ul class="cal-next">${upcoming}</ul>`;
   }
 
+  // Compact month for the photo frame: weeks other than the current one are dimmed, with the next events beside it.
+  function miniMonthHTML(now, bdays) {
+    const year = now.getFullYear(), month = now.getMonth(), events = allEvents(bdays), today = new Date(year, month, now.getDate());
+    const first = new Date(year, month, 1), days = new Date(year, month + 1, 0).getDate(), weekStart = addDays(today, -today.getDay());
+    let cells = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(l => `<b>${l}</b>`).join('') + '<span class="mc-d out"></span>'.repeat(first.getDay());
+    for (let day = 1; day <= days; day++) {
+      const date = new Date(year, month, day), found = eventsOn(events, date), kind = ['holiday', 'bday', 'date'].find(k => found.some(ev => ev.kind === k));
+      const inWeek = date >= weekStart && date < addDays(weekStart, 7);
+      cells += `<span class="mc-d ${kind || ''} ${inWeek ? 'wk' : ''} ${day === now.getDate() ? 'today' : ''}">${day}</span>`;
+    }
+    const upcoming = events.filter(ev => ev.date >= today).sort((a, b) => a.date - b.date).slice(0, 3).map(ev => {
+      const diff = Math.round((ev.date - today) / 86400000), when = diff === 0 ? 'Hoje' : diff === 1 ? 'Amanhã' : `Em ${diff} dias`;
+      return `<li><span>${when}</span><b>${ev.kind === 'bday' ? '🎂 ' : ''}${ev.name.replace(/</g, '&lt;')}</b></li>`;
+    }).join('');
+    return `<div class="mc-grid"><div class="mc-title">${now.toLocaleDateString('pt-BR', {month: 'long'})}<small>${year}</small></div>${cells}</div><ul class="mc-next">${upcoming}</ul>`;
+  }
+
   let calendarKey = '';
   function renderCalendar() {
     const box = $('calendar'), now = new Date(), bdays = last.bdays || [];
@@ -431,7 +443,7 @@
     calendarKey = key;
     const html = monthHTML(now, bdays);
     box.innerHTML = html;
-    $('frame-month').innerHTML = html;
+    $('frame-cal').innerHTML = miniMonthHTML(now, bdays);
   }
 
   // The family member's camera arrives through MediaMTX ("face"); until it does, the initial letter shows.
