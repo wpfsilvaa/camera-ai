@@ -134,9 +134,10 @@ body:has(#screen[data-mode=black]){background:#000}
 .fr-month{position:absolute;right:3vw;bottom:15vh;width:min(30vw,420px);background:#0008;border:.15vmin solid #fff3;border-radius:2vmin;padding:1.6vmin 1.8vmin;font-size:clamp(12px,1.35vw,20px);transform:translateX(120%);opacity:0;transition:transform .8s ease,opacity .8s ease;color:#fff}
 .fr-month.show{transform:none;opacity:1}
 .fr-month .cal-day{color:#fff}.fr-month .cal-day.today{background:#fff;color:#111}.fr-month .cal-day.holiday{color:#ff8f80}.fr-month .cal-title{color:#fff}.fr-month .cal-next li b{color:#fff}
-.frame-greeting{position:absolute;top:40vh;left:0;right:0;margin:0;text-align:center;color:#fff;font-size:clamp(48px,9vw,130px);font-weight:700;text-shadow:0 .3vmin 2vmin #000;animation:greet .8s ease-out}
-.frame-greeting.birthday{color:var(--amber)}
-.frame-greeting-sub{position:absolute;top:calc(40vh + 11vw);left:0;right:0;margin:0;text-align:center;color:#fff;font-size:clamp(26px,4.2vw,60px);font-weight:600;text-shadow:0 .2vmin 1.4vmin #000}
+.frame-greet-box{position:absolute;top:37vh;left:4vw;right:4vw;display:flex;flex-direction:column;align-items:center;gap:2.5vh;text-align:center;pointer-events:none}
+.frame-greeting{margin:0;color:#fff;font-size:clamp(44px,8vw,120px);line-height:1.08;font-weight:700;text-shadow:0 .3vmin 2vmin #000;animation:greet .8s ease-out}
+.frame-greeting.birthday{color:var(--amber);font-size:clamp(38px,6.2vw,92px)}
+.frame-greeting-sub{margin:0;color:#fff;font-size:clamp(22px,3.2vw,48px);line-height:1.25;font-weight:600;text-shadow:0 .2vmin 1.4vmin #000;max-width:88vw}
 .frame-reminder{position:absolute;left:3vw;top:34vh;width:min(50vw,820px);background:#0007;border:.15vmin solid #ffffff40;border-left:.7vmin solid var(--amber);border-radius:2vmin;padding:1.6vmin 3vmin;text-align:left;animation:slidein .7s ease-out}
 @keyframes slidein{from{opacity:0;transform:translateY(3vh)}to{opacity:1;transform:none}}
 .frame-reminder .rem-label{text-align:left}
@@ -146,7 +147,8 @@ html[data-night="1"] .frame{filter:brightness(.5) sepia(1) hue-rotate(-35deg) sa
 @media (prefers-reduced-motion:reduce){.slide.on img,.slide.leaving img,.fr-pill,.frame-reminder,.fr-progress i.run{animation:none!important}.fr-month{transition:none}}
 
 /* While someone is greeted (or a message is shown) the other overlays step aside */
-.frame.speaking .frame-reminder,.frame.speaking .fr-month{opacity:0!important;pointer-events:none;transition:opacity .4s}
+.frame.speaking .frame-reminder,.frame.speaking .fr-month,.frame.speaking .fr-foot,.frame.speaking .fr-credit{opacity:0!important;pointer-events:none;transition:opacity .4s}
+.fr-foot{transition:color .9s,opacity .4s}
 /* Messages for a person: a quote, the sender's name small underneath */
 .quote{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:8vh 8vw;background:radial-gradient(ellipse at center,#000b,#000e);animation:quotein .9s ease-out}
 .quote figure{margin:0;max-width:min(84vw,1400px)}
