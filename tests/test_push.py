@@ -68,6 +68,12 @@ class PushTests(unittest.TestCase):
         self.assertEqual([d['endpoint'] for d in self.push.devices('u2')], [])
         self.assertIsNotNone(self.push.devices('u1')[0]['last_ok'])
 
+    def test_an_alert_for_one_account_only_reaches_its_devices(self):
+        self.push.subscribe('u1', {'endpoint': 'https://push/a', 'keys': KEYS})
+        self.push.subscribe('u2', {'endpoint': 'https://push/b', 'keys': KEYS})
+        self.push.send_all({'id': 'call-1', 'kind': 'call', 'message': 'Seu pai está chamando Ana', 'to_user': 'u2'})
+        self.assertEqual([endpoint for endpoint, _, _ in self.sent], ['https://push/b'])
+
     def test_topics_can_be_turned_off_per_device(self):
         self.push.subscribe('u1', {'endpoint': 'https://push/a', 'keys': KEYS})
         self.push.subscribe('u1', {'endpoint': 'https://push/b', 'keys': KEYS})

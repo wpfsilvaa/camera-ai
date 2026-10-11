@@ -31,6 +31,7 @@ REMINDER_SECONDS = 120
 REMINDERS = {'call': 1, 'panic': 5}   # WhatsApp reminders, every REMINDER_SECONDS.
 # Phones are nudged much more often while a call rings, until someone answers or this long has passed.
 RING_SECONDS = 20
+PERSONAL_RING_SECONDS = 90   # A call to one person rings only on their phones this long, then goes to the whole family.
 RING_LIMIT = {'call': 180, 'panic': 600}
 
 
@@ -61,6 +62,7 @@ class NotebookMonitor:
         self.busy = None  # Callable: True while the screen needs quick updates.
         self.last_photo_sync = 0
         self.delivered = None  # Called with message ids once the screen accepted them.
+        self.avatars = None  # Callable returning [(user id, picture path or None, revision)] for the screen's call buttons.
         self.photos = None  # Photos object whose files are copied to the screen's frame.
         self.vigia = None  # Callable returning extra query parameters for the kitchen screen (watch mode, night, greeting).
         self.call = {'state': 'idle'}
@@ -122,6 +124,7 @@ class NotebookMonitor:
                     if now - self.last_photo_sync >= PHOTO_SYNC_SECONDS:
                         self.last_photo_sync = now
                         self.sync_photos(client, url, {'Authorization': f'Bearer {token}'}, settings)
+                        self.sync_avatars(client, url, {'Authorization': f'Bearer {token}'}, settings)
             except (httpx.HTTPError, ValueError):
                 pass
         self.check(settings, reading, now)
@@ -145,6 +148,21 @@ class NotebookMonitor:
                            headers={**headers, 'Content-Type': 'image/jpeg', 'X-Photo-Author': quote(authors.get(photo_id, ''))})
         except (httpx.HTTPError, ValueError, OSError):
             log.warning('Não foi possível sincronizar as fotos com a tela do notebook', exc_info=True)
+
+    def sync_avatars(self, client, url, headers, settings):
+        """Keep the screen's copies of the call buttons' pictures in step with the accounts (small files, only what changed)."""
+        if self.avatars is None or not settings.notebook_call_enabled:
+            return
+        try:
+            wanted = {i: (path, rev) for i, path, rev in self.avatars() if path}
+            stored = client.get(f'{url}/avatars', headers=headers, timeout=5).json().get('revs', {})
+            for user_id in set(stored) - set(wanted):
+                client.delete(f'{url}/avatars/{user_id}', headers=headers, timeout=5)
+            for user_id, (path, rev) in wanted.items():
+                if stored.get(user_id) != rev:
+                    client.put(f'{url}/avatars/{user_id}', content=path.read_bytes(), timeout=10, headers={**headers, 'Content-Type': 'image/jpeg', 'X-Rev': rev})
+        except (httpx.HTTPError, ValueError, OSError):
+            log.warning('Não foi possível sincronizar as fotos dos botões de chamada', exc_info=True)
 
     def reset(self):
         with self.lock:
@@ -205,18 +223,25 @@ class NotebookMonitor:
             self.finish_ring(call, now)
             return
         kind, since = call['kind'], call['since']
+        to_user, to_name = call.get('to'), call.get('to_name') or ''
+        if to_user and now - since >= PERSONAL_RING_SECONDS:
+            # The person asked for did not answer: everyone is told, once.
+            self.alerts.notebook_call(call['id'], kind, None, since, now, escalate=True, to_name=to_name)
+            to_user = None
+            if self.ring_state and self.ring_state['id'] == call['id']:
+                self.ring_state['to'] = None
         if not self.alerts.exists(f'{kind}-{call["id"]}'):
             jpeg = self.frame() if self.frame else None
-            self.alerts.notebook_call(call['id'], kind, jpeg, since, now)
+            self.alerts.notebook_call(call['id'], kind, jpeg, since, now, to_user=to_user, to_name=to_name)
         for number in range(1, min(int((now - since) // REMINDER_SECONDS), REMINDERS[kind]) + 1):
-            self.alerts.notebook_call(call['id'], kind, None, since, now, reminder=number)
+            self.alerts.notebook_call(call['id'], kind, None, since, now, reminder=number, to_user=to_user, to_name=to_name)
         # Push again every few seconds, like a phone that keeps ringing (the first alert above counts as the first ring).
         state = self.ring_state
         if state is None or state['id'] != call['id']:
-            state = self.ring_state = {'id': call['id'], 'kind': kind, 'since': since, 'last': now}
+            state = self.ring_state = {'id': call['id'], 'kind': kind, 'since': since, 'last': now, 'to': call.get('to')}
         if now - since <= RING_LIMIT[kind] and now - state['last'] >= RING_SECONDS:
             state['last'] = now
-            self.alerts.ring(call['id'], kind, since, now)
+            self.alerts.ring(call['id'], kind, since, now, to_user=to_user, to_name=to_name)
 
     def finish_ring(self, call, now):
         """The call stopped ringing: say how it ended, replacing the notification that kept nudging the phones."""
@@ -224,9 +249,9 @@ class NotebookMonitor:
         if state is None:
             return
         if call.get('id') == state['id'] and call.get('state') == 'answered':
-            self.alerts.ring_notice(state['id'], state['kind'], f"✅ {call.get('answered_by') or 'Alguém'} atendeu a chamada do seu pai.", now)
+            self.alerts.ring_notice(state['id'], state['kind'], f"✅ {call.get('answered_by') or 'Alguém'} atendeu a chamada do seu pai.", now, to_user=state.get('to'))
         elif call.get('id') == state['id'] and call.get('state') in ('ended', 'missed'):
-            self.alerts.ring_notice(state['id'], state['kind'], 'A chamada do notebook da cozinha terminou.', now)
+            self.alerts.ring_notice(state['id'], state['kind'], 'A chamada do notebook da cozinha terminou.', now, to_user=state.get('to'))
 
     def check_silence(self, settings, now):
         if self.silent_since is None:

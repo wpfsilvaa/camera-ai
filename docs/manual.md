@@ -328,7 +328,11 @@ A cada 5 minutos, o sistema procura em registros encerrados rostos reconhecidos 
 - sejam pelo menos tão nítidos quanto a mediana dos exemplos atuais;
 - tragam um ângulo novo (quase idênticos a um exemplo existente são ignorados).
 
-O melhor rosto de cada pessoa rastreada aparece em **Pessoas → Sugestões para aprender**. **Aprovar** faz o mesmo que confirmar no Histórico: o rosto vira exemplo e o registro fica identificado. **Não é** descarta a sugestão para sempre. Nada é aprendido sem aprovação. Ajuste ou desative em **Configurações → 04 · Pessoas**.
+O melhor rosto de cada pessoa rastreada aparece em **Pessoas → Sugestões para aprender**. **Aprovar** faz o mesmo que confirmar no Histórico: o rosto vira exemplo e o registro fica identificado. **Não é** descarta a sugestão para sempre. **Descartar foto** apaga a foto (e a sugestão) quando ficou borrada ou ruim: o sistema não aprende com ela. Nada é aprendido sem aprovação. Ajuste ou desative em **Configurações → 04 · Pessoas**.
+
+## Diário da família
+
+Em **Recados → Diário da família**, qualquer usuário anota o que quiser lembrar depois (saúde, humor, remédio, geral), com data e hora. Todos veem as anotações; só quem escreveu (ou um administrador) remove. Serve para levar ao médico o que mudou na rotina.
 
 ## Backup automático
 

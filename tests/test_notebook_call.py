@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import os
 import tempfile
 import unittest
@@ -57,6 +58,15 @@ class DeskTests(unittest.TestCase):
         self.clock.now += agent.RESULT_SECONDS + 1
         self.assertEqual(self.desk.snapshot()['state'], 'idle')
 
+    def test_call_to_one_person_needs_them_on_the_list(self):
+        uid = 'a' * 32
+        self.desk.configure(True, True, callto=json.dumps([{'i': uid, 'n': 'Lorena'}, {'i': 'nao-e-id', 'n': 'X'}]))
+        self.assertEqual(self.desk.callto, [{'i': uid, 'n': 'Lorena'}])
+        with self.assertRaises(ValueError):
+            self.desk.press('call', 'b' * 32)
+        call = self.desk.press('call', uid)
+        self.assertEqual((call['to'], call['to_name']), (uid, 'Lorena'))
+
     def test_call_goes_missed_but_panic_keeps_ringing(self):
         self.desk.press('call')
         self.clock.now += agent.MISSED_AFTER + 1
@@ -111,6 +121,21 @@ class CallAlertTests(unittest.TestCase):
         self.poll(1000 + 600)  # A plain call is reminded only once.
         self.assertEqual([a['kind'] for a in self.heard], ['call', 'call'])
         self.assertIn('Ainda sem resposta', self.heard[1]['message'])
+
+    def test_a_call_to_one_person_rings_only_their_phones_then_the_whole_family(self):
+        self.reading = {**self.reading, 'call': {'id': 'abc', 'kind': 'call', 'state': 'ringing', 'since': 1000.0, 'to': 'u1', 'to_name': 'Lorena'}}
+        self.poll(1001)
+        self.assertEqual((self.heard[0]['to_user'], 'chamando Lorena' in self.heard[0]['message']), ('u1', True))
+        self.poll(1000 + 25)
+        self.assertEqual({r['to_user'] for r in self.rang}, {'u1'})
+        self.poll(1000 + 95)
+        self.poll(1000 + 120)
+        everyone = [a for a in self.heard if a['id'] == 'call-abc-all']
+        self.assertEqual(len(everyone), 1)
+        self.assertIsNone(everyone[0]['to_user'])
+        self.poll(1000 + 100)
+        self.assertEqual(len([a for a in self.heard if a['id'] == 'call-abc-all']), 1)   # Said once.
+        self.assertIsNone(self.rang[-1]['to_user'])
 
     def test_panic_is_urgent_and_reminds_up_to_five_times(self):
         self.ring('panic')

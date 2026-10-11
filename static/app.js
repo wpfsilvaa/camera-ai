@@ -91,6 +91,7 @@ function fillSettings() {
       field.value = name==='additional_recipients' || name==='kiosk_hints' ? value.join('\n') : value;
     }
   }
+  window.fillCallUsers?.(settings.kiosk_call_users || []);
 }
 function route() {
   const requested = location.hash.slice(1) || 'overview';
@@ -321,6 +322,7 @@ $('#settings-form').addEventListener('submit', event => {
       const input = form.elements.namedItem(name); if (!input) continue;
       next[name] = name==='additional_recipients' || name==='kiosk_hints' ? input.value.split(/\r?\n/).map(v=>v.trim()).filter(Boolean) : input.type === 'checkbox' ? input.checked : typeof value === 'number' ? Number(input.value) : input.value;
     }
+    if (window.readCallUsers) next.kiosk_call_users = window.readCallUsers();
     settings = await api(cameraPath('/api/settings'),{method:'PUT',body:JSON.stringify(next)});
     fillSettings(); window.settingsSaved?.(); toast('Configurações salvas.'); await refresh();
   });

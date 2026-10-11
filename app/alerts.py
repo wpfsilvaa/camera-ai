@@ -165,10 +165,12 @@ class Alerts:
                                 f'⚠️ {name or "Uma pessoa"} entrou na área restrita da câmera {camera_name} ({clock(now)}). '
                                 f'O vídeo fica no histórico.', now, image=True, camera_id=camera_id, whatsapp=whatsapp)
 
-    def notebook_call(self, call_id, kind, jpeg, since, now=None, reminder=0):
+    def notebook_call(self, call_id, kind, jpeg, since, now=None, reminder=0, to_user=None, to_name='', escalate=False):
         """The kitchen notebook's button was pressed (kind "call" or "panic"): alert at once, then remind while nobody answers."""
         now = now or time.time()
-        alert_id = f'{kind}-{call_id}' + (f'-r{reminder}' if reminder else '')
+        alert_id = f'{kind}-{call_id}' + (f'-r{reminder}' if reminder else '') + ('-all' if escalate else '')
+        if escalate and self.exists(alert_id):
+            return alert_id
         if reminder and self.exists(alert_id):
             return alert_id
         image = bool(jpeg)
@@ -177,25 +179,27 @@ class Alerts:
         if kind == 'panic':
             text = f'🚨 PEDIDO DE AJUDA: seu pai apertou o botão de ajuda no notebook da cozinha às {clock(since)}.'
         else:
-            text = f'📞 Seu pai está chamando a família pelo notebook da cozinha ({clock(since)}).'
+            text = (f'📞 Seu pai está chamando {to_name} pelo notebook da cozinha ({clock(since)}).' if to_name and not escalate
+                    else f'📞 Seu pai chamou {to_name} e ainda ninguém atendeu: toda a família foi avisada ({clock(since)}).' if to_name
+                    else f'📞 Seu pai está chamando a família pelo notebook da cozinha ({clock(since)}).')
         if reminder:
             text = f'⏰ Ainda sem resposta há {elapsed(now - since)}. ' + text
         link = os.environ.get('PUBLIC_URL', '').rstrip('/')
         text += ' Abra o painel e toque em Atender.' if kind == 'call' else ' Ligue para ele agora ou abra o painel e toque em Atender.'
         if link:
             text += f'\n{link}'
-        return self.raise_alert(alert_id, kind, text, now, image=image)
+        return self.raise_alert(alert_id, kind, text, now, image=image, to_user=to_user)
 
-    def ring(self, call_id, kind, since, now):
+    def ring(self, call_id, kind, since, now, to_user=None, to_name=''):
         """A call nobody answered yet: nudge the phones again (push only; WhatsApp keeps its own, slower reminders)."""
         waited = elapsed(now - since)
         text = (f'🚨 PEDIDO DE AJUDA sem resposta há {waited}. Ligue para ele agora ou toque em Atender.' if kind == 'panic'
-                else f'📞 Seu pai continua chamando há {waited}. Toque em Atender.')
-        self._ring({'id': f'{kind}-{call_id}', 'kind': kind, 'created': now, 'message': text, 'image': 0, 'ring': True})
+                else f'📞 Seu pai continua chamando {to_name} há {waited}. Toque em Atender.' if to_name else f'📞 Seu pai continua chamando há {waited}. Toque em Atender.')
+        self._ring({'id': f'{kind}-{call_id}', 'kind': kind, 'created': now, 'message': text, 'image': 0, 'ring': True, 'to_user': to_user})
 
-    def ring_notice(self, call_id, kind, text, now=None):
+    def ring_notice(self, call_id, kind, text, now=None, to_user=None):
         """Replaces the ringing notification (same tag) with a calm one once the call is over."""
-        self._ring({'id': f'{kind}-{call_id}', 'kind': kind, 'created': now or time.time(), 'message': text, 'image': 0, 'notice': True,
+        self._ring({'id': f'{kind}-{call_id}', 'kind': kind, 'created': now or time.time(), 'message': text, 'image': 0, 'notice': True, 'to_user': to_user,
                     'title': 'Chamada atendida' if text.startswith('✅') else 'Chamada encerrada'})
 
     def _ring(self, alert):
@@ -215,7 +219,7 @@ class Alerts:
     def exists(self, alert_id):
         return bool(self.db.rows('SELECT 1 FROM alerts WHERE id=?', (alert_id,)))
 
-    def raise_alert(self, alert_id, kind, message, now, image=False, camera_id=None, whatsapp=True):
+    def raise_alert(self, alert_id, kind, message, now, image=False, camera_id=None, whatsapp=True, to_user=None):
         """Record an alert once per id and queue it for every WhatsApp recipient (or only notify the web app)."""
         recipients = list(self.config.get().delivery_targets()) if whatsapp else []
         with self.db.connect() as db:
@@ -226,7 +230,7 @@ class Alerts:
                                [(alert_id, phone) for phone in recipients])
         if created:
             log.info('Alerta %s registrado para %d destinatário(s)', alert_id, len(recipients))
-            alert = {'id': alert_id, 'kind': kind, 'created': now, 'message': message, 'image': int(image), 'camera_id': camera_id}
+            alert = {'id': alert_id, 'kind': kind, 'created': now, 'message': message, 'image': int(image), 'camera_id': camera_id, 'to_user': to_user}
             for listener in self.listeners:
                 try:
                     listener(alert)

@@ -23,6 +23,9 @@ PORT = int(os.environ.get('MONITOR_PORT', '8765'))
 PHOTOS = Path(os.environ.get('MONITOR_PHOTOS_DIR', Path.home() / '.cache/casa-monitor/photos'))
 PHOTO_ID = re.compile(r'^[a-f0-9]{32}$')
 MAX_PHOTO_BYTES = 4 * 1024 * 1024
+AVATARS = Path(os.environ.get('MONITOR_AVATARS_DIR', Path.home() / '.cache/casa-monitor/avatars'))
+MAX_AVATAR_BYTES = 300 * 1024
+MAX_CALLTO = 4   # Buttons "call this person" on the screen.
 KIOSK = Path(os.environ.get('MONITOR_KIOSK_DIR', Path(__file__).resolve().parent / 'kiosk'))
 TOKEN_FILE = Path(os.environ.get('MONITOR_TOKEN_FILE', Path.home() / '.config/casa-monitor/token'))
 
@@ -158,6 +161,36 @@ def parse_cfg(text):
     if isinstance(data.get('hints'), list):
         cfg['hints'] = [''.join(ch for ch in str(h) if ch.isprintable())[:120].strip() for h in data['hints'][:10] if str(h).strip()]
     return cfg
+
+
+def parse_callto(text):
+    """[{'i', 'n'}] people the screen can call by name: user id (32 hex) and first name."""
+    try:
+        items = json.loads(text) if text else []
+    except ValueError:
+        return []
+    found = []
+    for item in items[:MAX_CALLTO] if isinstance(items, list) else []:
+        if isinstance(item, dict) and PHOTO_ID.match(str(item.get('i', ''))):
+            name = ''.join(ch for ch in str(item.get('n', '')) if ch.isprintable())[:30].strip()
+            if name:
+                found.append({'i': item['i'], 'n': name})
+    return found
+
+
+def avatar_revs():
+    """{user id: revision} of the photos stored for the call buttons (the revision is what the dashboard sent)."""
+    found = {}
+    try:
+        for path in AVATARS.glob('*.jpg'):
+            if PHOTO_ID.match(path.stem):
+                try:
+                    found[path.stem] = (path.with_suffix('.rev')).read_text(encoding='utf-8').strip()[:20]
+                except OSError:
+                    found[path.stem] = ''
+    except OSError:
+        pass
+    return found
 
 
 def photo_ids():
@@ -422,13 +455,15 @@ class Desk:
         self.cfg = dict(DEFAULT_CFG)   # Screen settings from the dashboard.
         self.frame = False   # Photo frame switched on in the dashboard's settings.
         self.reminders = []  # [{'i', 'a', 't', 'e'}]: notes cycled on the screen until their expiry.
+        self.callto = []     # [{'i', 'n'}]: people with their own call button.
 
-    def configure(self, call, panic, vigia=None, night=False, greet='', greet_id='', kind='', age='', bdays='', reminders='', frame=False, cfg='', msgs='', quiet=False, acked='', red=False, weather=''):
+    def configure(self, call, panic, vigia=None, night=False, greet='', greet_id='', kind='', age='', bdays='', reminders='', frame=False, cfg='', msgs='', quiet=False, acked='', red=False, weather='', callto=''):
         with self.lock:
             now = self.last_poll = self.clock()
             self.enabled = {'call': call, 'panic': panic}
             self.vigia = (vigia, night, now) if vigia in VIGIA_STATES else None
             self.red = bool(red)
+            self.callto = parse_callto(callto)
             self.weather = parse_weather(weather)
             name = ''.join(ch for ch in greet if ch.isprintable())[:30].strip()
             if name and (not self.greet or self.greet['id'] != greet_id):
@@ -467,11 +502,13 @@ class Desk:
         """Watch-mode state, night tone and greeting for the kitchen screen; stale data is dropped."""
         with self.lock:
             now, vigia = self.clock(), self.vigia
+            avatars = avatar_revs()
             fresh = vigia is not None and now - vigia[2] < LINK_SECONDS
             greet = self.greet if self.greet and now < self.greet['until'] else None
             return {'vigia': vigia[0] if fresh else None, 'night': bool(vigia[1]) if fresh else False, 'red': self.red if fresh else False, 'weather': self.weather if fresh else None,
                     'greet': {k: greet[k] for k in ('name', 'id', 'birthday', 'age', 'msgs', 'quiet')} if greet else None,
                     'bdays': self.bdays if fresh else [],
+                    'callto': [{**p, 'p': avatars.get(p['i'])} for p in self.callto] if fresh else [],
                     'reminders': [r for r in self.reminders if r['e'] > now] if fresh else [],
                     'tests': [{k: t[k] for k in ('id', 'sound', 'volume', 'text')} for t in self.tests if now - t['at'] < 15],
                     'cfg': self.cfg if fresh else dict(DEFAULT_CFG), 'frame': self.frame if fresh else False, 'photos': photo_list() if fresh and self.frame else []}
@@ -508,14 +545,19 @@ class Desk:
             self.call = call = None
         return dict(call) if call else {'state': 'idle'}
 
-    def press(self, kind):
+    def press(self, kind, to=''):
         with self.lock:
             if kind not in KINDS or not self.enabled[kind] or not self.linked():
                 raise ValueError('Chamada indisponível agora.')
+            target = next((p for p in self.callto if p['i'] == to), None) if to and kind == 'call' else None
+            if to and not target:
+                raise ValueError('Esta pessoa não está mais na lista de chamadas.')
             if self._tick()['state'] in ('ringing', 'answered'):
                 return dict(self.call)
             self.call = {'id': uuid.uuid4().hex[:12], 'kind': kind, 'state': 'ringing', 'since': self.clock(),
                          'answered_by': None, 'answered_at': None, 'ended_at': None}
+            if target:
+                self.call.update(to=target['i'], to_name=target['n'])
             return dict(self.call)
 
     def answer(self, name):
@@ -577,14 +619,25 @@ class Handler(BaseHTTPRequestHandler):
             query = parse_qs(url.query)
             self.desk.configure(query.get('call') == ['1'], query.get('panic') == ['1'], (query.get('vigia') or [None])[0],
                                 query.get('night') == ['1'], (query.get('greet') or [''])[0], (query.get('greet_id') or [''])[0],
-                                (query.get('greet_kind') or [''])[0], (query.get('age') or [''])[0], (query.get('bdays') or [''])[0], (query.get('reminders') or [''])[0], query.get('frame') == ['1'], (query.get('cfg') or [''])[0], (query.get('greet_msgs') or [''])[0], query.get('greet_quiet') == ['1'], (query.get('acked') or [''])[0], query.get('red') == ['1'], (query.get('weather') or [''])[0])
+                                (query.get('greet_kind') or [''])[0], (query.get('age') or [''])[0], (query.get('bdays') or [''])[0], (query.get('reminders') or [''])[0], query.get('frame') == ['1'], (query.get('cfg') or [''])[0], (query.get('greet_msgs') or [''])[0], query.get('greet_quiet') == ['1'], (query.get('acked') or [''])[0], query.get('red') == ['1'], (query.get('weather') or [''])[0], (query.get('callto') or [''])[0])
             self.dim_from(query)
             self.desk.touch()   # Anything new for the screen goes out immediately to the waiting /state request.
             return self.reply(200, {**reading(), 'call': self.desk.snapshot(), 'acks': list(self.desk.acks)})
+        if url.path == '/avatars' and self.authorized():
+            return self.reply(200, {'revs': avatar_revs()})
         if url.path == '/photos' and self.authorized():
             return self.reply(200, {'ids': photo_ids(), 'authors': {p['id']: p['a'] for p in photo_list()}})
         if not self.local():
             return self.send_error(404)
+        avatar = re.fullmatch(r'/avatar/([a-f0-9]{32})\.jpg', url.path)
+        if avatar and (AVATARS / f'{avatar[1]}.jpg').is_file():
+            data = (AVATARS / f'{avatar[1]}.jpg').read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type', 'image/jpeg')
+            self.send_header('Content-Length', str(len(data)))
+            self.send_header('Cache-Control', 'max-age=3600')
+            self.end_headers()
+            return self.wfile.write(data)
         photo = re.fullmatch(r'/photo/([a-f0-9]{32})\.jpg', url.path)
         if photo:
             path = PHOTOS / f'{photo[1]}.jpg'
@@ -619,6 +672,20 @@ class Handler(BaseHTTPRequestHandler):
             if (PHOTOS / f'{renamed[1]}.jpg').is_file():
                 (PHOTOS / f'{renamed[1]}.author').write_text(self.rfile.read(size).decode('utf-8', 'replace')[:40], encoding='utf-8')
             return self.reply(200, {'ok': True})
+        avatar = re.fullmatch(r'/avatars/([a-f0-9]{32})', urlsplit(self.path).path)
+        if avatar and self.authorized():
+            size = int(self.headers.get('Content-Length') or 0)
+            if not 0 < size <= MAX_AVATAR_BYTES:
+                return self.send_error(413)
+            data = self.rfile.read(size)
+            if not data.startswith(b'\xff\xd8'):
+                return self.send_error(415)
+            AVATARS.mkdir(parents=True, exist_ok=True)
+            temporary = AVATARS / f'{avatar[1]}.part'
+            temporary.write_bytes(data)
+            temporary.replace(AVATARS / f'{avatar[1]}.jpg')
+            (AVATARS / f'{avatar[1]}.rev').write_text(self.headers.get('X-Rev', '')[:20], encoding='utf-8')
+            return self.reply(200, {'ok': True})
         photo = re.fullmatch(r'/photos/([a-f0-9]{32})', urlsplit(self.path).path)
         if not (photo and self.authorized()):
             return self.send_error(404)
@@ -637,6 +704,11 @@ class Handler(BaseHTTPRequestHandler):
         self.reply(200, {'ok': True})
 
     def do_DELETE(self):
+        avatar = re.fullmatch(r'/avatars/([a-f0-9]{32})', urlsplit(self.path).path)
+        if avatar and self.authorized():
+            (AVATARS / f'{avatar[1]}.jpg').unlink(missing_ok=True)
+            (AVATARS / f'{avatar[1]}.rev').unlink(missing_ok=True)
+            return self.reply(200, {'ok': True})
         photo = re.fullmatch(r'/photos/([a-f0-9]{32})', urlsplit(self.path).path)
         if not (photo and self.authorized()):
             return self.send_error(404)
@@ -672,7 +744,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_error(404)
         try:
             if url.path == '/call':
-                call = self.desk.press(str(self.body().get('kind')))
+                body = self.body()
+                call = self.desk.press(str(body.get('kind')), str(body.get('to') or ''))
                 self.desk.bump()
                 return self.reply(201, call)
             if url.path == '/cancel':

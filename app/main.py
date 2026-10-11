@@ -27,6 +27,7 @@ from .pacing import Greeter, first_name, kiosk_night, screen_power_saving, vigia
 from .jobs import Jobs
 from .learning import LearningSuggestions
 from .notebook import NotebookMonitor
+from .avatars import MAX_BYTES as AVATAR_MAX, Avatars
 from .journal import Journal
 from .messages import MessagePlanner, PersonMessages
 from .photos import Photos
@@ -75,6 +76,7 @@ reminders = Reminders(db)
 photos = Photos(db)
 person_messages = PersonMessages(db)
 journal = Journal(db)
+avatars = Avatars()
 weather = Weather(config)
 greeted = {'id': None}   # Last greeting sent to the screen: its messages go out once.
 message_planner = MessagePlanner(person_messages)
@@ -119,6 +121,10 @@ def vigia_for_kitchen():
             screen_state['until'] = now + settings.kiosk_screen_off_after
         info['screen'] = 'off' if now >= screen_state['until'] else 'on'
         info['screen_hold'] = settings.kiosk_screen_off_after
+    if settings.notebook_call_enabled:
+        contacts = call_contacts()
+        if contacts:
+            info['callto'] = json.dumps([{'i': i, 'n': n} for i, n in contacts], ensure_ascii=False)
     forecast = weather.current(settings)
     if forecast:
         info['weather'] = json.dumps(forecast, ensure_ascii=False)
@@ -170,6 +176,7 @@ def screen_busy():
 
 notebook.busy = screen_busy
 notebook.photos = photos
+notebook.avatars = lambda: [(i, avatars.path(i) if avatars.has(i) else None, avatars.rev(i)) for i, _ in call_contacts()]
 
 
 def messages_delivered(ids):
@@ -219,7 +226,7 @@ PUBLIC = {
     '/sw.js', '/manifest.webmanifest', '/static/icon-192.png', '/static/icon-512.png', '/static/icon-maskable.png',
 }
 # Family accounts are read-only; these (their own password and devices) are the only changes they may make.
-FAMILY_WRITES = {'/api/auth/logout', '/api/auth/password', '/api/auth/profile', '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/test',
+FAMILY_WRITES = {'/api/auth/logout', '/api/auth/password', '/api/auth/profile', '/api/auth/avatar', '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/test',
                  '/api/push/presence-status', '/api/push/presence', '/api/push/topics-status', '/api/push/topics', '/api/notebook/call/answer', '/api/notebook/call/end',
                  '/api/intercom/listen', '/api/intercom/talk', '/api/intercom/video', '/api/intercom/face', '/api/intercom/hangup'}
 
@@ -323,6 +330,51 @@ def delete_reminder(reminder_id: str, request: Request):
     except KeyError as exc:
         raise HTTPException(404, str(exc))
     return {'ok': True}
+
+
+def call_contacts():
+    """Accounts chosen for their own call button on the kitchen screen: [(id, first name)], in the order chosen."""
+    chosen = config.get().kiosk_call_users
+    names = {u['id']: u['name'] for u in auth.users()}
+    return [(i, first_name(names[i])) for i in chosen if i in names]
+
+
+@app.get('/api/call-contacts')
+def list_call_contacts(request: Request):
+    me = request.state.user
+    return {'users': [{'id': u['id'], 'name': u['name'], 'avatar': avatars.has(u['id']), 'me': bool(me) and me['id'] == u['id']} for u in auth.users()]}
+
+
+@app.post('/api/auth/avatar')
+async def upload_avatar(request: Request):
+    user = request.state.user
+    if not user:
+        raise HTTPException(409, 'Crie um usuário antes de enviar a foto do perfil.')
+    content = bytearray()
+    async for chunk in request.stream():
+        content.extend(chunk)
+        if len(content) > AVATAR_MAX:
+            raise HTTPException(413, 'A foto deve ter até 8 MB.')
+    try:
+        await run_in_threadpool(avatars.save, user['id'], bytes(content))
+    except Exception:
+        raise HTTPException(422, 'Envie uma foto JPEG ou PNG válida.')
+    return {'ok': True}
+
+
+@app.delete('/api/auth/avatar')
+def delete_avatar(request: Request):
+    user = request.state.user
+    if user:
+        avatars.delete(user['id'])
+    return {'ok': True}
+
+
+@app.get('/avatar-media/{user_id}.jpg')
+def avatar_media(user_id: str):
+    if not avatars.has(user_id):
+        raise HTTPException(404)
+    return FileResponse(avatars.path(user_id), media_type='image/jpeg', headers={'Cache-Control': 'private, max-age=300'})
 
 
 class JournalIn(BaseModel):

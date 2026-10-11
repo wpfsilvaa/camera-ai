@@ -122,6 +122,14 @@ Com o vigia e a tela desligada juntos, o notebook só trabalha de verdade quando
 depende do aparelho (o painel de um notebook costuma ser uma das maiores cargas). De dia, a tela apagada usa o mesmo tempo de
 "Desligar a tela depois de" e liga por presença do mesmo jeito que à noite.
 
+### Chamar uma pessoa pelo nome
+
+Em **Configurações → Totem**, escolha até 4 usuários em **Botões para chamar uma pessoa**. Cada um aparece na tela do notebook como um botão redondo com a foto (cada pessoa envia a própria em **Minha conta → Minha foto**; sem foto, aparece a inicial). Tocar chama só aquela pessoa: a notificação toca só nos aparelhos dela e a tela mostra "Chamando Fulana…". Se ela não atender em **90 segundos**, a família toda é avisada. "Chamar a família" continua existindo.
+
+## Luz de passagem à noite
+
+Em **Configurações → Totem → Noite**, **Luz de passagem** faz a tela acender uma luz quente e suave, só com a hora, quando alguém aparece na câmera de madrugada (e apagar sozinha depois que sai). Ajuda a enxergar o caminho sem acender a luz forte. Você escolhe o brilho; tocar na tela mostra os botões normais. Durante a luz, saudações e recados esperam a próxima vez.
+
 ## Tela desligada à noite
 
 Em **Configurações → Totem → Noite → Como a tela fica à noite**, a opção **"Desligar a tela (liga quando alguém

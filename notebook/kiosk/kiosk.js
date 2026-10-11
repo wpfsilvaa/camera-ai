@@ -68,15 +68,39 @@
 
   const post = path => fetch(path, {method: 'POST', headers: {'X-Kiosk': '1', 'Content-Type': 'application/json'}, body: '{}'});
 
-  async function press(kind) {
+  async function press(kind, to) {
     try { sounds.press(); } catch { /* ignore */ }
-    const response = await fetch('/call', {method: 'POST', headers: {'X-Kiosk': '1', 'Content-Type': 'application/json'}, body: JSON.stringify({kind})});
+    const response = await fetch('/call', {method: 'POST', headers: {'X-Kiosk': '1', 'Content-Type': 'application/json'}, body: JSON.stringify({kind, to: to || ''})});
     if (!response.ok) { $('note').textContent = 'Não foi possível chamar agora. Tente de novo.'; $('note').classList.remove('hidden'); }
     confirming = false;
     await poll(true);
   }
 
   $('btn-call').onclick = () => press('call');
+
+  // One button per person with a photo: calls only them (the family is told too if they do not answer).
+  let callToKey = '';
+  function renderCallTo(on, linked) {
+    const people = on ? (last.callto || []) : [], box = $('callto');
+    const key = JSON.stringify(people);
+    box.classList.toggle('hidden', !people.length);
+    if (key !== callToKey) {
+      callToKey = key;
+      box.replaceChildren(...people.map(person => {
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = 'callto-btn';
+        const face = document.createElement('span'); face.className = 'callto-face';
+        if (person.p !== null && person.p !== undefined) {
+          const img = document.createElement('img'); img.alt = ''; img.src = `/avatar/${person.i}.jpg?r=${encodeURIComponent(person.p)}`; face.append(img);
+        } else face.textContent = person.n.slice(0, 1).toUpperCase();
+        const name = document.createElement('span'); name.className = 'callto-name'; name.textContent = person.n;
+        button.append(face, name);
+        button.onclick = () => press('call', person.i);
+        return button;
+      }));
+    }
+    box.querySelectorAll('button').forEach(button => { button.disabled = !linked; });
+  }
   $('btn-panic').onclick = () => { confirming = true; render(); };
   $('confirm-yes').onclick = () => press('panic');
   $('confirm-no').onclick = () => { confirming = false; render(); };
@@ -120,12 +144,13 @@
     if (last.build) { if (build === null) build = last.build; else if (build !== last.build) location.reload(); }
 
     $('btn-call').classList.toggle('hidden', !enabled.call);
+    renderCallTo(enabled.call, linked);
     $('btn-panic').classList.toggle('hidden', !enabled.panic);
     $('btn-call').disabled = $('btn-panic').disabled = !linked;
     const note = !linked ? 'Chamada indisponível no momento. Se precisar, use o telefone.' : !enabled.call && !enabled.panic ? 'Chamada pela tela desativada.' : '';
     $('note').textContent = note;
     $('note').classList.toggle('hidden', !note);
-    $('ringing-title').textContent = call.kind === 'panic' ? 'Pedindo ajuda…' : 'Chamando a família…';
+    $('ringing-title').textContent = call.kind === 'panic' ? 'Pedindo ajuda…' : call.to_name ? `Chamando ${call.to_name}…` : 'Chamando a família…';
     if (view === 'answered') {
       $('answered-title').textContent = `${call.answered_by} atendeu`;
       $('avatar').textContent = (call.answered_by || '?').trim().slice(0, 1).toUpperCase();
