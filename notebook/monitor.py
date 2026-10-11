@@ -92,7 +92,7 @@ def parse_quotes(text):
         if isinstance(item, dict):
             body = ''.join(ch for ch in str(item.get('t', '')) if ch.isprintable())[:240].strip()
             if body:
-                found.append({'i': str(item.get('i', ''))[:40], 't': body, 'a': ''.join(ch for ch in str(item.get('a', '')) if ch.isprintable())[:30].strip()})
+                found.append({'s': bool(item.get('s')), 'i': str(item.get('i', ''))[:40], 't': body, 'a': ''.join(ch for ch in str(item.get('a', '')) if ch.isprintable())[:30].strip()})
     return found
 
 

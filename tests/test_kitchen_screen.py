@@ -143,6 +143,15 @@ class PersonMessageTests(unittest.TestCase):
         self.messages.delete(message, 'u1', False)
         self.assertEqual(self.messages.active(), [])
 
+    def test_view_once_message_is_consumed_when_the_screen_shows_it(self):
+        single = self.messages.add('Waldemar', 'u1', 'father', 'Só para você', 24, True, now=1000, single=True)
+        rows = self.messages.for_person('father', 1100)
+        self.assertEqual([(r['id'], r['single']) for r in rows], [(single, 1)])
+        self.messages.mark_read([single], 1105)                               # The screen confirms it started showing it.
+        self.assertEqual(self.messages.for_person('father', 1200), [])         # Gone for good, even though nobody tapped "Li".
+        listed = self.messages.active(1200, only_user='u1')[0]
+        self.assertEqual((listed['single'], listed['read_at']), (1, 1105))     # The sender still sees it was viewed.
+
     def test_each_account_only_lists_its_own_messages(self):
         mine = self.messages.add('Waldemar', 'u1', 'father', 'Segredo meu', 24)
         self.messages.add('Lorena', 'u2', 'father', 'Segredo dela', 24)
@@ -212,8 +221,9 @@ class MonitorDisplayTests(unittest.TestCase):
         desk = monitor.Desk(clock=lambda: 1000.0)
         desk.configure(True, True, 'resting', False, 'Ana', '5', '', '', '', '', False, '', '[{"t":"Te amo","a":"Waldemar"},{"t":"","a":"x"}]', False)
         greet = desk.display()['greet']
-        self.assertEqual(greet['msgs'], [{'i': '', 't': 'Te amo', 'a': 'Waldemar'}])
+        self.assertEqual(greet['msgs'], [{'s': False, 'i': '', 't': 'Te amo', 'a': 'Waldemar'}])
         self.assertFalse(greet['quiet'])
+        self.assertEqual(monitor.parse_quotes('[{"t":"x","s":1,"i":"a"}]'), [{'s': True, 'i': 'a', 't': 'x', 'a': ''}])
         self.assertEqual(monitor.parse_quotes('not json'), [])
 
     def test_acks_wait_until_the_dashboard_confirms_them(self):

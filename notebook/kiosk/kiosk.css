@@ -176,3 +176,10 @@ html[data-night="1"] .quote-head{color:#c8493c}
 .quote.attn::after{animation:attn 1.3s ease-in-out 4}
 @keyframes attn{0%,100%{opacity:0}50%{opacity:.5}}
 @media (prefers-reduced-motion:reduce){.quote.attn::after{animation:none}}
+
+/* View-once message: it disappears by itself; a bar shows how long is left */
+.quote-timer{position:absolute;left:50%;bottom:7vh;transform:translateX(-50%);width:min(46vw,640px);text-align:center;color:var(--muted);font-size:clamp(16px,2vw,28px)}
+.quote-timer b{display:block;height:.9vh;margin-top:1.2vh;border-radius:99px;background:#ffffff26;overflow:hidden}
+.quote-timer i{display:block;height:100%;width:100%;background:var(--amber);transform-origin:left;animation:drain 30s linear forwards}
+@keyframes drain{to{transform:scaleX(0)}}
+@media (prefers-reduced-motion:reduce){.quote-timer i{animation:none}}

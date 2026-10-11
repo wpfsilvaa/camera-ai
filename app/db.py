@@ -98,7 +98,7 @@ class Database:
                 CREATE TABLE IF NOT EXISTS person_messages (
                     id TEXT PRIMARY KEY, to_person TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE, author TEXT NOT NULL, user_id TEXT,
                     text TEXT NOT NULL, created REAL NOT NULL, expires REAL NOT NULL, once INTEGER NOT NULL DEFAULT 1,
-                    shown INTEGER NOT NULL DEFAULT 0, last_shown REAL, read_at REAL
+                    shown INTEGER NOT NULL DEFAULT 0, last_shown REAL, read_at REAL, single INTEGER NOT NULL DEFAULT 0
                 );
                 -- Notes left for the kitchen screen; each one disappears at its expiry.
                 CREATE TABLE IF NOT EXISTS reminders (
@@ -142,8 +142,11 @@ class Database:
                     db.execute(f'ALTER TABLE push_subscriptions ADD COLUMN {name} {definition}')
             if 'image' not in {r['name'] for r in db.execute('PRAGMA table_info(alerts)')}:
                 db.execute('ALTER TABLE alerts ADD COLUMN image INTEGER NOT NULL DEFAULT 0')
-            if 'read_at' not in {r['name'] for r in db.execute('PRAGMA table_info(person_messages)')}:
+            message_columns = {r['name'] for r in db.execute('PRAGMA table_info(person_messages)')}
+            if 'read_at' not in message_columns:
                 db.execute('ALTER TABLE person_messages ADD COLUMN read_at REAL')   # When the person tapped "Li" on the screen.
+            if 'single' not in message_columns:
+                db.execute('ALTER TABLE person_messages ADD COLUMN single INTEGER NOT NULL DEFAULT 0')   # View-once: shown 30 s, then gone.
             if 'birthday' not in {r['name'] for r in db.execute('PRAGMA table_info(people)')}:
                 db.execute('ALTER TABLE people ADD COLUMN birthday TEXT')   # ISO date (YYYY-MM-DD), used for the kitchen screen's greeting.
             track_columns = {r['name'] for r in db.execute('PRAGMA table_info(person_tracks)')}

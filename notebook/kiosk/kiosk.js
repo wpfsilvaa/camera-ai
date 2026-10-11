@@ -150,20 +150,25 @@
     if (!item) { quoteId = ''; $('quote').classList.add('hidden'); syncSpeaking(); return; }
     quoteId = item.i || '';
     $('quote-text').textContent = item.t; $('quote-by').textContent = item.a || '';
-    $('quote-ok').classList.toggle('hidden', !quoteId);
+    const single = Boolean(item.s);
+    $('quote-ok').classList.toggle('hidden', !quoteId || single);
+    $('quote-timer').classList.toggle('hidden', !single);
+    if (single) { const bar = $('quote-timer').querySelector('i'); bar.style.animation = 'none'; void bar.offsetWidth; bar.style.animation = ''; }
+    // View-once: showing it is what consumes it, so the screen tells the dashboard right away.
+    if (single && quoteId) fetch('/ack', {method: 'POST', headers: {'X-Kiosk': '1', 'Content-Type': 'application/json'}, body: JSON.stringify({id: quoteId})}).catch(() => {});
     const head = $('quote-head');
     head.textContent = quoteHead.text; head.classList.toggle('hidden', !quoteHead.text); head.classList.toggle('birthday', quoteHead.birthday);
     head.classList.remove('rise'); if (quoteHead.fresh) { void head.offsetWidth; head.classList.add('rise'); quoteHead.fresh = false; }   // Moves up once.
     $('quote').classList.remove('hidden'); $('quote').style.animation = 'none'; void $('quote').offsetWidth; $('quote').style.animation = '';
     syncSpeaking();
-    quoteTimer = setTimeout(nextQuote, item.ms || 20000);
+    quoteTimer = setTimeout(nextQuote, item.ms || (single ? 30000 : 20000));
     testVolume = item.vol ?? null;
     try { sounds.message(); } catch { /* no audio device */ }
     testVolume = null;
     $('quote').classList.remove('attn'); void $('quote').offsetWidth; $('quote').classList.add('attn');
     clearTimeout(chimeTimer);
     const current = quoteId;
-    chimeTimer = setTimeout(() => { if (current && !item.vol && quoteId === current) { try { sounds.message(); } catch { /* ignore */ } } }, 9000);   // Still unread: once more.
+    chimeTimer = setTimeout(() => { if (current && !item.vol && !single && quoteId === current) { try { sounds.message(); } catch { /* ignore */ } } }, 9000);   // Still unread: once more.
   }
   let quoteHead = {text: '', birthday: false, fresh: false};
   function showQuotes(items, delay, headline = '', birthday = false) {

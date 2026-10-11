@@ -104,7 +104,7 @@ def vigia_for_kitchen():
             if greeting['id'] != greeted['id']:
                 waiting = person_messages.for_person(greeting['person'], now)
                 if waiting:
-                    info['greet_msgs'] = json.dumps([{'i': r['id'], 't': r['text'], 'a': first_name(r['author'])} for r in waiting[:5]], ensure_ascii=False)
+                    info['greet_msgs'] = json.dumps([{'i': r['id'], 't': r['text'], 'a': first_name(r['author']), 's': int(r['single'])} for r in waiting[:5]], ensure_ascii=False)
                     info['_deliver'] = [r['id'] for r in waiting[:5]]
                     greeted['pending'], greeted['person'] = greeting['id'], greeting['person']   # Counted as sent only once the screen accepted them.
                 else:
@@ -117,7 +117,7 @@ def vigia_for_kitchen():
             if planned:
                 person, track, waiting = planned
                 info.update(greet=first_name(track.get('name') or ''), greet_id=int(now), greet_quiet=1,
-                            greet_msgs=json.dumps([{'i': r['id'], 't': r['text'], 'a': first_name(r['author'])} for r in waiting[:5]], ensure_ascii=False))
+                            greet_msgs=json.dumps([{'i': r['id'], 't': r['text'], 'a': first_name(r['author']), 's': int(r['single'])} for r in waiting[:5]], ensure_ascii=False))
                 info['_deliver'] = [r['id'] for r in waiting[:5]]
                 greeted['pending'], greeted['person'] = None, person
     return info
@@ -281,13 +281,13 @@ class MessageIn(BaseModel):
     to_person: str = Field(min_length=1, max_length=64)
     text: str = Field(min_length=1, max_length=240)
     hours: int = Field(ge=1, le=24 * 90)
-    once: bool = True
+    mode: str = Field(default='read', pattern='^(read|always|single)$')   # until read, every time, or view-once
 
 
 def message_view(row, user):
     """A message as its author sees it; nobody else gets to list it (it is shown only to the recipient, on the screen)."""
     return {'id': row['id'], 'to_person': row['to_person'], 'to_name': row['to_name'], 'author': row['author'], 'text': row['text'], 'created': row['created'],
-            'expires': row['expires'], 'once': bool(row['once']), 'shown': row['shown'], 'last_shown': row['last_shown'], 'read_at': row['read_at'],
+            'expires': row['expires'], 'once': bool(row['once']), 'single': bool(row['single']), 'shown': row['shown'], 'last_shown': row['last_shown'], 'read_at': row['read_at'],
             'mine': True}
 
 
@@ -300,7 +300,7 @@ def list_messages(request: Request):
 @app.post('/api/messages')
 def add_message(body: MessageIn, request: Request):
     user = request.state.user
-    call_service(person_messages.add, user['name'] if user else 'Casa', user['id'] if user else None, body.to_person, body.text, body.hours, body.once)
+    call_service(person_messages.add, user['name'] if user else 'Casa', user['id'] if user else None, body.to_person, body.text, body.hours, body.mode != 'always', None, body.mode == 'single')
     return {'messages': [message_view(r, user) for r in person_messages.active(only_user=user['id'] if user else None)]}
 
 

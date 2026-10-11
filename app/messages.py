@@ -21,7 +21,7 @@ class PersonMessages:
         where, params = ('WHERE m.user_id=?', (only_user,)) if only_user is not None else ('', ())
         return self.db.rows(f'SELECT m.*,p.name AS to_name FROM person_messages m LEFT JOIN people p ON p.id=m.to_person {where} ORDER BY m.created DESC', params)
 
-    def add(self, author, user_id, to_person, text, hours, once=True, now=None):
+    def add(self, author, user_id, to_person, text, hours, once=True, now=None, single=False):
         now = now or time.time()
         text = ' '.join(''.join(ch for ch in str(text) if ch.isprintable() or ch in '\n ').split())[:MAX_TEXT]
         if not text:
@@ -33,14 +33,15 @@ class PersonMessages:
         if len(self.active(now)) >= MAX_ACTIVE:
             raise ValueError(f'Há {MAX_ACTIVE} recados ativos. Remova alguns antes de escrever outro.')
         message_id = uuid.uuid4().hex
-        self.db.execute('INSERT INTO person_messages(id,to_person,author,user_id,text,created,expires,once) VALUES(?,?,?,?,?,?,?,?)',
-                        (message_id, to_person, str(author)[:60] or 'Alguém', user_id, text, now, now + hours * 3600, int(once)))
+        # A view-once message is consumed when it is first shown: it behaves as "until read", the screen confirming for the person.
+        self.db.execute('INSERT INTO person_messages(id,to_person,author,user_id,text,created,expires,once,single) VALUES(?,?,?,?,?,?,?,?,?)',
+                        (message_id, to_person, str(author)[:60] or 'Alguém', user_id, text, now, now + hours * 3600, int(once or single), int(single)))
         return message_id
 
     def for_person(self, person_id, now=None):
         """Messages to show now to this person: valid, and for "once" messages only until the person taps "Li"."""
         now = now or time.time()
-        return self.db.rows('SELECT id,author,text,once FROM person_messages WHERE to_person=? AND expires>? AND (once=0 OR read_at IS NULL) ORDER BY created',
+        return self.db.rows('SELECT id,author,text,once,single FROM person_messages WHERE to_person=? AND expires>? AND (once=0 OR read_at IS NULL) ORDER BY created',
                             (person_id, now))
 
     def mark_shown(self, message_ids, now=None):
