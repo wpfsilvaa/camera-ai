@@ -174,21 +174,38 @@
   // Messages left for the person being greeted, one after the other, quote-style with the sender underneath.
   // Each message stays 20 s (or until the person taps "Li", which tells the family it was read).
   let quoteQueue = [], quoteTimer = null, quoteId = '', chimeTimer = null;
-  // Reads text aloud with the browser's Portuguese voice (if the machine has one), at the messages volume.
-  function speak(text) {
+  // Reads text aloud: first with the notebook's local neural voice (Piper, via the monitor), then with the browser's own voice.
+  let talking = null, speechToken = 0;
+  async function speak(text) {
+    if (!cfg().speak || !cfg().sound || !text) return;
+    const token = ++speechToken;
+    stopSpeaking(false);
+    const volume = Math.min(Math.max((cfg().vol.message ?? 80) / 100, 0), 1);
+    try {
+      const response = await fetch('/tts', {method: 'POST', headers: {'X-Kiosk': '1', 'Content-Type': 'application/json'}, body: JSON.stringify({text})});
+      if (!response.ok) throw new Error('sem voz local');
+      const audio = new Audio(URL.createObjectURL(await response.blob()));
+      if (token !== speechToken) return;   // Another message (or a hide) came first.
+      audio.volume = volume;
+      talking = audio;
+      await audio.play();
+      return;
+    } catch { /* fall back to the browser voice */ }
     try {
       const synth = window.speechSynthesis;
-      if (!synth || !cfg().speak || !cfg().sound || !text) return;
-      synth.cancel();
+      if (!synth || token !== speechToken) return;
       const talk = new SpeechSynthesisUtterance(text);
       talk.lang = 'pt-BR';
       talk.voice = synth.getVoices().find(v => v.lang === 'pt-BR') || synth.getVoices().find(v => v.lang.startsWith('pt')) || null;
-      talk.volume = Math.min(Math.max((cfg().vol.message ?? 80) / 100, 0), 1);
+      talk.volume = volume;
       talk.rate = .92;
       synth.speak(talk);
     } catch { /* no voice available */ }
   }
-  const stopSpeaking = () => { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch { /* ignore */ } };
+  function stopSpeaking(bump = true) {
+    if (bump) speechToken++;
+    try { if (talking) { talking.pause(); talking = null; } window.speechSynthesis && window.speechSynthesis.cancel(); } catch { /* ignore */ }
+  }
   function hideQuote() { stopSpeaking(); clearTimeout(quoteTimer); clearTimeout(chimeTimer); quoteQueue = []; quoteId = ''; $('quote').classList.add('hidden'); syncSpeaking(); }
   function nextQuote() {
     clearTimeout(quoteTimer);

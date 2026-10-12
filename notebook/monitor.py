@@ -5,11 +5,13 @@ Sem dependências. O painel consulta GET /status com o token compartilhado (bate
 estado da chamada) e decide quando avisar (app/notebook.py). A tela do quiosque (notebook/kiosk/)
 é servida só para o próprio notebook (127.0.0.1) e fala com este agente em /state, /call e /cancel.
 """
+import hashlib
 import hmac
 import json
 import os
 import re
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -27,6 +29,7 @@ AVATARS = Path(os.environ.get('MONITOR_AVATARS_DIR', Path.home() / '.cache/casa-
 MAX_AVATAR_BYTES = 300 * 1024
 MAX_CALLTO = 4   # Buttons "call this person" on the screen.
 KIOSK = Path(os.environ.get('MONITOR_KIOSK_DIR', Path(__file__).resolve().parent / 'kiosk'))
+TTS_DIR = Path(os.environ.get('MONITOR_TTS_DIR', Path.home() / '.local/share/casa-tts'))
 TOKEN_FILE = Path(os.environ.get('MONITOR_TOKEN_FILE', Path.home() / '.config/casa-monitor/token'))
 
 
@@ -575,9 +578,50 @@ class Desk:
             return self._tick()
 
 
+class Voice:
+    """Local text to speech with Piper (a Portuguese neural voice), installed in its own folder; wavs are cached."""
+    MODEL = 'voices/pt_BR-faber-medium.onnx'
+    MAX_CHARS = 700
+    KEEP = 60
+
+    def __init__(self, folder=None):
+        self.folder = Path(folder or TTS_DIR)
+        self.lock = threading.Lock()
+
+    @property
+    def python(self):
+        return self.folder / 'venv/bin/python'
+
+    def available(self):
+        return self.python.is_file() and (self.folder / self.MODEL).is_file()
+
+    def wav(self, text):
+        """WAV bytes for the text, or None when the voice is not installed or failed."""
+        text = ' '.join(''.join(ch for ch in str(text) if ch.isprintable()).split())[:self.MAX_CHARS]
+        if not text or not self.available():
+            return None
+        cache = self.folder / 'cache'
+        cache.mkdir(exist_ok=True)
+        target = cache / (hashlib.sha1(text.encode()).hexdigest() + '.wav')
+        with self.lock:
+            if not target.is_file():
+                temporary = target.with_suffix('.tmp')
+                try:
+                    subprocess.run([str(self.python), '-m', 'piper', '-m', str(self.folder / self.MODEL), '-f', str(temporary), '--', text],
+                                   check=True, capture_output=True, timeout=40)
+                    temporary.replace(target)
+                except (subprocess.SubprocessError, OSError):
+                    temporary.unlink(missing_ok=True)
+                    return None
+                for old in sorted(cache.glob('*.wav'), key=lambda p: p.stat().st_mtime)[:-self.KEEP]:
+                    old.unlink(missing_ok=True)
+        return target.read_bytes()
+
+
 class Handler(BaseHTTPRequestHandler):
     token = ''
     desk = Desk()
+    voice = Voice()
     dimmer = Dimmer(Backlight())
     screen = ScreenSchedule(DisplayPower())
     kiosk_files = {'/': ('index.html', 'text/html; charset=utf-8'), '/kiosk.css': ('kiosk.css', 'text/css'),
@@ -757,6 +801,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.dimmer.wake()
                 self.screen.wake()
                 return self.reply(200, {'ok': True})
+            if url.path == '/tts':
+                audio = self.voice.wav(str(self.body().get('text', '')))
+                return self.reply(200, body=audio, kind='audio/wav') if audio else self.send_error(404)
             if url.path == '/ack':
                 self.desk.ack(str(self.body().get('id', '')))
                 self.desk.bump()

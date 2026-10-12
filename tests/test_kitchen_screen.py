@@ -449,5 +449,26 @@ class MonitorDisplayTests(unittest.TestCase):
         self.assertEqual((shown['bdays'], shown['reminders']), ([], []))
 
 
+class VoiceTests(unittest.TestCase):
+    def test_not_installed_means_no_audio(self):
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertIsNone(monitor.Voice(folder).wav('Bom dia'))
+
+    def test_speaks_through_the_installed_voice_and_caches(self):
+        with tempfile.TemporaryDirectory() as folder:
+            python = Path(folder) / 'venv/bin/python'
+            python.parent.mkdir(parents=True)
+            counter = Path(folder) / 'runs'
+            # A stand-in for `python -m piper -m model -f out.wav -- text`: writes the text into the output file.
+            python.write_text('#!/bin/sh\necho x >> "%s"\nwhile [ "$1" != "-f" ]; do shift; done\nprintf RIFF-fake > "$2"\n' % counter)
+            python.chmod(0o755)
+            (Path(folder) / 'voices').mkdir()
+            (Path(folder) / monitor.Voice.MODEL).write_bytes(b'model')
+            voice = monitor.Voice(folder)
+            self.assertEqual(voice.wav('Bom dia, Ana.'), b'RIFF-fake')
+            self.assertEqual(voice.wav('Bom   dia, Ana.'), b'RIFF-fake')   # Same text once spaces are tidied: cached.
+            self.assertEqual(len(counter.read_text().split()), 1)
+
+
 if __name__ == '__main__':
     unittest.main()
