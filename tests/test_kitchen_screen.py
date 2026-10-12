@@ -419,7 +419,7 @@ class MonitorDisplayTests(unittest.TestCase):
         desk.configure(True, True, 'resting', False)
         first = desk.queue_test({'sound': 'message', 'volume': 250, 'text': 'Oi'})
         shown = desk.display()['tests']
-        self.assertEqual(shown, [{'id': first, 'sound': 'message', 'volume': 100, 'text': 'Oi'}])
+        self.assertEqual(shown, [{'id': first, 'sound': 'message', 'volume': 100, 'text': 'Oi', 'voice': ''}])
         for bad in ({'sound': 'siren', 'volume': 50}, {'sound': 'press', 'volume': 'loud'}, {'sound': 'press'}):
             with self.assertRaises(ValueError):
                 desk.queue_test(bad)
@@ -463,7 +463,7 @@ class VoiceTests(unittest.TestCase):
             python.write_text('#!/bin/sh\necho x >> "%s"\nwhile [ "$1" != "-f" ]; do shift; done\nprintf RIFF-fake > "$2"\n' % counter)
             python.chmod(0o755)
             (Path(folder) / 'voices').mkdir()
-            (Path(folder) / monitor.Voice.MODEL).write_bytes(b'model')
+            (Path(folder) / "voices/pt_BR-faber-medium.onnx").write_bytes(b'model')
             voice = monitor.Voice(folder)
             self.assertEqual(voice.wav('Bom dia, Ana.'), b'RIFF-fake')
             self.assertEqual(voice.wav('Bom   dia, Ana.'), b'RIFF-fake')   # Same text once spaces are tidied: cached.

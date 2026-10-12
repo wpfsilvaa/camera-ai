@@ -75,13 +75,13 @@ class NotebookMonitor:
         self.silent_alerted = False
         self.unplugged_alerted = False
 
-    def send_test(self, sound, volume, text=''):
+    def send_test(self, sound, volume, text='', voice=''):
         """Ask the kitchen screen to play one sound (or show a sample message) now."""
         url, token = notebook_url(self.config.get().camera_source), self.token()
         if not (url and token):
             raise RuntimeError('A tela do notebook não está configurada.')
         try:
-            response = httpx.post(f'{url}/test', headers={'Authorization': f'Bearer {token}'}, json={'sound': sound, 'volume': volume, 'text': text}, timeout=5)
+            response = httpx.post(f'{url}/test', headers={'Authorization': f'Bearer {token}'}, json={'sound': sound, 'volume': volume, 'text': text, 'voice': voice}, timeout=5)
         except httpx.HTTPError:
             raise RuntimeError('A tela do notebook não respondeu. Confira se ele está ligado.')
         if response.status_code != 200:

@@ -28,3 +28,14 @@ document.addEventListener('click', event => {
     toast('Teste enviado: veja o lembrete na tela do notebook.');
   });
 });
+// "Ouvir esta voz": the notebook reads a sample with the voice picked in the list (no need to save first), at the message volume.
+document.addEventListener('click', event => {
+  const button = event.target.closest('#test-voice');
+  if (!button) return;
+  const volume = Number(document.querySelector('input[name="kiosk_vol_message_day"]')?.value || 80);
+  const voice = document.querySelector('select[name="kiosk_voice"]')?.value || '';
+  action(button, async () => {
+    await api('/api/kiosk/test', {method: 'POST', body: JSON.stringify({sound: 'voice', volume, voice})});
+    toast('Teste enviado: a tela do notebook vai ler um exemplo em alguns segundos.');
+  });
+});

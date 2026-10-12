@@ -4,7 +4,7 @@
   const screen = $('screen');
   let last = {call: {state: 'idle'}}, confirming = false, face = null, faceTimer = null;
   let build = null, greetedId = null, greetTimer = null;
-  const DEFAULT_CFG = {slide: 15, awake: 30, sound: true, vol: {button: 70, call: 70, help: 100, message: 80}, calendar: true, framecal: 'always', rain: true, speak: true, hints: [], black: true};
+  const DEFAULT_CFG = {slide: 15, awake: 30, sound: true, vol: {button: 70, call: 70, help: 100, message: 80}, calendar: true, framecal: 'always', rain: true, speak: true, voice: 'faber', hints: [], black: true};
   const cfg = () => ({...DEFAULT_CFG, ...(last.cfg || {}), vol: {...DEFAULT_CFG.vol, ...((last.cfg || {}).vol || {})}});
 
   // Sounds generated here (no files). Each kind has its own volume (0-100, set for day and night in the dashboard);
@@ -48,6 +48,7 @@
         else if (test.sound === 'help') sounds.ring('panic');
         else if (test.sound === 'rain') { rain.testLevel = test.volume > 66 ? 3 : test.volume > 33 ? 2 : 1; rain.testUntil = Date.now() + 15000; updateRain(); }
         else if (test.sound === 'nudge') showQuotes([{i: '', t: test.text || 'Lembrete.', a: '', vol: test.volume, ms: 12000, sound: 'nudge'}], 0, 'Lembrete', false);
+        else if (test.sound === 'voice') { showQuotes([{i: '', t: test.text, a: '', vol: test.volume, ms: 14000, sound: 'nudge'}], 0, `Voz: ${test.voice || cfg().voice}`, false); speak(test.text, test); }
         else if (test.sound === 'message') showQuotes([{i: '', t: test.text || 'Esta é uma mensagem de teste.', a: 'Teste', vol: test.volume, ms: 8000}], 0, 'Mensagem de teste', false);
       } catch { /* no audio device */ }
       testVolume = null;
@@ -176,13 +177,13 @@
   let quoteQueue = [], quoteTimer = null, quoteId = '', chimeTimer = null;
   // Reads text aloud: first with the notebook's local neural voice (Piper, via the monitor), then with the browser's own voice.
   let talking = null, speechToken = 0;
-  async function speak(text) {
-    if (!cfg().speak || !cfg().sound || !text) return;
+  async function speak(text, test = null) {
+    if (!text || (!test && (!cfg().speak || !cfg().sound))) return;
     const token = ++speechToken;
     stopSpeaking(false);
-    const volume = Math.min(Math.max((cfg().vol.message ?? 80) / 100, 0), 1);
+    const volume = Math.min(Math.max((test ? test.volume : (cfg().vol.message ?? 80)) / 100, 0), 1), voice = (test && test.voice) || cfg().voice;
     try {
-      const response = await fetch('/tts', {method: 'POST', headers: {'X-Kiosk': '1', 'Content-Type': 'application/json'}, body: JSON.stringify({text})});
+      const response = await fetch('/tts', {method: 'POST', headers: {'X-Kiosk': '1', 'Content-Type': 'application/json'}, body: JSON.stringify({text, voice})});
       if (!response.ok) throw new Error('sem voz local');
       const audio = new Audio(URL.createObjectURL(await response.blob()));
       if (token !== speechToken) return;   // Another message (or a hide) came first.

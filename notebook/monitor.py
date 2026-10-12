@@ -63,8 +63,8 @@ def reading():
 # A call nobody answered stops ringing after this long ("panic" keeps ringing until someone answers or he cancels).
 MISSED_AFTER = 300
 RESULT_SECONDS = 10  # How long "call ended / missed" stays on the kiosk screen.
-DEFAULT_CFG = {'slide': 15, 'awake': 30, 'sound': True, 'vol': {'button': 70, 'call': 70, 'help': 100, 'message': 80}, 'calendar': True, 'framecal': 'always', 'rain': True, 'speak': True, 'hints': [], 'black': True}
-TEST_SOUNDS = ('press', 'ring', 'help', 'message', 'nudge', 'rain')
+DEFAULT_CFG = {'slide': 15, 'awake': 30, 'sound': True, 'vol': {'button': 70, 'call': 70, 'help': 100, 'message': 80}, 'calendar': True, 'framecal': 'always', 'rain': True, 'speak': True, 'voice': 'faber', 'hints': [], 'black': True}
+TEST_SOUNDS = ('press', 'ring', 'help', 'message', 'nudge', 'rain', 'voice')
 VIGIA_STATES = ('off', 'resting', 'analysing', 'scheduled')
 GREET_SECONDS = 10
 BIRTHDAY_SECONDS = 25
@@ -164,6 +164,8 @@ def parse_cfg(text):
             cfg[key] = data[key]
     if isinstance(data.get('hints'), list):
         cfg['hints'] = [''.join(ch for ch in str(h) if ch.isprintable())[:120].strip() for h in data['hints'][:10] if str(h).strip()]
+    if data.get('voice') in Voice.MODELS:
+        cfg['voice'] = data['voice']
     return cfg
 
 
@@ -489,9 +491,10 @@ class Desk:
         if sound not in TEST_SOUNDS or not isinstance(volume, int) or isinstance(volume, bool):
             raise ValueError('Teste inválido.')
         text = ''.join(ch for ch in str(spec.get('text', '')) if ch.isprintable())[:200].strip()
+        voice = spec.get('voice') if spec.get('voice') in Voice.MODELS else ''
         with self.lock:
             now = self.clock()
-            self.tests = [t for t in self.tests if now - t['at'] < 30][-4:] + [{'id': uuid.uuid4().hex, 'sound': sound, 'volume': min(max(volume, 0), 100), 'text': text, 'at': now}]
+            self.tests = [t for t in self.tests if now - t['at'] < 30][-4:] + [{'id': uuid.uuid4().hex, 'sound': sound, 'volume': min(max(volume, 0), 100), 'text': text, 'voice': voice, 'at': now}]
             test_id = self.tests[-1]['id']
         self.bump()
         return test_id
@@ -514,7 +517,7 @@ class Desk:
                     'bdays': self.bdays if fresh else [],
                     'callto': [{**p, 'p': avatars.get(p['i'])} for p in self.callto] if fresh else [],
                     'reminders': [r for r in self.reminders if r['e'] > now] if fresh else [],
-                    'tests': [{k: t[k] for k in ('id', 'sound', 'volume', 'text')} for t in self.tests if now - t['at'] < 15],
+                    'tests': [{k: t[k] for k in ('id', 'sound', 'volume', 'text', 'voice')} for t in self.tests if now - t['at'] < 15],
                     'cfg': self.cfg if fresh else dict(DEFAULT_CFG), 'frame': self.frame if fresh else False, 'photos': photo_list() if fresh and self.frame else []}
 
     def bump(self):
@@ -580,7 +583,8 @@ class Desk:
 
 class Voice:
     """Local text to speech with Piper (a Portuguese neural voice), installed in its own folder; wavs are cached."""
-    MODEL = 'voices/pt_BR-faber-medium.onnx'
+    MODELS = {'faber': 'pt_BR-faber-medium', 'cadu': 'pt_BR-cadu-medium', 'jeff': 'pt_BR-jeff-medium', 'edresson': 'pt_BR-edresson-low'}
+    DEFAULT = 'faber'
     MAX_CHARS = 700
     KEEP = 60
 
@@ -592,22 +596,26 @@ class Voice:
     def python(self):
         return self.folder / 'venv/bin/python'
 
-    def available(self):
-        return self.python.is_file() and (self.folder / self.MODEL).is_file()
+    def model(self, voice):
+        return self.folder / 'voices' / f'{self.MODELS.get(voice) or self.MODELS[self.DEFAULT]}.onnx'
 
-    def wav(self, text):
-        """WAV bytes for the text, or None when the voice is not installed or failed."""
+    def available(self, voice=None):
+        return self.python.is_file() and self.model(voice).is_file()
+
+    def wav(self, text, voice=None):
+        """WAV bytes for the text in that voice (faber, cadu, jeff, edresson), or None when it is not installed or failed."""
         text = ' '.join(''.join(ch for ch in str(text) if ch.isprintable()).split())[:self.MAX_CHARS]
-        if not text or not self.available():
+        voice = voice if voice in self.MODELS else self.DEFAULT
+        if not text or not self.available(voice):
             return None
         cache = self.folder / 'cache'
         cache.mkdir(exist_ok=True)
-        target = cache / (hashlib.sha1(text.encode()).hexdigest() + '.wav')
+        target = cache / (hashlib.sha1(f'{voice}|{text}'.encode()).hexdigest() + '.wav')
         with self.lock:
             if not target.is_file():
                 temporary = target.with_suffix('.tmp')
                 try:
-                    subprocess.run([str(self.python), '-m', 'piper', '-m', str(self.folder / self.MODEL), '-f', str(temporary), '--', text],
+                    subprocess.run([str(self.python), '-m', 'piper', '-m', str(self.model(voice)), '-f', str(temporary), '--', text],
                                    check=True, capture_output=True, timeout=40)
                     temporary.replace(target)
                 except (subprocess.SubprocessError, OSError):
@@ -802,7 +810,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.screen.wake()
                 return self.reply(200, {'ok': True})
             if url.path == '/tts':
-                audio = self.voice.wav(str(self.body().get('text', '')))
+                body = self.body()
+                audio = self.voice.wav(str(body.get('text', '')), str(body.get('voice', '')))
                 return self.reply(200, body=audio, kind='audio/wav') if audio else self.send_error(404)
             if url.path == '/ack':
                 self.desk.ack(str(self.body().get('id', '')))

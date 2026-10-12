@@ -222,6 +222,7 @@ class Settings(CameraSettings):
     kiosk_bright_hold: int = Field(default=45, ge=10, le=600)
     kiosk_frame_calendar: str = 'always'                             # On the photo frame: always visible, pulse (12 s a minute) or off.
     kiosk_birthdays_enabled: bool = True
+    kiosk_voice: str = Field(default='faber', pattern='^(faber|cadu|jeff|edresson)$')   # Local voice (Piper) that reads messages aloud.
     kiosk_read_messages: bool = True   # The kitchen screen reads a message aloud when the person it is for is recognised (and the daily briefing).
     kiosk_daily_briefing: bool = True   # First greeting of the day also gives the date, the weather and a few suggestions.
     kiosk_nightlight_enabled: bool = False                            # Night: a soft light on the screen while someone walks by.

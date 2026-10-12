@@ -123,7 +123,7 @@ def vigia_for_kitchen():
             'red': int(kiosk_night(settings, hour) and settings.kiosk_night_mode == 'red'),
             'cfg': json.dumps({'slide': settings.kiosk_slide_seconds, 'awake': settings.kiosk_awake_seconds, 'sound': settings.kiosk_sound_on,
                                'vol': {name: getattr(settings, f'kiosk_vol_{name}_{"night" if info_night else "day"}') for name in ('button', 'call', 'help', 'message')},
-                               'calendar': settings.kiosk_calendar_enabled, 'framecal': settings.kiosk_frame_calendar, 'rain': settings.kiosk_weather_rain, 'speak': settings.kiosk_read_messages, 'hints': settings.kiosk_hints, 'black': settings.kiosk_night_mode == 'black', 'light': bool(night_light)}, ensure_ascii=False)}
+                               'calendar': settings.kiosk_calendar_enabled, 'framecal': settings.kiosk_frame_calendar, 'rain': settings.kiosk_weather_rain, 'speak': settings.kiosk_read_messages, 'voice': settings.kiosk_voice, 'hints': settings.kiosk_hints, 'black': settings.kiosk_night_mode == 'black', 'light': bool(night_light)}, ensure_ascii=False)}
     if settings.kiosk_dim_enabled:
         # Day: the day level. Night: very dim, but brighter while someone is in view (kept for a while after they leave).
         if camera.get('people') or notebook.call.get('state') in ('ringing', 'answered'):
@@ -506,7 +506,8 @@ def delete_message(message_id: str, request: Request):
 
 
 class KioskTest(BaseModel):
-    sound: str = Field(pattern='^(press|ring|help|message|nudge|brightness|screenoff|rain)$')
+    sound: str = Field(pattern='^(press|ring|help|message|nudge|brightness|screenoff|rain|voice)$')
+    voice: str = Field(default='', pattern='^(faber|cadu|jeff|edresson|)$')
     volume: int = Field(ge=0, le=100)
     text: str = Field(default='', max_length=160)   # The reminder shown by the "nudge" test.
 
@@ -515,8 +516,8 @@ class KioskTest(BaseModel):
 def kiosk_test(body: KioskTest, request: Request):
     """Play a sound (or a sample message) on the kitchen screen at the given volume, to tune the settings."""
     user = request.state.user
-    text = 'Esta é uma mensagem de teste.' if body.sound == 'message' else body.text.strip() or 'Este é um lembrete de teste.' if body.sound == 'nudge' else ''
-    call_service(notebook.send_test, body.sound, body.volume, text)
+    text = 'Esta é uma mensagem de teste.' if body.sound == 'message' else body.text.strip() or 'Este é um lembrete de teste.' if body.sound == 'nudge' else 'Bom dia! Hoje o dia vai ser nublado, com máxima de vinte e oito graus. Leve o guarda-chuva se for sair.' if body.sound == 'voice' else ''
+    call_service(notebook.send_test, body.sound, body.volume, text, body.voice)
     return {'ok': True, 'from': first_name(user['name']) if user else ''}
 
 
