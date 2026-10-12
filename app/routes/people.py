@@ -33,6 +33,10 @@ class PersonMonitored(BaseModel):
     monitored: bool
 
 
+class TrackSplit(BaseModel):
+    sample_ids: list[str] = Field(min_length=1, max_length=40)
+
+
 class TrackMerge(BaseModel):
     into: int
 
@@ -153,6 +157,10 @@ def build(recognition, learning, on_forget=None):
     def ignore_person(track_id: int):
         call_service(recognition.ignore_track, track_id)
         return {'ok': True}
+
+    @router.post('/api/person-tracks/{track_id}/split')
+    def split_person(track_id: int, body: TrackSplit):
+        return {'id': call_service(recognition.split_track, track_id, body.sample_ids)}
 
     @router.post('/api/person-tracks/{track_id}/merge')
     def merge_person(track_id: int, body: TrackMerge):

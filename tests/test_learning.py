@@ -98,6 +98,20 @@ class LearningTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.recognition.ignore_track(self.db.rows('SELECT id FROM person_tracks WHERE reviewed=1')[0]['id'])   # Taught: refused.
 
+    def test_split_moves_the_chosen_faces_into_a_new_person(self):
+        event = self.event()
+        track, (a, b, c) = self.track(event, suggested=None, faces=[((.97, .2, .1), 90), ((.9, .1, .42), 80), ((.5, .5, .5), 70)])
+        self.recognition.confirm(track, 'father', sample_ids=[a])
+        new = self.recognition.split_track(track, [a, c])
+        self.assertEqual({r['id'] for r in self.db.rows('SELECT id FROM person_samples WHERE track_id=?', (new,))}, {a, c})
+        self.assertEqual([r['id'] for r in self.db.rows('SELECT id FROM person_samples WHERE track_id=?', (track,))], [b])
+        self.assertIsNone(self.db.rows('SELECT person_id FROM person_samples WHERE id=?', (a,))[0]['person_id'])   # Taught under the old identity: out of the gallery.
+        self.assertEqual(self.db.rows('SELECT reviewed FROM person_tracks WHERE id=?', (new,))[0]['reviewed'], 0)
+        with self.assertRaises(ValueError):
+            self.recognition.split_track(new, [a, c])   # Cannot take everything.
+        with self.assertRaises(ValueError):
+            self.recognition.split_track(track, [])
+
     def test_fragments_of_a_single_person_record_are_joined_automatically(self):
         event = self.event()
         a, _ = self.track(event, suggested=None, faces=[((.97, .2, .1), 90)])

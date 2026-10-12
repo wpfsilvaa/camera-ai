@@ -374,6 +374,30 @@ class Recognition:
             db.execute('DELETE FROM person_tracks WHERE id=?', (source_id,))
             recompute_identity(db, target['event_id'])
 
+    def split_track(self, track_id, sample_ids):
+        """The tracker gave one number to two people: move the chosen faces into a new, unidentified person of the same record."""
+        chosen = list(dict.fromkeys(sample_ids))
+        if not chosen:
+            raise ValueError('Marque os rostos que pertencem à outra pessoa.')
+        with self.lock, self.db.connect() as db:
+            track = self._open_track(db, track_id)
+            samples = db.execute('SELECT id,created,person_id FROM person_samples WHERE track_id=?', (track_id,)).fetchall()
+            moving = [s for s in samples if s['id'] in chosen]
+            if len(moving) != len(chosen):
+                raise ValueError('Uma das imagens marcadas não pertence a essa pessoa do registro.')
+            if len(moving) == len(samples):
+                raise ValueError('Deixe ao menos um rosto na pessoa original.')
+            number = db.execute('SELECT COUNT(*) FROM person_tracks WHERE event_id=?', (track['event_id'],)).fetchone()[0]
+            key = f"{track['track_key']}-{number}"
+            new_id = db.execute('''INSERT INTO person_tracks(event_id,track_key,started,last_seen,recognition_kind) VALUES(?,?,?,?,'face')''',
+                                (track['event_id'], key, min(s['created'] for s in moving), max(s['created'] for s in moving))).lastrowid
+            taught = any(s['person_id'] for s in moving)
+            db.execute(f"UPDATE person_samples SET track_id=?,person_id=NULL WHERE id IN ({','.join('?' * len(chosen))})", (new_id, *chosen))
+            recompute_identity(db, track['event_id'])
+            if taught:
+                self.invalidate(db)   # Faces taught under the old identity leave the gallery.
+        return new_id
+
     def merge_fragments(self, since):
         """Records with one person at a time whose tracker handed out several numbers: join the ones that follow each other.
 
