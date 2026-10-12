@@ -123,7 +123,7 @@ def vigia_for_kitchen():
             'red': int(kiosk_night(settings, hour) and settings.kiosk_night_mode == 'red'),
             'cfg': json.dumps({'slide': settings.kiosk_slide_seconds, 'awake': settings.kiosk_awake_seconds, 'sound': settings.kiosk_sound_on,
                                'vol': {name: getattr(settings, f'kiosk_vol_{name}_{"night" if info_night else "day"}') for name in ('button', 'call', 'help', 'message')},
-                               'calendar': settings.kiosk_calendar_enabled, 'framecal': settings.kiosk_frame_calendar, 'rain': settings.kiosk_weather_rain, 'hints': settings.kiosk_hints, 'black': settings.kiosk_night_mode == 'black', 'light': bool(night_light)}, ensure_ascii=False)}
+                               'calendar': settings.kiosk_calendar_enabled, 'framecal': settings.kiosk_frame_calendar, 'rain': settings.kiosk_weather_rain, 'speak': settings.kiosk_read_messages, 'hints': settings.kiosk_hints, 'black': settings.kiosk_night_mode == 'black', 'light': bool(night_light)}, ensure_ascii=False)}
     if settings.kiosk_dim_enabled:
         # Day: the day level. Night: very dim, but brighter while someone is in view (kept for a while after they leave).
         if camera.get('people') or notebook.call.get('state') in ('ringing', 'answered'):

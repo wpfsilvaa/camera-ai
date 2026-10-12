@@ -4,7 +4,7 @@
   const screen = $('screen');
   let last = {call: {state: 'idle'}}, confirming = false, face = null, faceTimer = null;
   let build = null, greetedId = null, greetTimer = null;
-  const DEFAULT_CFG = {slide: 15, awake: 30, sound: true, vol: {button: 70, call: 70, help: 100, message: 80}, calendar: true, framecal: 'always', rain: true, hints: [], black: true};
+  const DEFAULT_CFG = {slide: 15, awake: 30, sound: true, vol: {button: 70, call: 70, help: 100, message: 80}, calendar: true, framecal: 'always', rain: true, speak: true, hints: [], black: true};
   const cfg = () => ({...DEFAULT_CFG, ...(last.cfg || {}), vol: {...DEFAULT_CFG.vol, ...((last.cfg || {}).vol || {})}});
 
   // Sounds generated here (no files). Each kind has its own volume (0-100, set for day and night in the dashboard);
@@ -174,7 +174,22 @@
   // Messages left for the person being greeted, one after the other, quote-style with the sender underneath.
   // Each message stays 20 s (or until the person taps "Li", which tells the family it was read).
   let quoteQueue = [], quoteTimer = null, quoteId = '', chimeTimer = null;
-  function hideQuote() { clearTimeout(quoteTimer); clearTimeout(chimeTimer); quoteQueue = []; quoteId = ''; $('quote').classList.add('hidden'); syncSpeaking(); }
+  // Reads text aloud with the browser's Portuguese voice (if the machine has one), at the messages volume.
+  function speak(text) {
+    try {
+      const synth = window.speechSynthesis;
+      if (!synth || !cfg().speak || !cfg().sound || !text) return;
+      synth.cancel();
+      const talk = new SpeechSynthesisUtterance(text);
+      talk.lang = 'pt-BR';
+      talk.voice = synth.getVoices().find(v => v.lang === 'pt-BR') || synth.getVoices().find(v => v.lang.startsWith('pt')) || null;
+      talk.volume = Math.min(Math.max((cfg().vol.message ?? 80) / 100, 0), 1);
+      talk.rate = .92;
+      synth.speak(talk);
+    } catch { /* no voice available */ }
+  }
+  const stopSpeaking = () => { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch { /* ignore */ } };
+  function hideQuote() { stopSpeaking(); clearTimeout(quoteTimer); clearTimeout(chimeTimer); quoteQueue = []; quoteId = ''; $('quote').classList.add('hidden'); syncSpeaking(); }
   function nextQuote() {
     clearTimeout(quoteTimer);
     const item = quoteQueue.shift();
@@ -189,6 +204,7 @@
     if (single && quoteId) fetch('/ack', {method: 'POST', headers: {'X-Kiosk': '1', 'Content-Type': 'application/json'}, body: JSON.stringify({id: quoteId})}).catch(() => {});
     const head = $('quote-head');
     head.textContent = quoteHead.text; head.classList.toggle('hidden', !quoteHead.text); head.classList.toggle('birthday', quoteHead.birthday);
+    if (!item.sound) speak(`${quoteHead.fresh && quoteHead.text ? quoteHead.text + '. ' : ''}${item.a ? item.a + ' deixou um recado: ' : 'Recado: '}${item.t}`);
     head.classList.remove('rise'); if (quoteHead.fresh) { void head.offsetWidth; head.classList.add('rise'); quoteHead.fresh = false; }   // Moves up once.
     $('quote').classList.remove('hidden'); $('quote').style.animation = 'none'; void $('quote').offsetWidth; $('quote').style.animation = '';
     fitQuote();
@@ -243,7 +259,7 @@
 
   function greet(view) {
     const pairs = [['greeting', 'greeting-sub'], ['frame-greeting', 'frame-greeting-sub']];
-    const hide = () => { pairs.flat().forEach(id => $(id).classList.add('hidden')); $('confetti').classList.add('hidden'); $('confetti').innerHTML = ''; syncSpeaking(); };
+    const hide = () => { stopSpeaking(); pairs.flat().forEach(id => $(id).classList.add('hidden')); $('confetti').classList.add('hidden'); $('confetti').innerHTML = ''; syncSpeaking(); };
     if (view !== 'idle') { hide(); hideQuote(); return; }
     if (last.greet && last.greet.id !== greetedId) {
       greetedId = last.greet.id;
@@ -265,6 +281,7 @@
             $(sub).textContent = extra; $(sub).classList.toggle('hidden', !birthday && !daily);
           }
           if (birthday) party(); else $('confetti').classList.add('hidden');
+          if (daily) speak(`${text}. ${extra}`);
           clearTimeout(greetTimer);
           greetTimer = setTimeout(hide, shownFor);
           syncSpeaking();

@@ -60,7 +60,7 @@ def reading():
 # A call nobody answered stops ringing after this long ("panic" keeps ringing until someone answers or he cancels).
 MISSED_AFTER = 300
 RESULT_SECONDS = 10  # How long "call ended / missed" stays on the kiosk screen.
-DEFAULT_CFG = {'slide': 15, 'awake': 30, 'sound': True, 'vol': {'button': 70, 'call': 70, 'help': 100, 'message': 80}, 'calendar': True, 'framecal': 'always', 'rain': True, 'hints': [], 'black': True}
+DEFAULT_CFG = {'slide': 15, 'awake': 30, 'sound': True, 'vol': {'button': 70, 'call': 70, 'help': 100, 'message': 80}, 'calendar': True, 'framecal': 'always', 'rain': True, 'speak': True, 'hints': [], 'black': True}
 TEST_SOUNDS = ('press', 'ring', 'help', 'message', 'nudge', 'rain')
 VIGIA_STATES = ('off', 'resting', 'analysing', 'scheduled')
 GREET_SECONDS = 10
@@ -156,7 +156,7 @@ def parse_cfg(text):
                       for name in DEFAULT_CFG['vol']}
     if data.get('framecal') in ('always', 'pulse', 'off'):
         cfg['framecal'] = data['framecal']
-    for key in ('calendar', 'black', 'sound', 'rain', 'light'):
+    for key in ('calendar', 'black', 'sound', 'rain', 'light', 'speak'):
         if isinstance(data.get(key), bool):
             cfg[key] = data[key]
     if isinstance(data.get('hints'), list):
