@@ -106,6 +106,7 @@ def kiosk_night(settings, hour):
 
 GREET_SECONDS = 10      # How long the kitchen screen greets someone.
 BIRTHDAY_SECONDS = 25   # ... and on their birthday.
+DAILY_SECONDS = 25      # ... and the first time of the day (date, weather and suggestions).
 GREET_COOLDOWN = 1800   # The same person is greeted again only after this long.
 
 
@@ -140,6 +141,7 @@ class Greeter:
         self.last = {}
         self.last_any = 0   # When anybody was last greeted (keeps the screen refreshing fast around a greeting).
         self.current = None
+        self.day = {}   # person -> the date they were last greeted on (the first greeting of a day carries the briefing).
 
     def update(self, tracks, now, birthdays=None, today=None):
         """tracks: [{'person_id', 'name'}] visible now; birthdays: {person_id: 'YYYY-MM-DD'}.
@@ -155,6 +157,10 @@ class Greeter:
                 self.current = {'name': name, 'id': int(now), 'person': person, 'until': now + (BIRTHDAY_SECONDS if age is not None else self.seconds)}
                 if age is not None:
                     self.current.update(birthday=True, age=age)
+                elif today and self.day.get(person) != today:
+                    self.current.update(daily=True, until=now + DAILY_SECONDS)
+                if today:
+                    self.day[person] = today
                 break
         if self.current and now < self.current['until']:
             return {k: v for k, v in self.current.items() if k != 'until'}

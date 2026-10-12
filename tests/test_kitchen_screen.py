@@ -74,6 +74,18 @@ class GreetingTests(unittest.TestCase):
         self.assertIsNone(birthday_today('1956-10-13', today))
         self.assertIsNone(birthday_today('bad', today))
 
+    def test_first_greeting_of_the_day_carries_the_briefing(self):
+        greeter = Greeter()
+        ana, today = [{'person_id': 'a', 'name': 'Ana'}], date(2026, 10, 12)
+        first = greeter.update(ana, 1000, None, today)
+        self.assertTrue(first.get('daily'))
+        self.assertIsNotNone(greeter.update([], 1020))      # Longer window, like a birthday.
+        again = greeter.update(ana, 1000 + 1800, None, today)
+        self.assertIsNotNone(again)
+        self.assertFalse(again.get('daily'))                # Same day: a plain greeting.
+        tomorrow = greeter.update(ana, 1000 + 86400, None, date(2026, 10, 13))
+        self.assertTrue(tomorrow.get('daily'))
+
 
 class BirthdayStorageTests(unittest.TestCase):
     def test_set_validate_and_clear(self):
@@ -374,7 +386,7 @@ class MonitorDisplayTests(unittest.TestCase):
                        '[{"n":"Beto","d":"10-12"},{"n":"","d":"x"}]', '[{"i":"a","a":"Ana","t":"Leite","e":1500},{"i":"b","a":"X","t":"velho","e":900}]')
         shown = desk.display()
         self.assertEqual((shown['vigia'], shown['night']), ('resting', True))
-        self.assertEqual(shown['greet'], {'name': 'Ana', 'id': '77', 'birthday': True, 'age': 70, 'msgs': [], 'quiet': False})
+        self.assertEqual(shown['greet'], {'name': 'Ana', 'id': '77', 'birthday': True, 'daily': False, 'age': 70, 'msgs': [], 'quiet': False})
         self.assertEqual(shown['bdays'], [{'n': 'Beto', 'd': '10-12'}])
         self.assertEqual([r['t'] for r in shown['reminders']], ['Leite'])          # The expired one is dropped.
         clock[0] += 26

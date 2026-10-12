@@ -65,6 +65,7 @@ TEST_SOUNDS = ('press', 'ring', 'help', 'message', 'nudge', 'rain')
 VIGIA_STATES = ('off', 'resting', 'analysing', 'scheduled')
 GREET_SECONDS = 10
 BIRTHDAY_SECONDS = 25
+DAILY_SECONDS = 25
 LINK_SECONDS = 30  # The panel polls every few seconds; silence longer than this means calls would go nowhere.
 KINDS = ('call', 'panic')
 BACKLIGHT = Path(os.environ.get('MONITOR_BACKLIGHT_DIR', '/sys/class/backlight'))
@@ -467,9 +468,9 @@ class Desk:
             self.weather = parse_weather(weather)
             name = ''.join(ch for ch in greet if ch.isprintable())[:30].strip()
             if name and (not self.greet or self.greet['id'] != greet_id):
-                birthday = kind == 'birthday'
-                self.greet = {'name': name, 'id': greet_id, 'until': now + (BIRTHDAY_SECONDS if birthday else GREET_SECONDS),
-                              'birthday': birthday, 'age': int(age) if age.isdigit() and 0 < int(age) < 130 else 0,
+                birthday, daily = kind == 'birthday', kind == 'daily'
+                self.greet = {'name': name, 'id': greet_id, 'until': now + (BIRTHDAY_SECONDS if birthday else DAILY_SECONDS if daily else GREET_SECONDS),
+                              'birthday': birthday, 'daily': daily, 'age': int(age) if age.isdigit() and 0 < int(age) < 130 else 0,
                               'msgs': parse_quotes(msgs), 'quiet': bool(quiet)}
             self.bdays = parse_birthdays(bdays)
             done = {i for i in acked.split(',') if i}
@@ -506,7 +507,7 @@ class Desk:
             fresh = vigia is not None and now - vigia[2] < LINK_SECONDS
             greet = self.greet if self.greet and now < self.greet['until'] else None
             return {'vigia': vigia[0] if fresh else None, 'night': bool(vigia[1]) if fresh else False, 'red': self.red if fresh else False, 'weather': self.weather if fresh else None,
-                    'greet': {k: greet[k] for k in ('name', 'id', 'birthday', 'age', 'msgs', 'quiet')} if greet else None,
+                    'greet': {k: greet[k] for k in ('name', 'id', 'birthday', 'daily', 'age', 'msgs', 'quiet')} if greet else None,
                     'bdays': self.bdays if fresh else [],
                     'callto': [{**p, 'p': avatars.get(p['i'])} for p in self.callto] if fresh else [],
                     'reminders': [r for r in self.reminders if r['e'] > now] if fresh else [],

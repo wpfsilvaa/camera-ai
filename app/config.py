@@ -222,6 +222,7 @@ class Settings(CameraSettings):
     kiosk_bright_hold: int = Field(default=45, ge=10, le=600)
     kiosk_frame_calendar: str = 'always'                             # On the photo frame: always visible, pulse (12 s a minute) or off.
     kiosk_birthdays_enabled: bool = True
+    kiosk_daily_briefing: bool = True   # First greeting of the day also gives the date, the weather and a few suggestions.
     kiosk_nightlight_enabled: bool = False                            # Night: a soft light on the screen while someone walks by.
     kiosk_nightlight_bright: int = Field(default=60, ge=5, le=100)
     kiosk_hints: list[str] = Field(default_factory=list, max_length=10)   # Extra messages cycled on the photo frame.

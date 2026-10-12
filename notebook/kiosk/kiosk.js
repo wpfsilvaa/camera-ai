@@ -221,17 +221,37 @@
   };
   const syncSpeaking = () => $('frame').classList.toggle('speaking', !$('quote').classList.contains('hidden') || !$('frame-greeting').classList.contains('hidden'));
 
+  // First greeting of the day: the date, the weather and a couple of suggestions that follow from it.
+  function briefing() {
+    const now = new Date(), w = last.weather, fresh = w && Date.now() / 1000 - w.at < 3 * 3600;
+    const day = now.toLocaleDateString('pt-BR', {weekday: 'long', day: 'numeric', month: 'long'});
+    const parts = [`Hoje é ${day}.`];
+    const tips = [];
+    if (fresh) {
+      const today = w.days[0] || {};
+      parts.push(`Agora faz ${w.t}° e o tempo está ${w.text.toLowerCase()}. Máxima de ${today.hi}° e mínima de ${today.lo}°.`);
+      const wet = (today.rain || 0) >= 50 || ['rain', 'storm'].includes(w.icon);
+      if (wet) parts.push(`Há ${today.rain || 0}% de chance de chuva.`);
+      if (wet) tips.push('leve o guarda-chuva se for sair');
+      if (today.hi >= 30) tips.push('beba bastante água e evite o sol do meio-dia');
+      else if (today.lo <= 15 || w.t <= 15) tips.push('vista um agasalho');
+      else if (!wet) tips.push('bom dia para uma caminhada leve');
+    } else tips.push('lembre-se de beber água ao longo do dia');
+    if (tips.length) parts.push(`Sugestão: ${tips.slice(0, 2).join(' e ')}.`);
+    return parts.join(' ');
+  }
+
   function greet(view) {
     const pairs = [['greeting', 'greeting-sub'], ['frame-greeting', 'frame-greeting-sub']];
     const hide = () => { pairs.flat().forEach(id => $(id).classList.add('hidden')); $('confetti').classList.add('hidden'); $('confetti').innerHTML = ''; syncSpeaking(); };
     if (view !== 'idle') { hide(); hideQuote(); return; }
     if (last.greet && last.greet.id !== greetedId) {
       greetedId = last.greet.id;
-      const msgs = last.greet.msgs || [], birthday = !!last.greet.birthday, shownFor = birthday ? 25000 : 10000;
+      const msgs = last.greet.msgs || [], birthday = !!last.greet.birthday, daily = !!last.greet.daily && !birthday, shownFor = birthday || daily ? 25000 : 10000;
       if (!last.greet.quiet) {
         const hour = new Date().getHours(), period = hour >= 5 && hour < 12 ? 'Bom dia' : hour >= 12 && hour < 18 ? 'Boa tarde' : 'Boa noite';
         const text = birthday ? `🎂 Feliz aniversário, ${last.greet.name}!` : `${period}, ${last.greet.name}`;
-        const extra = birthday ? `${last.greet.age ? `Hoje você completa ${last.greet.age} anos. ` : ''}${BIRTHDAY_LINES[last.greet.id % BIRTHDAY_LINES.length]}` : '';
+        const extra = birthday ? `${last.greet.age ? `Hoje você completa ${last.greet.age} anos. ` : ''}${BIRTHDAY_LINES[last.greet.id % BIRTHDAY_LINES.length]}` : daily ? briefing() : '';
         if (msgs.length) {
           // A message is waiting: no big greeting first, the greeting sits on top of the message card straight away.
           pairs.flat().forEach(id => $(id).classList.add('hidden'));
@@ -242,7 +262,7 @@
         } else {
           for (const [headline, sub] of pairs) {
             $(headline).textContent = text; $(headline).classList.toggle('birthday', birthday); $(headline).classList.remove('hidden');
-            $(sub).textContent = extra; $(sub).classList.toggle('hidden', !birthday);
+            $(sub).textContent = extra; $(sub).classList.toggle('hidden', !birthday && !daily);
           }
           if (birthday) party(); else $('confetti').classList.add('hidden');
           clearTimeout(greetTimer);

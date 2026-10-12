@@ -163,6 +163,8 @@ def vigia_for_kitchen():
                 info['greet_quiet'] = 1
             if greeting.get('birthday') and config.get().notebook_greeting_enabled:
                 info.update(greet_kind='birthday', age=greeting['age'])
+            elif greeting.get('daily') and settings.kiosk_daily_briefing and config.get().notebook_greeting_enabled:
+                info.update(greet_kind='daily')
             if greeting['id'] != greeted['id']:
                 waiting = person_messages.for_person(greeting['person'], now)
                 if waiting:
