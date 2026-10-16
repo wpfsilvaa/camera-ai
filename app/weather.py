@@ -14,6 +14,7 @@ GEOCODE = 'https://geocoding-api.open-meteo.com/v1/search'
 FORECAST = 'https://api.open-meteo.com/v1/forecast'
 REFRESH_SECONDS = 20 * 60
 STALE_SECONDS = 3 * 3600
+RETRY_SECONDS = 60   # After a failed fetch wait before asking again (the free service rate-limits).
 
 # WMO weather codes -> (description in Portuguese, icon the screen draws)
 CONDITIONS = {0: ('Céu limpo', 'sun'), 1: ('Predomínio de sol', 'sun'), 2: ('Parcialmente nublado', 'partly'), 3: ('Nublado', 'cloud'),
@@ -74,6 +75,7 @@ class Weather:
         self.config = config
         self.data, self.key = None, None
         self.error = ''
+        self.forced = False
         self.stop_event = threading.Event()
         self.wake = threading.Event()
         self.thread = None
@@ -104,13 +106,17 @@ class Weather:
 
     def poke(self):
         """Settings changed: refresh soon instead of waiting for the next round."""
+        self.forced = True
         self.wake.set()
 
     def _run(self):
-        last = 0
+        last = tried = 0
         while not self.stop_event.is_set():
-            key = self.settings_key(self.config.get())
-            if key != self.key or (key is not None and time.time() - last >= REFRESH_SECONDS):
+            key, now = self.settings_key(self.config.get()), time.time()
+            due = key != self.key or (key is not None and now - last >= REFRESH_SECONDS)
+            if due and (key is None or self.forced or now - tried >= RETRY_SECONDS):
+                self.forced = False
+                tried = now
                 self.refresh()
                 last = time.time()
             self.wake.wait(3)
