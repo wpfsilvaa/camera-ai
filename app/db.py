@@ -153,6 +153,11 @@ class Database:
                     db.execute(f'ALTER TABLE push_subscriptions ADD COLUMN {name} {definition}')
             if 'person_id' not in columns:
                 db.execute('ALTER TABLE events ADD COLUMN person_id TEXT')   # Who the family said was in a record that has no individual tracks.
+            visit_columns = {r['name'] for r in db.execute('PRAGMA table_info(restricted_visits)')}
+            if 'kind' not in visit_columns:
+                db.execute("ALTER TABLE restricted_visits ADD COLUMN kind TEXT NOT NULL DEFAULT ''")   # father / family / unknown, as seen when it happened.
+            if 'verdict' not in visit_columns:
+                db.execute('ALTER TABLE restricted_visits ADD COLUMN verdict TEXT')   # What a person said afterwards: father / other.
             if 'area' not in {r['name'] for r in db.execute('PRAGMA table_info(restricted_visits)')}:
                 db.execute("ALTER TABLE restricted_visits ADD COLUMN area TEXT NOT NULL DEFAULT ''")
             if db.execute('PRAGMA user_version').fetchone()[0] < 1:

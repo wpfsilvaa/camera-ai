@@ -188,14 +188,14 @@ class CameraWorker:
                     log.exception('Falha ao registrar possível queda')
         return lying
 
-    def log_visits(self, now, settings, person):
+    def log_visits(self, now, settings, person, kind='unknown'):
         """One visit per area each time someone goes in after it was empty, so a report can say how often the fridge or the cupboard was opened."""
         names=settings.restricted_zone_names
         for index in self.restricted.areas:
             if now-self.area_seen.get(index,-AREA_GAP)>=AREA_GAP and self.on_visit:
                 name=(names[index] if index<len(names) else '') or (f'Área {index+1}' if len(settings.restricted_zones)>1 else 'Área restrita')
                 try:
-                    self.on_visit(self.camera_id,now,name,person)
+                    self.on_visit(self.camera_id,now,name,person,kind)
                 except Exception:
                     log.exception('Falha ao registrar ida à área restrita')
             self.area_seen[index]=now
@@ -216,7 +216,13 @@ class CameraWorker:
         height,width=frame.shape[:2]
         inside=self.restricted.update(boxes,ids,labels,(width,height),settings.restricted_zones,settings.restricted_who)
         started=zone.update(now,len(inside))=='start'
-        self.log_visits(now,settings,next((labels.get(str(k),{}).get('name') for k in inside if labels.get(str(k),{}).get('name')),None))
+        if any(key in self.restricted.watched for key in inside):
+            kind='father'
+        elif any(label.get('person_id') and not label.get('monitored') and label['person_id']!=FATHER for label in labels.values()):
+            kind='family'   # Someone registered who is not monitored is in view: probably them at the fridge.
+        else:
+            kind='unknown'
+        self.log_visits(now,settings,next((labels.get(str(k),{}).get('name') for k in inside if labels.get(str(k),{}).get('name')),None),kind)
         if started and settings.restricted_pause_with_family and any(
                 label.get('person_id') and not label.get('monitored') and label['person_id']!=FATHER for label in labels.values()):
             return   # Family is with him: the visit is still counted, but nobody needs a warning.

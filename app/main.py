@@ -429,6 +429,21 @@ def street_switch(body: StreetSwitch):
     return street.set(body.armed)
 
 
+class VisitVerdict(BaseModel):
+    father: bool
+
+
+@app.get('/api/father/visits')
+def father_visits():
+    return father_log.pending()
+
+
+@app.post('/api/father/visits/{visit_id}')
+def father_visit_verdict(visit_id: int, body: VisitVerdict):
+    call_service(father_log.decide, visit_id, body.father)
+    return {'ok': True}
+
+
 @app.get('/api/father/today')
 def father_today():
     return father_log.summary()

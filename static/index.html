@@ -68,7 +68,7 @@
         </div>
 
         <article class="panel street-panel" id="street-panel"><div class="panel-heading"><h2>Modo rua</h2><span class="pill neutral" id="street-pill">Desligado</span></div><div class="panel-body"><p id="street-text" class="small muted"></p><button type="button" class="button primary" id="street-toggle">Ligar Modo rua</button></div></article>
-        <article class="panel father-today" id="father-today"><div class="panel-heading"><h2>O pai hoje</h2><span class="muted small" id="father-today-note"></span></div><div class="panel-body"><div id="father-people" class="time-chips"></div><div class="father-row"><div class="father-count"><strong id="father-sightings">0</strong><span>vezes na câmera</span></div><div class="time-chips" id="father-sightings-times"></div></div><div id="father-areas"></div><div class="week-bars" id="father-week" aria-label="Últimos 7 dias"></div></div></article>
+        <article class="panel father-today" id="father-today"><div class="panel-heading"><h2>O pai hoje</h2><span class="muted small" id="father-today-note"></span></div><div class="panel-body"><div id="father-people" class="time-chips"></div><div class="father-row"><div class="father-count"><strong id="father-sightings">0</strong><span>vezes na câmera</span></div><div class="time-chips" id="father-sightings-times"></div></div><div id="father-areas"></div><div id="father-others" class="small muted"></div><button type="button" class="button secondary compact hidden" id="review-visits">Revisar idas sem identificação</button><div class="week-bars" id="father-week" aria-label="Últimos 7 dias"></div></div></article>
         <p id="video-details" class="footnote">Transmissão contínua · nomes incluídos nas gravações</p>
         <div class="bottom-grid">
           <article class="panel activity-panel"><div class="panel-heading"><h2>Presença na semana</h2><span class="muted small">Últimos 7 dias</span></div><div class="chart-summary"><strong id="week-count">0</strong><span>registros de presença<br><small>Uma entrada e saída = um registro</small></span></div><div id="weekly-chart" class="chart" aria-label="Registros de presença nos últimos sete dias"></div><div class="chart-legend"><span><i class="legend-total"></i> Todas as presenças</span><span><i class="legend-father"></i> Pai confirmado</span></div></article>
@@ -196,6 +196,7 @@
     <p id="examples-error" class="alert hidden" role="alert"></p>
     <div id="examples-grid" class="examples-grid"></div>
   </dialog>
+  <dialog id="visits-dialog" class="examples-dialog" aria-labelledby="visits-title"><div class="dialog-heading"><h2 id="visits-title">Quem foi à geladeira?</h2><button type="button" class="icon-button close-dialog" aria-label="Fechar">×</button></div><p class="small muted">Confirme as idas que o sistema não soube identificar. “Foi ele” entra na contagem do pai; “Não foi” vai para a família.</p><div id="visits-list" class="examples-grid"></div><p id="visits-empty" class="muted hidden">Tudo identificado por enquanto. 🎉</p></dialog>
   <dialog id="example-photo-dialog" aria-labelledby="example-photo-title">
     <div class="dialog-heading"><h2 id="example-photo-title">Foto do exemplo</h2><button id="example-photo-close" class="icon-button" aria-label="Fechar foto">×</button></div>
     <img id="example-photo" alt="Rosto usado como exemplo" class="example-photo">

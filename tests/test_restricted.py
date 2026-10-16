@@ -148,7 +148,7 @@ class AreaVisitTests(unittest.TestCase):
         settings = CameraSettings(restricted_enabled=True, restricted_zones=zones, restricted_zone_names=['Geladeira', ''], restricted_who='anyone')
         worker = CameraWorker.__new__(CameraWorker)
         worker.restricted, worker.camera_id, worker.area_seen, seen = RestrictedWatch(), 'main', {}, []
-        worker.on_visit = lambda camera, now, area, person: seen.append((now, area, person))
+        worker.on_visit = lambda camera, now, area, person, kind='': seen.append((now, area, person))
         fridge, cupboard = AT_FRIDGE, (50, 300, 250, 900)
         for now, box in ((1000, fridge), (1002, fridge), (1004, cupboard), (1006, cupboard), (1030, fridge)):
             worker.restricted.update([box], [7], {'7': FATHER}, FRAME, zones, 'anyone')

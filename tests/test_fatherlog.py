@@ -63,6 +63,36 @@ class FatherLogTests(unittest.TestCase):
         self.assertEqual(self.log.count_today(NOON), 3)
         self.assertEqual({p['name']: p['sightings'] for p in self.log.summary(NOON)['today']['people']}, {'Meu pai': 1, 'Minha mãe': 2})
 
+    def test_visits_are_split_by_who_they_were(self):
+        self.db.execute("INSERT INTO people(id,name,is_father,created) VALUES('ana','Ana',0,0)")
+        self.log.record_visit('main', NOON - 300, 'Geladeira', 'Meu pai', 'father')
+        self.log.record_visit('main', NOON - 240, 'Geladeira', 'Ana', 'family')
+        self.log.record_visit('main', NOON - 180, 'Geladeira', None, 'unknown')
+        self.log.record_visit('main', NOON - 120, 'Geladeira', None, 'unknown')
+        today = self.log.summary(NOON)['today']
+        self.assertEqual(today['areas'], {'Geladeira': [NOON - 300]})          # Only the father counts.
+        self.assertEqual(today['others'], {'family': 1, 'unknown': 2})
+        self.assertEqual(self.log.summary(NOON)['week'][-1]['unknown'], 2)
+
+    def test_triage_verdict_moves_a_visit_between_the_counts(self):
+        self.log.record_visit('main', NOON - 180, 'Geladeira', None, 'unknown')
+        self.log.record_visit('main', NOON - 120, 'Geladeira', None, 'unknown')
+        first, second = [v['id'] for v in self.log.pending(NOON)][::-1]
+        self.assertEqual(len(self.log.pending(NOON)), 2)
+        self.log.decide(first, True)     # It was him.
+        self.log.decide(second, False)   # It was someone else.
+        summary = self.log.summary(NOON)
+        self.assertEqual(summary['today']['areas'], {'Geladeira': [NOON - 180]})
+        self.assertEqual((summary['today']['others'], summary['pending'], self.log.pending(NOON)), ({'family': 1, 'unknown': 0}, 0, []))
+        with self.assertRaises(KeyError):
+            self.log.decide(9999, True)
+
+    def test_review_in_the_history_beats_what_the_camera_guessed(self):
+        event = self.presence(NOON - 600, 'father')
+        self.db.execute('UPDATE events SET ended=? WHERE id=?', (NOON - 500, event))
+        self.log.record_visit('main', NOON - 550, 'Geladeira', None, 'unknown')   # The camera could not tell.
+        self.assertEqual(self.log.summary(NOON)['today']['areas'], {'Geladeira': [NOON - 550]})
+
 
 if __name__ == '__main__':
     unittest.main()
