@@ -421,6 +421,24 @@ class Recognition:
             joined += self._join(group)
         return joined
 
+    def prune_ghosts(self, since, before):
+        """Finished records: drop tracker numbers that never had a face, a suggestion or a confirmation (keeping one if nothing else is left)."""
+        dropped = 0
+        events = self.db.rows("SELECT id FROM events WHERE ended IS NOT NULL AND ended<? AND started>=? AND (kind!='manual' OR analysis_state='complete')", (before, since))
+        for event in events:
+            tracks = self.db.rows('''SELECT t.id,t.started,t.last_seen,t.reviewed,t.person_id,t.suggested_id,
+                (SELECT COUNT(*) FROM person_samples s WHERE s.track_id=t.id) AS faces FROM person_tracks t WHERE t.event_id=?''', (event['id'],))
+            ghosts = [t for t in tracks if not t['reviewed'] and not t['person_id'] and not t['suggested_id'] and not t['faces']]
+            if len(ghosts) == len(tracks) and ghosts:
+                ghosts.remove(max(ghosts, key=lambda t: t['last_seen'] - t['started']))   # Something must stay to confirm the presence.
+            for ghost in ghosts:
+                try:
+                    self.ignore_track(ghost['id'])
+                    dropped += 1
+                except (KeyError, ValueError):
+                    continue
+        return dropped
+
     def _join(self, group):
         if len(group) < 2:
             return 0

@@ -112,6 +112,19 @@ class LearningTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.recognition.split_track(track, [])
 
+    def test_faceless_ghost_tracks_are_pruned_but_one_stays_when_nothing_else_is(self):
+        event = self.event()
+        real, _ = self.track(event, suggested=None, faces=[((.97, .2, .1), 90)])
+        ghost_a, _ = self.track(event, suggested=None)
+        ghost_b, _ = self.track(event, suggested=None)
+        self.assertEqual(self.recognition.prune_ghosts(self.now - 3600, self.now), 2)
+        self.assertEqual([t['id'] for t in self.db.rows('SELECT id FROM person_tracks WHERE event_id=?', (event,))], [real])
+        only = self.event()
+        first, _ = self.track(only, suggested=None)
+        second, _ = self.track(only, suggested=None)
+        self.recognition.prune_ghosts(self.now - 3600, self.now)
+        self.assertEqual(len(self.db.rows('SELECT id FROM person_tracks WHERE event_id=?', (only,))), 1)
+
     def test_fragments_of_a_single_person_record_are_joined_automatically(self):
         event = self.event()
         a, _ = self.track(event, suggested=None, faces=[((.97, .2, .1), 90)])

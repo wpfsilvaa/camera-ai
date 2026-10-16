@@ -282,3 +282,9 @@ dialog .dialog-heading{position:sticky;top:0;z-index:5;background:var(--surface)
 
 /* Street mode on: a red edge on the panel so nobody forgets it is armed. */
 .street-on .street-panel{border-color:var(--red-ink,#b3402a);box-shadow:0 0 0 2px var(--red-bg)}
+
+/* Tracker noise in the review dialog: one folded line instead of a card per ghost. */
+.ghost-tracks{margin-top:12px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;font-size:12px;color:var(--muted)}
+.ghost-tracks summary{cursor:pointer}
+.ghost-tracks ul{margin:8px 0 0;padding-left:18px}
+.ghost-actions{margin-top:8px}
