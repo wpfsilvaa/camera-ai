@@ -62,5 +62,17 @@ class CameraReportTests(unittest.TestCase):
         self.assertEqual(seen, [True, False, False])
 
 
+class ViewersTests(unittest.TestCase):
+    def test_counts_open_streams(self):
+        from app.viewers import Viewers
+        viewers = Viewers()
+        self.assertEqual(viewers.total(), 0)
+        with viewers.watch('main'):
+            with viewers.watch('main'), viewers.watch('door'):
+                self.assertEqual(viewers.total(), 3)
+            self.assertEqual(viewers.total(), 1)
+        self.assertEqual(viewers.total(), 0)
+
+
 if __name__ == '__main__':
     unittest.main()

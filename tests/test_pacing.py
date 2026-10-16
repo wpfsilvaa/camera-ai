@@ -4,7 +4,7 @@ from pathlib import Path
 
 from app.config import CameraSettings
 from app.db import Database
-from app.pacing import DetectionPacing, TouchThrottle
+from app.pacing import DetectionPacing, TouchThrottle, analysis_wanted
 
 
 class DetectionPacingTests(unittest.TestCase):
@@ -163,6 +163,15 @@ class SentinelTests(unittest.TestCase):
         self.assertTrue(live.failed)
         self.assertLess(capture.reads, 12)       # About one decoded frame per 50 ms, not one per frame.
         self.assertGreater(capture.grabs, 100)
+
+
+class AnalysisPauseTests(unittest.TestCase):
+    def test_manual_pause_wins_except_inside_the_watch_hours(self):
+        paused = CameraSettings(analysis_enabled=False, sentinel_enabled=True, sentinel_always=True, sentinel_start_hour=22, sentinel_end_hour=6)
+        self.assertFalse(analysis_wanted(paused, 14))   # "Watch mode all day" does not undo the pause button.
+        self.assertTrue(analysis_wanted(paused, 23))    # The night net stays.
+        self.assertTrue(analysis_wanted(CameraSettings(analysis_enabled=True), 14))
+        self.assertFalse(analysis_wanted(CameraSettings(analysis_enabled=False), 23))
 
 
 if __name__ == '__main__':

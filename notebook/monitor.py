@@ -462,6 +462,7 @@ class Desk:
         self.frame = False   # Photo frame switched on in the dashboard's settings.
         self.reminders = []  # [{'i', 'a', 't', 'e'}]: notes cycled on the screen until their expiry.
         self.callto = []     # [{'i', 'n'}]: people with their own call button.
+        self.watching = 0    # People looking at the live camera in the dashboard right now.
 
     def configure(self, call, panic, vigia=None, night=False, greet='', greet_id='', kind='', age='', bdays='', reminders='', frame=False, cfg='', msgs='', quiet=False, acked='', red=False, weather='', callto=''):
         with self.lock:
@@ -512,7 +513,7 @@ class Desk:
             avatars = avatar_revs()
             fresh = vigia is not None and now - vigia[2] < LINK_SECONDS
             greet = self.greet if self.greet and now < self.greet['until'] else None
-            return {'vigia': vigia[0] if fresh else None, 'night': bool(vigia[1]) if fresh else False, 'red': self.red if fresh else False, 'weather': self.weather if fresh else None,
+            return {'vigia': vigia[0] if fresh else None, 'night': bool(vigia[1]) if fresh else False, 'red': self.red if fresh else False, 'weather': self.weather if fresh else None, 'watching': self.watching if fresh else 0,
                     'greet': {k: greet[k] for k in ('name', 'id', 'birthday', 'daily', 'age', 'msgs', 'quiet')} if greet else None,
                     'bdays': self.bdays if fresh else [],
                     'callto': [{**p, 'p': avatars.get(p['i'])} for p in self.callto] if fresh else [],
@@ -673,6 +674,7 @@ class Handler(BaseHTTPRequestHandler):
             self.desk.configure(query.get('call') == ['1'], query.get('panic') == ['1'], (query.get('vigia') or [None])[0],
                                 query.get('night') == ['1'], (query.get('greet') or [''])[0], (query.get('greet_id') or [''])[0],
                                 (query.get('greet_kind') or [''])[0], (query.get('age') or [''])[0], (query.get('bdays') or [''])[0], (query.get('reminders') or [''])[0], query.get('frame') == ['1'], (query.get('cfg') or [''])[0], (query.get('greet_msgs') or [''])[0], query.get('greet_quiet') == ['1'], (query.get('acked') or [''])[0], query.get('red') == ['1'], (query.get('weather') or [''])[0], (query.get('callto') or [''])[0])
+            self.desk.watching = int(query['watch'][0]) if (query.get('watch') or [''])[0].isdigit() else 0
             self.dim_from(query)
             self.desk.touch()   # Anything new for the screen goes out immediately to the waiting /state request.
             return self.reply(200, {**reading(), 'call': self.desk.snapshot(), 'acks': list(self.desk.acks)})

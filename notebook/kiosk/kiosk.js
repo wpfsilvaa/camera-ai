@@ -548,6 +548,9 @@
     $('nightlight').classList.toggle('hidden', mode !== 'light');
     if (slideTimer && slideMs !== cfg().slide * 1000) startFrame(false);   // The interval changed in the settings.
     screen.dataset.mode = mode;
+    const watching = Number(last.watching || 0);   // Someone is looking at the camera in the dashboard.
+    $('watching').classList.toggle('hidden', !watching || mode === 'black');
+    $('watching-count').textContent = watching > 1 ? watching : '';
     $('frame').classList.toggle('hidden', mode !== 'frame');
     // Month card on the frame: always there, sliding in for 12 s each minute, or never.
     const month = $('frame-cal'), how = cfg().framecal;

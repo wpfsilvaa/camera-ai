@@ -79,6 +79,12 @@ class MotionGate:
         return True
 
 
+def analysis_wanted(settings, hour):
+    """Whether detection runs. A manual pause wins, except inside the watch-mode hours (a safety net for the night);
+    "watch mode all day" only lowers the pace, it does not override the pause button."""
+    return settings.analysis_enabled or (settings.sentinel_enabled and in_window(hour, settings.sentinel_start_hour, settings.sentinel_end_hour))
+
+
 def in_window(hour, start, end):
     """True when the hour falls in [start, end), wrapping past midnight (22 to 6); start == end means never."""
     if start == end:

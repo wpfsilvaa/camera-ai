@@ -10,7 +10,7 @@ from pathlib import Path
 
 from . import detectors
 from .db import TZ
-from .pacing import FORCE_SECONDS, SENTINEL_FORCE_SECONDS, in_window
+from .pacing import FORCE_SECONDS, SENTINEL_FORCE_SECONDS, analysis_wanted, in_window
 from .sources import local_device
 from .config import CLIPS, DATA, CAMERA_FIELDS
 os.environ.setdefault('YOLO_CONFIG_DIR', str(DATA / 'ultralytics'))
@@ -372,7 +372,7 @@ class CameraWorker:
                     # Tolerance avoids accidentally reducing a 30 fps source to 15 fps.
                     next_frame=now+1/settings.fps-.003
                     lap=[lap_start,time.perf_counter()]  # Stage times, logged when the loop stalls.
-                    wanted=current.analysis_enabled or night
+                    wanted=analysis_wanted(current,datetime.now(TZ).hour)
                     if analysis_active != wanted:
                         if event_id is not None:
                             recorder.finish(latest_time)

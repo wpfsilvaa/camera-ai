@@ -42,6 +42,7 @@ from .push import Push
 from .recognition import Recognition
 from .storage import Storage
 from .street import StreetMode
+from .viewers import Viewers
 from .routes import alerts as alert_routes, auth as auth_routes, backup as backup_routes, intercom as intercom_routes, people as people_routes, photos as photos_routes, push as push_routes, storage as storage_routes
 from .services import call_service
 
@@ -64,6 +65,7 @@ cameras.fall_handler = alerts.fall
 cameras.presence_handler = push.presence
 cameras.restricted_handler = alerts.restricted
 street = StreetMode()
+viewers = Viewers()
 
 
 def guard_house(camera_id, camera_name, stranger, now, make_jpeg):
@@ -119,6 +121,7 @@ def vigia_for_kitchen():
         night_light = now < light_state['until']
     info = {'vigia': vigia_state(settings.sentinel_enabled, settings.sentinel_start_hour, settings.sentinel_end_hour, hour, bool(camera.get('sentinel')), settings.sentinel_always),
             'night': int(kiosk_night(settings, hour)),
+            'watch': viewers.total(),
             # Only the "red tones" choice recolours the screen; with the panel off (or black) it shows its normal colours when on.
             'red': int(kiosk_night(settings, hour) and settings.kiosk_night_mode == 'red'),
             'cfg': json.dumps({'slide': settings.kiosk_slide_seconds, 'awake': settings.kiosk_awake_seconds, 'sound': settings.kiosk_sound_on,
@@ -767,14 +770,15 @@ async def stream(request: Request, camera_id: str = 'main'):
     worker = call_service(cameras.get, camera_id)
     async def frames():
         previous = -1
-        while not await request.is_disconnected() and not worker.stop_event.is_set():
-            with worker.lock:
-                sequence, jpeg = worker.sequence, worker.jpeg
-            if jpeg is not None and sequence != previous and worker.snapshot()['state'] == 'online':
-                previous = sequence
-                yield b'--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ' + str(len(jpeg)).encode() + b'\r\n\r\n' + jpeg + b'\r\n'
-            # Each viewer reads the latest frame; a slow client cannot queue old images.
-            await asyncio.sleep(.005)
+        with viewers.watch(camera_id):
+            while not await request.is_disconnected() and not worker.stop_event.is_set():
+                with worker.lock:
+                    sequence, jpeg = worker.sequence, worker.jpeg
+                if jpeg is not None and sequence != previous and worker.snapshot()['state'] == 'online':
+                    previous = sequence
+                    yield b'--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ' + str(len(jpeg)).encode() + b'\r\n\r\n' + jpeg + b'\r\n'
+                # Each viewer reads the latest frame; a slow client cannot queue old images.
+                await asyncio.sleep(.005)
     return StreamingResponse(frames(), media_type='multipart/x-mixed-replace; boundary=frame',
                              headers={'X-Accel-Buffering': 'no'})
 

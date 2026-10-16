@@ -164,7 +164,8 @@ function renderStatus() {
   $('#people-count').textContent = online && !camera.analysis_active ? 'Análise pausada' : online ? `${camera.people} ${camera.people === 1 ? 'pessoa detectada' : 'pessoas detectadas'}` : 'Aguardando câmera';
   $('#recording-badge').classList.toggle('hidden', !camera.event_id && !camera.manual_recording);
   $('#toggle-analysis').textContent=settings.analysis_enabled ? 'Pausar análise' : 'Retomar análise';
-  $('#analysis-note').textContent=camera.analysis_active ? 'Detecção e reconhecimento ativos.' : 'Somente vídeo: detecção de pessoas, reconhecimento e gravação por presença pausados.';
+  $('#toggle-analysis').title=!settings.analysis_enabled && camera.analysis_active ? 'Em pausa, mas o Modo vigia mantém a análise ligada neste horário.' : '';
+  $('#analysis-note').textContent=camera.analysis_active ? (!settings.analysis_enabled ? 'Pausada, mas o Modo vigia mantém a análise ligada neste horário.' : 'Detecção e reconhecimento ativos.') : 'Somente vídeo: detecção de pessoas, reconhecimento e gravação por presença pausados.';
   $('#toggle-recording').textContent=camera.manual_requested || camera.manual_recording ? 'Parar gravação manual' : 'Gravar manualmente';
   $('#toggle-recording').disabled=!online && !camera.manual_requested && !camera.manual_recording;
   $('#offline-note').classList.toggle('hidden',!status.offline?.event_id);
