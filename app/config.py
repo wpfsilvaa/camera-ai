@@ -67,6 +67,9 @@ class CameraSettings(BaseModel):
     restricted_who: str = 'father'
     restricted_zone_names: list[str] = Field(default_factory=list, max_length=10)   # Name of each restricted area, by position ("Geladeira", "Armário").
     restricted_alert: bool = False
+    restricted_min_seconds: float = Field(default=3, ge=0, le=30)   # Stay this long in the area before it counts (walking past does not).
+    restricted_still: bool = True      # ... and be standing still, not crossing the room.
+    restricted_hands: bool = False     # Count only when a hand is in the area (needs the pose model, like fall detection).
     # Restricted mode: send its alert and videos by WhatsApp too. Off = web-app notifications only.
     restricted_whatsapp: bool = True
     # Restricted mode: when the father is recognised going into the area, the kitchen screen plays a sound and shows this reminder.

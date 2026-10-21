@@ -123,6 +123,7 @@ class CameraWorker:
         self.on_presence=None  # Called with (camera_id, camera_name, time) when a presence record starts.
         # Called with (camera_id, camera_name, jpeg bytes, person name) when a restricted area visit starts.
         self.on_restricted=None
+        self.pose_points=None   # Pose keypoints of the people in the last analysed frame (only while the hands rule is on).
         self.on_street=None   # Called every analysed frame of a guarded camera: (camera id, name, stranger in view, time, jpeg maker).
         self.on_visit=None   # Called with (camera id, time, name) at the start of every visit to a restricted area.
         self.on_reminder=None   # Called with (camera id, text) when the father goes into a restricted area (a sound on the kitchen screen).
@@ -169,6 +170,14 @@ class CameraWorker:
         log.warning('Câmera %s: volta lenta de %.0f ms (espera por quadro %.0f ms; %s)%s',
                     self.camera_id,work*1000,waited*1000,detail,' durante gravação' if recording else '')
 
+    @staticmethod
+    def pose_of(result, tracker):
+        """The pose keypoints of each tracked person, in the order of the boxes (None where the model gave none)."""
+        if result.keypoints is None:
+            return []
+        points=result.keypoints.data.cpu().numpy()
+        return [points[i] if i<len(points) else None for i in tracker.last_indices]
+
     def check_falls(self, result, tracker, boxes, ids, frame, now, settings):
         """Update lying durations from pose keypoints and report new suspected falls."""
         if not settings.fall_detection_enabled or result.keypoints is None:
@@ -214,7 +223,7 @@ class CameraWorker:
     def check_restricted(self, zone, boxes, ids, labels, frame, now, settings):
         """Update the restricted area visit; alert once when it starts, if enabled."""
         height,width=frame.shape[:2]
-        inside=self.restricted.update(boxes,ids,labels,(width,height),settings.restricted_zones,settings.restricted_who)
+        inside=self.restricted.update(boxes,ids,labels,(width,height),settings.restricted_zones,settings.restricted_who,now,settings.restricted_min_seconds,settings.restricted_still,self.pose_points if settings.restricted_hands else None)
         started=zone.update(now,len(inside))=='start'
         if any(key in self.restricted.watched for key in inside):
             kind='father'
@@ -427,7 +436,7 @@ class CameraWorker:
                         want_cuda=settings.device!='cpu' and torch.cuda.is_available()
                         if settings.device=='cuda' and not want_cuda:
                             raise RuntimeError('CUDA solicitado, mas a GPU não está acessível. Verifique o driver ou selecione Auto.')
-                        pose=current.fall_detection_enabled
+                        pose=current.fall_detection_enabled or (current.restricted_enabled and current.restricted_hands)
                         weights,task,engine,detector_ready=detectors.resolve(current.detector_model,current.detector_engine,pose,settings.detection_size)
                         # ONNX/OpenVINO run on the CPU; only the PyTorch engine uses CUDA.
                         cuda=want_cuda and engine=='pytorch'
@@ -472,6 +481,7 @@ class CameraWorker:
                             device=device,quantize=16 if half else 32,max_det=20,verbose=False)[0]
                         boxes,ids=tracker.update(result.boxes,original,now)
                         detected_lying=self.check_falls(result,tracker,boxes,ids,original,now,current)
+                        self.pose_points=[p for p in self.pose_of(result,tracker)] if current.restricted_enabled and current.restricted_hands else None
                         count=len(boxes)
                         inference_ms=round((time.perf_counter()-begin)*1000,1)
                         result=None

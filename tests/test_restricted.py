@@ -74,6 +74,47 @@ class RestrictedTests(unittest.TestCase):
             CameraSettings(restricted_who='vizinho')
 
 
+class PassingByTests(unittest.TestCase):
+    """Walking past the fridge is not a visit: the person must stay a few seconds, standing still, with a hand there if asked."""
+
+    def watch(self, boxes_by_time, **options):
+        watch, results = RestrictedWatch(), []
+        for now, box in boxes_by_time:
+            results.append(watch.update([box], [7], {'7': FATHER}, FRAME, FRIDGE, 'father', now, **options))
+        return results
+
+    def test_must_stay_the_minimum_time(self):
+        results = self.watch([(0, AT_FRIDGE), (1, AT_FRIDGE), (2.5, AT_FRIDGE), (3.2, AT_FRIDGE)], min_seconds=3)
+        self.assertEqual(results, [[], [], [], [7]])
+
+    def test_crossing_the_room_never_counts(self):
+        x = 600
+        walking = []
+        for step in range(8):
+            walking.append((step * .5, (x + step * 60, AT_FRIDGE[1], x + step * 60 + 200, AT_FRIDGE[3])))
+        # Only the first positions touch the area, and the person keeps moving along it.
+        results = self.watch(walking, min_seconds=2, still=True)
+        self.assertTrue(all(result == [] for result in results))
+
+    def test_leaving_resets_the_clock(self):
+        results = self.watch([(0, AT_FRIDGE), (2, AT_FRIDGE), (4, ACROSS_ROOM), (6, AT_FRIDGE), (7, AT_FRIDGE)], min_seconds=3)
+        self.assertEqual(results[-1], [])
+
+    def test_without_the_new_options_nothing_changes(self):
+        self.assertEqual(self.watch([(0, AT_FRIDGE)]), [[7]])
+
+    def test_hands_decide_when_the_pose_is_known(self):
+        import numpy as np
+        watch = RestrictedWatch()
+        hands_away = np.zeros((17, 3), np.float32)           # No hand sure enough.
+        hands_in = hands_away.copy()
+        hands_in[9] = (750, 500, .9)                           # A wrist inside the fridge area.
+        shown = lambda points: watch.update([AT_FRIDGE], [7], {'7': FATHER}, FRAME, FRIDGE, 'father', 0, 0, False, [points])
+        self.assertEqual(shown(hands_away), [])
+        self.assertEqual(shown(hands_in), [7])
+        self.assertEqual(watch.update([AT_FRIDGE], [7], {'7': FATHER}, FRAME, FRIDGE, 'father', 0, 0, False, [None]), [7])   # No pose: the body rule.
+
+
 class MonitoredTests(unittest.TestCase):
     def test_any_monitored_person_counts_as_watched(self):
         boxes, ids = [AT_FRIDGE, AT_FRIDGE], [1, 2]
@@ -106,7 +147,7 @@ class ReminderTests(unittest.TestCase):
         return worker, np.zeros((1000, 1000, 3), np.uint8)
 
     def settings(self, **changes):
-        return CameraSettings(restricted_enabled=True, restricted_zones=FRIDGE, restricted_who='anyone', restricted_reminder=True, **changes)
+        return CameraSettings(restricted_enabled=True, restricted_zones=FRIDGE, restricted_who='anyone', restricted_reminder=True, restricted_min_seconds=0, restricted_still=False, **changes)
 
     def test_only_the_recognised_father_is_reminded(self):
         worker, frame = self.worker()
@@ -133,7 +174,7 @@ class ReminderTests(unittest.TestCase):
         self.assertEqual(len(self.heard), 1)
         worker.check_restricted(self.Zone(), [AT_FRIDGE], [8], {'8': FATHER}, frame, 1061, self.settings())
         self.assertEqual(len(self.heard), 2)
-        off = CameraSettings(restricted_enabled=True, restricted_zones=FRIDGE, restricted_who='anyone')
+        off = CameraSettings(restricted_enabled=True, restricted_zones=FRIDGE, restricted_who='anyone', restricted_min_seconds=0, restricted_still=False)
         worker.check_restricted(self.Zone(), [AT_FRIDGE], [8], {'8': FATHER}, frame, 2000, off)
         self.assertEqual(len(self.heard), 2)
 
