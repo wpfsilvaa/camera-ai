@@ -10,7 +10,25 @@ def item(key, title, level, detail, hint=''):
     return {'key': key, 'title': title, 'level': level, 'detail': detail, 'hint': hint}
 
 
-def cameras_items(snapshots):
+def power_limits(resources, battery_plugged=None):
+    """Why the processor may be running slower than it can: a list of short reasons (empty when it is not held back)."""
+    reasons = []
+    if not resources:
+        return reasons
+    if resources.get('power_profile') == 'power-saver':
+        reasons.append('o modo de economia de energia está ligado')
+    power = resources.get('cpu_power')
+    if power and power['max']:
+        if power['cap'] < .9 * power['max']:
+            reasons.append(f"o processador está limitado a {power['cap']} MHz (o máximo é {power['max']} MHz)")
+        elif power['cur'] < .7 * power['max'] and resources.get('cpu', 0) > 60:
+            reasons.append(f"o processador está trabalhando a {power['cur']} MHz de {power['max']} MHz, mesmo ocupado (economia de energia ou calor)")
+    if battery_plugged is False and not reasons:
+        reasons.append('o computador está na bateria')
+    return reasons
+
+
+def cameras_items(snapshots, limits=()):
     out = []
     for camera in snapshots:
         title = f"Câmera {camera['name']}"
@@ -19,8 +37,11 @@ def cameras_items(snapshots):
         elif camera['state'] == 'online':
             slow = camera.get('analysis_active') and (camera.get('fps') or 0) < 4
             detail = f"{camera.get('fps') or 0} quadros/s · análise {'ativa' if camera.get('analysis_active') else 'pausada'}"
-            out.append(item(f"camera-{camera['id']}", title, 'warn' if slow else 'ok', detail + (' · lenta' if slow else ''),
-                            'O processador não está dando conta. Reduza a taxa de análise ou o tamanho da detecção.' if slow else ''))
+            if slow and limits:
+                hint = f"Provável causa: {limits[0]}. Mude para o perfil Equilibrado ou Desempenho (ou ligue na tomada)."
+            else:
+                hint = 'O processador não está dando conta. Reduza a taxa de análise ou o tamanho da detecção.' if slow else ''
+            out.append(item(f"camera-{camera['id']}", title, 'warn' if slow else 'ok', detail + (' · lenta' if slow else ''), hint))
         elif camera['state'] == 'connecting':
             out.append(item(f"camera-{camera['id']}", title, 'warn', 'Conectando…', 'Se demorar, confira o cabo, o endereço e a energia da câmera.'))
         else:
@@ -32,7 +53,8 @@ def evaluate(data, now=None):
     """`data`: cameras, whatsapp, notebook, disk_free_gb, min_free_gb, resources, backup, backup_enabled, whatsapp_enabled,
     recognition, failed_clips, processing_clips, failed_deliveries, alerts, uptime."""
     now = now or time.time()
-    items = cameras_items(data['cameras'])
+    limits = power_limits(data.get('resources'), (data['notebook'].get('plugged') if data['notebook'].get('state') in ('ok', 'battery') else None))
+    items = cameras_items(data['cameras'], limits)
 
     whatsapp = data['whatsapp'].get('state')
     if whatsapp == 'connected':
@@ -70,8 +92,15 @@ def evaluate(data, now=None):
             problems.append(f'memória {memory:.0f}%'); level = 'error' if memory > 92 else max(level, 'warn', key=RANK.get)
         if resources['cpu'] > 85:
             problems.append(f"CPU {resources['cpu']:.0f}%"); level = max(level, 'warn', key=RANK.get)
-        items.append(item('resources', 'Computador', level, ' · '.join(problems) if problems else f"CPU {resources['cpu']:.0f}% · memória {memory:.0f}%" + (f" · {resources['temp']:.0f} °C" if resources.get('temp') is not None else ''),
-                          'Reduza a carga (menos análise por segundo, desligue o reconhecimento por corpo) ou melhore a ventilação.' if problems else ''))
+        if limits and level == 'ok':
+            level = 'warn'
+        text = ' · '.join(problems) if problems else f"CPU {resources['cpu']:.0f}% · memória {memory:.0f}%" + (f" · {resources['temp']:.0f} °C" if resources.get('temp') is not None else '')
+        if limits:
+            joined = '; '.join(limits)
+            text += f' · {joined[0].upper()}{joined[1:]}'
+        hint = ('Mude o perfil de energia para Equilibrado ou Desempenho (no notebook: powerprofilesctl set balanced).' if limits
+                else 'Reduza a carga (menos análise por segundo, desligue o reconhecimento por corpo) ou melhore a ventilação.' if problems else '')
+        items.append(item('resources', 'Computador', level, text, hint))
 
     if not data.get('backup_enabled'):
         items.append(item('backup', 'Backup', 'info', 'Desligado.', 'Ligue em Configurações para proteger o histórico e as pessoas cadastradas.'))

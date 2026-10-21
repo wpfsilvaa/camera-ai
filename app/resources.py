@@ -55,6 +55,21 @@ class Reader:
                     found.append(value)
         return round(max(found), 1) if found else None
 
+    def cpu_power(self):
+        """How fast the processor is allowed to run: {'cur','max','cap'} in MHz (average over the cores) and its governor, or None."""
+        cur, top, cap, governor = [], [], [], ''
+        for path in sorted(self.sys.glob('devices/system/cpu/cpu[0-9]*/cpufreq')):
+            try:
+                cur.append(int((path / 'scaling_cur_freq').read_text()) / 1000)
+                top.append(int((path / 'cpuinfo_max_freq').read_text()) / 1000)
+                cap.append(int((path / 'scaling_max_freq').read_text()) / 1000)
+                governor = (path / 'scaling_governor').read_text().strip()
+            except (OSError, ValueError):
+                continue
+        if not cur:
+            return None
+        return {'cur': round(sum(cur) / len(cur)), 'max': round(max(top)), 'cap': round(max(cap)), 'governor': governor}
+
     def battery(self):
         for path in sorted(self.sys.glob('class/power_supply/BAT*')):
             try:
@@ -85,6 +100,14 @@ class Reader:
         return found
 
 
+def power_profile():
+    try:
+        result = subprocess.run(['powerprofilesctl', 'get'], capture_output=True, text=True, timeout=2)
+        return result.stdout.strip() or None if result.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 def gpu_reading():
     """NVIDIA GPU use through nvidia-smi, or None."""
     if not shutil.which('nvidia-smi'):
@@ -109,6 +132,7 @@ class Monitor:
         self.previous = None
         self.gpu = None
         self.gpu_at = 0
+        self.profile, self.profile_at = None, 0
         self.stop_event = threading.Event()
         self.thread = None
 
@@ -137,6 +161,13 @@ class Monitor:
         battery = self.reader.battery()
         if battery:
             point['battery'] = battery
+        power = self.reader.cpu_power()
+        if power:
+            point['cpu_power'] = power
+        if now - self.profile_at >= 30:   # The power profile of the desktop (power-saver, balanced, performance) changes rarely.
+            self.profile, self.profile_at = power_profile(), now
+        if self.profile:
+            point['power_profile'] = self.profile
         if now - self.gpu_at >= 2 * SAMPLE_SECONDS:
             self.gpu, self.gpu_at = gpu_reading(), now
         if self.gpu:

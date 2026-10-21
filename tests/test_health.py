@@ -44,5 +44,26 @@ class HealthTests(unittest.TestCase):
         self.assertEqual({i['key']: i['level'] for i in report['items']}['backup'], 'error')
 
 
+    def test_a_slow_camera_points_at_the_power_saving_mode(self):
+        slow = [{'id': 'main', 'name': 'Cozinha', 'enabled': True, 'state': 'online', 'fps': 3, 'analysis_active': True}]
+        saving = {'cpu': 40, 'mem_used': 2, 'mem_total': 8, 'temp': 50, 'power_profile': 'power-saver', 'cpu_power': {'cur': 800, 'max': 2600, 'cap': 1200, 'governor': 'powersave'}}
+        report = evaluate(base(cameras=slow, resources=saving), now=1000 + 3600)
+        items = {i['key']: i for i in report['items']}
+        self.assertIn('economia de energia', items['camera-main']['hint'])
+        self.assertEqual(items['resources']['level'], 'warn')
+        self.assertIn('1200 MHz', items['resources']['detail'])
+        self.assertIn('powerprofilesctl', items['resources']['hint'])
+
+    def test_a_fast_processor_is_not_blamed(self):
+        free = {'cpu': 30, 'mem_used': 2, 'mem_total': 8, 'temp': 50, 'power_profile': 'balanced', 'cpu_power': {'cur': 2300, 'max': 2600, 'cap': 2600, 'governor': 'performance'}}
+        report = evaluate(base(resources=free), now=1000 + 3600)
+        self.assertEqual({i['key']: i['level'] for i in report['items']}['resources'], 'ok')
+
+    def test_busy_and_slow_clock_is_reported_even_without_a_profile(self):
+        busy = {'cpu': 90, 'mem_used': 2, 'mem_total': 8, 'temp': 50, 'cpu_power': {'cur': 1000, 'max': 2600, 'cap': 2600, 'governor': 'powersave'}}
+        report = evaluate(base(resources=busy), now=1000 + 3600)
+        self.assertIn('1000 MHz', next(i for i in report['items'] if i['key'] == 'resources')['detail'])
+
+
 if __name__ == '__main__':
     unittest.main()
