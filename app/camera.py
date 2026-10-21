@@ -379,7 +379,7 @@ class CameraWorker:
                     live=LiveFrames(cap)
                 while not self.stop_event.is_set():
                     current=self.config.get()
-                    restart=('camera_source','fps','confidence','min_presence_seconds','absence_seconds','segment_seconds','recognition_enabled','device','detection_size','detection_fps','recording_width','camera_name')
+                    restart=('camera_source','fps','confidence','min_presence_seconds','absence_seconds','segment_seconds','recognition_enabled','device','detection_size','detection_fps','recording_width','camera_name','track_hold_seconds')
                     if not current.enabled or any(getattr(current,k)!=getattr(settings,k) for k in restart):
                         reason='settings_changed'
                         break
@@ -502,7 +502,7 @@ class CameraWorker:
                             self.recognition.start()
                         begin=time.perf_counter()
                         if tracker is None:
-                            tracker=PersonTracker(settings.confidence)
+                            tracker=PersonTracker(settings.confidence,settings.track_hold_seconds)
                         result=model.predict(original,classes=[0],conf=tracker.low_confidence,imgsz=settings.detection_size,
                             device=device,quantize=16 if half else 32,max_det=20,verbose=False)[0]
                         boxes,ids=tracker.update(result.boxes,original,now)

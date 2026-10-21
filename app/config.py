@@ -165,6 +165,7 @@ class Settings(CameraSettings):
     body_memory_minutes: int = Field(default=30, ge=1, le=240)
     body_threshold: float = Field(default=.85, ge=.70, le=.99)
     body_margin: float = Field(default=.08, ge=.02, le=.30)
+    track_hold_seconds: float = Field(default=4, ge=1, le=15)   # A person the detector misses for less than this keeps the same track number (and name).
     face_hold_seconds: float = Field(default=15, ge=0, le=60)
     send_probable_father: bool = False
     # Propose sharp, confidently recognized faces as new examples; a person approves each one.

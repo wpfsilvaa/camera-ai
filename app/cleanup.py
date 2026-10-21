@@ -7,11 +7,10 @@ bin, and before anything moves the gallery is tested on itself so the result can
 import statistics
 import time
 
-import cv2
 import numpy as np
 
-from .config import FACE_DETECTOR
 from .faces import normalized
+from .views import ViewCache
 
 QUARANTINE_DAYS = 30
 MIN_REFERENCES = 20       # A person is never left with fewer references than this.
@@ -21,35 +20,12 @@ INTRUDER_BELOW = .20
 BLURRY_SHARE = .2         # Sharpness under this share of the person's median ...
 BLURRY_FLOOR = 25         # ... or under this value.
 MAX_LISTED = 120
-PARTIAL_SCORE = .75       # The face detector is less sure than this about the crop ...
-PARTIAL_YAW = 1.5         # ... or the nose is this far (in eye distances) from between the eyes: a profile.
+PROFILE_PERSON = .25      # A person with more than this share of clear profiles is mostly seen from the side: their profiles are kept.
 
-SEVERITY = {'swapped': 'high', 'intruder': 'medium', 'profile': 'medium', 'blurry': 'low'}
+SEVERITY = {'swapped': 'high', 'intruder': 'medium', 'unclear': 'medium', 'profile': 'low', 'blurry': 'low'}
 REASON_TEXT = {'swapped': 'Parece mais com {other} do que com {own}', 'intruder': 'Pouco parecida com as outras fotos de {own}',
-               'profile': 'Rosto de lado ou parcial (pouco aproveitável)', 'blurry': 'Imagem muito borrada'}
-_detector = None
-
-
-def partial_view(path):
-    """True when the saved face is a profile, partly hidden (a cup, a hand) or not a clear face at all.
-
-    The crop is run through the face detector again: no face found, low confidence, or a nose far off the eyes' midpoint."""
-    global _detector
-    image = cv2.imread(str(path))
-    if image is None:
-        return False
-    if _detector is None:
-        _detector = cv2.FaceDetectorYN.create(FACE_DETECTOR, '', (224, 224), .4, .3, 5)
-    padded = cv2.copyMakeBorder(cv2.resize(image, (224, 224)), 56, 56, 56, 56, cv2.BORDER_REPLICATE)
-    _detector.setInputSize((padded.shape[1], padded.shape[0]))
-    _, found = _detector.detect(padded)
-    if found is None or len(found) == 0:
-        return True
-    face = found[int(np.argmax(found[:, -1]))]
-    eyes = np.linalg.norm(face[4:6] - face[6:8]) + 1e-6
-    yaw = abs(face[8] - (face[4] + face[6]) / 2) / eyes
-    return bool(face[-1] < PARTIAL_SCORE or yaw > PARTIAL_YAW)
-
+               'unclear': 'Rosto coberto ou não identificável (orelha, copo, mão…)', 'profile': 'De lado, incomum para {own}',
+               'blurry': 'Imagem muito borrada'}
 
 
 def person_scores(vectors, owners, alive):
@@ -118,6 +94,9 @@ class GalleryCleanup:
         quality = np.array([r['quality'] for r in rows])
         typical_own = {person: statistics.median(own[owners == person]) for person in people}
         typical_quality = {person: statistics.median(quality[owners == person]) for person in people}
+        views = ViewCache(self.db, self.recognition.directory)
+        kinds = {row['id']: views.kind(row['id']) if row['source'] == 'sample' else 'front' for row in rows}
+        profile_share = {person: sum(1 for i, row in enumerate(rows) if owners[i] == person and kinds[row['id']] == 'profile') / max(1, int((owners == person).sum())) for person in people}
         found = []
         for i, row in enumerate(rows):
             if row['source'] != 'sample':
@@ -130,12 +109,15 @@ class GalleryCleanup:
                 reasons.append('swapped')
             if own[i] < min(INTRUDER_ABSOLUTE, typical_own[person] - INTRUDER_BELOW):
                 reasons.append('intruder')
-            if partial_view(self.recognition.directory / f"{row['id']}.jpg"):
-                reasons.append('profile')
+            view = kinds[row['id']]
+            if view == 'unclear':
+                reasons.append('unclear')
+            elif view == 'profile' and profile_share[person] <= PROFILE_PERSON:
+                reasons.append('profile')   # Only when side views are unusual for this person.
             if quality[i] < max(BLURRY_FLOOR, BLURRY_SHARE * typical_quality[person]):
                 reasons.append('blurry')
             if reasons:
-                top = min(reasons, key=lambda r: ['swapped', 'intruder', 'profile', 'blurry'].index(r))
+                top = min(reasons, key=lambda r: ['swapped', 'intruder', 'unclear', 'profile', 'blurry'].index(r))
                 found.append({'sample_id': row['id'], 'person_id': person, 'name': names.get(person, ''), 'reasons': reasons, 'severity': SEVERITY[top],
                               'text': ' · '.join(REASON_TEXT[r].format(own=names.get(person, ''), other=names.get(other_id, '')) for r in reasons),
                               'own': round(float(own[i]), 2), 'other': round(float(best_other), 2), 'quality': round(float(quality[i]))})

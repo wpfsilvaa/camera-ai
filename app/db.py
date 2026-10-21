@@ -121,6 +121,10 @@ class Database:
                     sample_id TEXT PRIMARY KEY REFERENCES person_samples(id) ON DELETE CASCADE,
                     person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE, created REAL NOT NULL
                 );
+                -- How usable each saved face is (clear / profile / unclear), measured once.
+                CREATE TABLE IF NOT EXISTS sample_views (
+                    sample_id TEXT PRIMARY KEY REFERENCES person_samples(id) ON DELETE CASCADE, score REAL, yaw REAL
+                );
                 CREATE TABLE IF NOT EXISTS face_enrollments (
                     id TEXT PRIMARY KEY, person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
                     created REAL NOT NULL, feature BLOB NOT NULL, model TEXT NOT NULL, quality REAL NOT NULL

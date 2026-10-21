@@ -284,7 +284,8 @@ class RecognitionTests(unittest.TestCase):
         noisy=normalized([.82,np.sqrt(1-.82**2),0])
         self.recognition.observe_faces(None,boxes,[2],{},211.8,cfg,{'2':noisy})
         self.assertTrue(self.recognition.labels([2],boxes,211.8,15)['2']['held'])
-        self.assertEqual(self.recognition.labels([2],boxes,214,15),{})
+        self.assertTrue(self.recognition.labels([2],boxes,214,15)['2']['held'])   # A body-based name now lasts up to 10 s without a new match.
+        self.assertEqual(self.recognition.labels([2],boxes,221.5,15),{})
         self.recognition.body_memory.features.clear()
         self.recognition.observe_faces(None,boxes,[2],{},215,cfg,{'2':normalized([0,1,0])})
         self.assertEqual(self.recognition.labels([2],boxes,215,15),{})

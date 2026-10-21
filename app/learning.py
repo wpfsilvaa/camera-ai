@@ -12,6 +12,7 @@ import numpy as np
 
 from .faces import normalized
 from .recognition import match_person
+from .views import ViewCache
 
 LOOKBACK_SECONDS = 3 * 86400
 DUPLICATE_SIMILARITY = .97   # Nearly the same image as an existing example teaches nothing new.
@@ -28,6 +29,8 @@ class LearningSuggestions:
     def __init__(self, db, recognition, config):
         self.db, self.recognition, self.config = db, recognition, config
         self.last_scan = 0
+        self.views = ViewCache(db, recognition.directory)
+        self.PROFILE_PERSON = .25
 
     def references(self, model):
         rows = self.db.rows('''SELECT person_id,feature,quality FROM person_samples WHERE person_id IS NOT NULL AND model=?
@@ -53,6 +56,8 @@ class LearningSuggestions:
                 continue  # Rows come sharpest first: keep one per track.
             gallery = galleries.setdefault(row['model'], self.references(row['model']))
             score = self.qualifies(row, gallery, settings)
+            if score is not None and not self.usable_view(row):
+                score = None
             if score is not None:
                 best[row['track_id']] = (row, score)
         added = 0
@@ -80,6 +85,13 @@ class LearningSuggestions:
             except (KeyError, ValueError):
                 continue   # E.g. the record is still open; it is tried again on the next scan.
         return approved
+
+    def usable_view(self, row):
+        """A face that is not clearly a face (an ear, a cup, a hand) never teaches; a clear profile only teaches someone who is mostly seen from the side."""
+        kind = self.views.kind(row['id'])
+        if kind == 'unclear':
+            return False
+        return kind != 'profile' or self.views.profile_share(row['person_id']) > self.PROFILE_PERSON
 
     @staticmethod
     def qualifies(row, gallery, settings):

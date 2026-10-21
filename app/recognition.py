@@ -15,6 +15,8 @@ from .config import PEOPLE
 from .faces import FaceEncoder, normalized
 
 
+HANDOFF_SECONDS = 6      # A new track that appears this soon where a recognised one vanished inherits its identity (until its own face says otherwise).
+BODY_HOLD = 10          # Seconds an identity from the body/clothes survives a failed comparison.
 EXAMPLE_LIMIT = 100   # Taught faces kept per person.
 MERGE_GAP = 10   # Seconds between two tracker numbers of one person for them to count as the same person.
 
@@ -75,6 +77,7 @@ class Recognition:
         self.db, self.directory = db, Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
+        self.recent_lost, self.last_boxes = [], {}   # Identities of tracks that just vanished, and the last box of every visible track.
         self.monitored = {'father'}
         self.encoder_lock = threading.Lock()
         self.condition = threading.Condition()
@@ -124,7 +127,7 @@ class Recognition:
             self.generation += 1
             self.last_sample.clear()
             self.votes.clear()
-            self.live.clear()
+            self.live.clear();self.recent_lost=[]
             self.visible.clear()
             self.body_memory.clear()
             self.body_anchors.clear()
@@ -196,7 +199,7 @@ class Recognition:
     def invalidate(self, connection):
         connection.execute('UPDATE recognition_meta SET revision=revision+1 WHERE id=1')
         connection.execute('UPDATE person_tracks SET suggested_id=NULL,similarity=NULL,recognized_at=NULL WHERE reviewed=0')
-        self.live.clear()
+        self.live.clear();self.recent_lost=[]
         self.votes.clear()
         self.revision = -1
         self.body_memory.clear()
@@ -681,20 +684,52 @@ class Recognition:
                 if event_id is not None:
                     self.db.execute('UPDATE person_tracks SET suggested_id=NULL,similarity=NULL,recognized_at=NULL WHERE event_id=? AND track_key=? AND reviewed=0',(event_id,key))
 
+    def hand_off(self, boxes, now):
+        """A visible track without a name appears right where a named one just vanished: it is the same person (one candidate only)."""
+        if not self.recent_lost:
+            return
+        unnamed=[key for key in boxes if key not in self.live]
+        named={item['person_id'] for key,item in self.live.items() if key in boxes}
+        for lost in list(self.recent_lost):
+            if lost['item']['person_id'] in named or not unnamed:
+                continue
+            lx1,ly1,lx2,ly2=lost['box']
+            lcx,lcy,size=(lx1+lx2)/2,(ly1+ly2)/2,max(lx2-lx1,ly2-ly1)
+            near=[]
+            for key in unnamed:
+                if key==lost['key']:
+                    continue   # The same number coming back is verified again, not trusted.
+                x1,y1,x2,y2=boxes[key]
+                distance=(((x1+x2)/2-lcx)**2+((y1+y2)/2-lcy)**2)**.5
+                if distance<=size:
+                    near.append((distance,key))
+            if len(near)!=1 or sum(1 for other in self.recent_lost if other is not lost and other['item']['person_id']!=lost['item']['person_id'])>0:
+                continue   # More than one candidate: leave it to the face and the clothes.
+            key=near[0][1]
+            self.live[key]={**lost['item'],'seen':now,'source':'continuity','score':(lost['item'].get('score') or 0)*.9}
+            self.recent_lost.remove(lost);unnamed.remove(key);named.add(lost['item']['person_id'])
+
     def labels(self, ids, boxes, now, hold_seconds):
         with self.lock:
             self.body_anchors.retain(ids,boxes)
             body_boxes={str(key):box for key,box in zip(ids,boxes) if key is not None}
             self.body_memory.retain({key for key in body_boxes if not self.body_anchors.overlaps(key,body_boxes)})
             visible={str(key) for key in ids if key is not None}
-            # Drop identity immediately on a lost track; an ID returning must be verified again.
+            # A lost track loses its identity, but it is remembered for a few seconds: the same person often comes back under a new number
+            # (turning to drink, a hand in front of the face) a moment later, in the same place.
             for key in (set(self.live) | set(self.votes) | set(self.body_memory.votes))-visible:
+                if key in self.live and key in self.last_boxes:
+                    box,seen=self.last_boxes[key]
+                    self.recent_lost.append({'key':key,'item':self.live[key],'box':box,'at':seen})
                 self.body_anchors.items.pop(key,None)
                 self.live.pop(key,None);self.votes.pop(key,None);self.body_memory.votes.pop(key,None)
+            self.recent_lost=[lost for lost in self.recent_lost if now-lost['at']<=HANDOFF_SECONDS]
+            self.hand_off(body_boxes,now)
+            self.last_boxes={key:(box,now) for key,box in body_boxes.items()}
             output={}
             for key,item in self.live.items():
                 age=now-item['seen']
-                limit=min(hold_seconds,3) if item.get('source')=='body' else hold_seconds
+                limit=min(hold_seconds,BODY_HOLD) if item.get('source')=='body' else min(hold_seconds,8) if item.get('source')=='continuity' else hold_seconds
                 if key in visible and 0<=age<=limit:
                     output[key]={**item,'held':age>.8,'monitored':item['person_id'] in self.monitored}
             # FaceEncoder checks unique face ownership. Body rectangles can overlap

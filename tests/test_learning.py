@@ -221,6 +221,40 @@ if __name__ == '__main__':
     unittest.main()
 
 
+class IdentityHandoffTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        path = Path(self.tmp.name)
+        self.recognition = Recognition(Database(path / 'h.sqlite3'), path / 'people')
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def named(self, key, now):
+        self.recognition.live[key] = {'person_id': 'father', 'name': 'Meu pai', 'score': .8, 'seen': now, 'source': 'face'}
+
+    def test_same_person_under_a_new_number_keeps_the_name_for_a_moment(self):
+        self.named('5', 100)
+        box = [100, 100, 200, 400]
+        self.assertIn('5', self.recognition.labels([5], [box], 100.5, 15))
+        labels = self.recognition.labels([9], [[110, 105, 210, 405]], 103, 15)   # Number 5 vanished; 9 appears in the same place.
+        self.assertEqual((labels['9']['person_id'], labels['9']['source']), ('father', 'continuity'))
+
+    def test_far_away_or_late_or_ambiguous_does_not_hand_off(self):
+        self.named('5', 100)
+        self.recognition.labels([5], [[100, 100, 200, 400]], 100.5, 15)
+        self.assertEqual(self.recognition.labels([9], [[800, 100, 900, 400]], 103, 15), {})   # Somewhere else entirely.
+        self.recognition.recent_lost = []
+        self.named('6', 200)
+        self.recognition.labels([6], [[100, 100, 200, 400]], 200.5, 15)
+        self.assertEqual(self.recognition.labels([7], [[100, 100, 200, 400]], 215, 15), {})   # Too late.
+
+    def test_body_identity_survives_ten_seconds_of_failed_comparisons(self):
+        self.recognition.live['5'] = {'person_id': 'father', 'name': 'Meu pai', 'score': .8, 'seen': 100, 'source': 'body'}
+        self.assertIn('5', self.recognition.labels([5], [[0, 0, 50, 100]], 108, 20))
+        self.assertNotIn('5', self.recognition.labels([5], [[0, 0, 50, 100]], 112, 20))
+
+
 class SmartCleanupTests(unittest.TestCase):
     def setUp(self):
         from app import cleanup
@@ -229,18 +263,19 @@ class SmartCleanupTests(unittest.TestCase):
         path = Path(self.tmp.name)
         self.db = Database(path / 'h.sqlite3')
         self.config = Config(path / 's.json')
-        self.config.save(Settings())
+        self.config.save(Settings(learning_auto_approve=False))
         self.recognition = Recognition(self.db, path / 'people')
         self.cleaner = cleanup.GalleryCleanup(self.db, self.recognition, self.config)
-        self.original = cleanup.partial_view
-        cleanup.partial_view = lambda path: path.name in self.partial
-        self.partial = set()
+        from app import views
+        self.views_module, self.original = views, views.view_of
+        self.partial, self.side = set(), set()
+        views.view_of = lambda path: (0.0, None) if path.name in self.partial else (0.95, 3.0) if path.name in self.side else (0.95, 0.2)
         self.rng = np.random.default_rng(7)
         self.people = {'father': self.rng.normal(size=16), 'ana': self.rng.normal(size=16)}
         self.ids = {'father': [], 'ana': []}
 
     def tearDown(self):
-        self.cleanup_module.partial_view = self.original
+        self.views_module.view_of = self.original
         self.tmp.cleanup()
 
     def teach(self, person, vector=None, quality=100):
@@ -264,20 +299,47 @@ class SmartCleanupTests(unittest.TestCase):
         self.gallery()
         swapped = self.teach('father', vector=self.people['ana'] + self.rng.normal(scale=.1, size=16))   # A face of Ana taught as the father.
         blurry = self.teach('father', quality=5)
-        profile = self.teach('father')
+        profile = self.teach('father')          # Covered face (no face found).
         self.partial.add(f'{profile}.jpg')
         result = self.cleaner.analyze()
         found = {item['sample_id']: item for item in result['items']}
         self.assertIn('swapped', found[swapped]['reasons'])
         self.assertEqual(found[swapped]['severity'], 'high')
         self.assertIn('blurry', found[blurry]['reasons'])
-        self.assertIn('profile', found[profile]['reasons'])
+        self.assertIn('unclear', found[profile]['reasons'])
         self.assertNotIn(profile, [i['sample_id'] for i in result['items'] if i['severity'] == 'high'])
         clean = [s for s in self.ids['ana'] if s in found]
         self.assertLessEqual(len(clean), 3)   # Healthy faces are mostly left alone.
         validation = result['validation']
         self.assertTrue(validation['better_or_equal'])
         self.assertGreaterEqual(validation['after']['right'], validation['before']['right'])
+
+    def test_clear_profiles_are_kept_for_someone_mostly_seen_from_the_side(self):
+        self.gallery()
+        for _ in range(20):                      # The father is mostly seen from the side.
+            self.side.add(f'{self.teach("father")}.jpg')
+        result = self.cleaner.analyze()
+        self.assertFalse([i for i in result['items'] if 'profile' in i['reasons'] and i['name'] == 'Meu pai'])
+        stranger_side = self.teach('ana')        # For Ana a profile is unusual, so it is noted (lightly).
+        self.side.add(f'{stranger_side}.jpg')
+        found = {i['sample_id']: i for i in self.cleaner.analyze()['items']}
+        self.assertIn('profile', found[stranger_side]['reasons'])
+        self.assertEqual(found[stranger_side]['severity'], 'low')
+
+    def test_learning_never_teaches_unclear_faces_and_profiles_only_when_usual(self):
+        self.gallery()
+        learner = LearningSuggestions(self.db, self.recognition, self.config)
+        row = lambda sample, person: {'id': sample, 'person_id': person}
+        clear, covered, side = self.teach('father'), self.teach('father'), self.teach('father')
+        self.partial.add(f'{covered}.jpg')
+        self.side.add(f'{side}.jpg')
+        self.assertTrue(learner.usable_view(row(clear, 'father')))
+        self.assertFalse(learner.usable_view(row(covered, 'father')))
+        self.assertFalse(learner.usable_view(row(side, 'father')))   # Few profiles in the gallery: not usual for him.
+        for _ in range(15):
+            self.side.add(f'{self.teach("father")}.jpg')
+        self.db.execute('DELETE FROM sample_views')                  # Measure again with the new gallery.
+        self.assertTrue(learner.usable_view(row(side, 'father')))
 
     def test_quarantine_hides_from_recognition_and_can_be_restored_and_purged(self):
         self.gallery()
