@@ -69,6 +69,7 @@ class CameraSettings(BaseModel):
     restricted_alert: bool = False
     restricted_min_seconds: float = Field(default=3, ge=0, le=30)   # Stay this long in the area before it counts (walking past does not).
     restricted_still: bool = True      # ... and be standing still, not crossing the room.
+    restricted_floor: list[list[float]] = Field(default_factory=list, max_length=10)   # Strips of floor in front of the area: the person's feet must be on one of them.
     restricted_hands: bool = False     # Count only when a hand is in the area (needs the pose model, like fall detection).
     # Restricted mode: send its alert and videos by WhatsApp too. Off = web-app notifications only.
     restricted_whatsapp: bool = True
@@ -98,7 +99,7 @@ class CameraSettings(BaseModel):
             raise ValueError('Informe o nome da câmera.')
         return value
 
-    @field_validator('fall_zones', 'restricted_zones')
+    @field_validator('fall_zones', 'restricted_zones', 'restricted_floor')
     @classmethod
     def zones_valid(cls, zones):
         for zone in zones:

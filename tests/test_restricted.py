@@ -115,6 +115,35 @@ class PassingByTests(unittest.TestCase):
         self.assertEqual(watch.update([AT_FRIDGE], [7], {'7': FATHER}, FRAME, FRIDGE, 'father', 0, 0, False, [None]), [7])   # No pose: the body rule.
 
 
+class FloorStripTests(unittest.TestCase):
+    STRIP = [[.55, .8, .95, 1.0]]   # The floor right in front of the fridge.
+
+    def test_feet_must_be_on_the_strip(self):
+        in_front = (650, 300, 850, 950)        # Feet at y=950: on the strip.
+        far_behind = (650, 100, 850, 600)      # Overlaps the fridge in the picture, but the feet are far up the room.
+        update = lambda box: RestrictedWatch().update([box], [7], {'7': FATHER}, FRAME, FRIDGE, 'father', floor=self.STRIP)
+        self.assertEqual(update(in_front), [7])
+        self.assertEqual(update(far_behind), [])
+        self.assertEqual(RestrictedWatch().update([far_behind], [7], {'7': FATHER}, FRAME, FRIDGE, 'father'), [7])   # Without strips: as before.
+
+
+class VisitMeasureTests(unittest.TestCase):
+    def test_new_visit_gets_a_snapshot_and_its_length_is_updated(self):
+        import numpy as np
+        from app.camera import CameraWorker
+        worker = CameraWorker.__new__(CameraWorker)
+        worker.restricted, worker.camera_id, worker.area_seen = RestrictedWatch(), 'main', {}
+        made, lengths = [], []
+        worker.on_visit = lambda camera, now, area, person, kind, snapshot: (made.append(snapshot() if snapshot else None), 42)[1]
+        worker.on_visit_time = lambda visit, seconds: lengths.append((visit, round(seconds)))
+        settings = CameraSettings(restricted_enabled=True, restricted_zones=FRIDGE, restricted_who='anyone')
+        for now in (1000, 1001, 1003, 1006):
+            worker.restricted.update([AT_FRIDGE], [7], {'7': FATHER}, FRAME, FRIDGE, 'anyone')
+            worker.log_visits(now, settings, 'Meu pai', 'father', lambda: b'jpeg')
+        self.assertEqual(made, [b'jpeg'])   # One visit, one picture.
+        self.assertEqual(lengths, [(42, 3), (42, 6)])
+
+
 class MonitoredTests(unittest.TestCase):
     def test_any_monitored_person_counts_as_watched(self):
         boxes, ids = [AT_FRIDGE, AT_FRIDGE], [1, 2]
@@ -189,7 +218,7 @@ class AreaVisitTests(unittest.TestCase):
         settings = CameraSettings(restricted_enabled=True, restricted_zones=zones, restricted_zone_names=['Geladeira', ''], restricted_who='anyone')
         worker = CameraWorker.__new__(CameraWorker)
         worker.restricted, worker.camera_id, worker.area_seen, seen = RestrictedWatch(), 'main', {}, []
-        worker.on_visit = lambda camera, now, area, person, kind='': seen.append((now, area, person))
+        worker.on_visit = lambda camera, now, area, person, kind='', snapshot=None: seen.append((now, area, person))
         fridge, cupboard = AT_FRIDGE, (50, 300, 250, 900)
         for now, box in ((1000, fridge), (1002, fridge), (1004, cupboard), (1006, cupboard), (1030, fridge)):
             worker.restricted.update([box], [7], {'7': FATHER}, FRAME, zones, 'anyone')

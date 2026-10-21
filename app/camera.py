@@ -34,6 +34,7 @@ STALL_SECONDS = .3
 STALL_WAIT_SECONDS = 1.0
 AREA_GAP=10  # Seconds without anyone inside before the next entry counts as a new visit to that area.
 REMINDER_GAP=60  # Seconds between two reminders at least.
+FLOOR_COLOR=(90,160,60)  # BGR: the floor strips in front of a restricted area are green.
 RESTRICTED_COLOR=(60,60,200)  # BGR: restricted areas are red, fall areas blue.
 # Ultralytics initialization touches process-wide configuration; serialize warmup.
 MODEL_LOAD_LOCK = threading.Lock()
@@ -109,6 +110,9 @@ class LiveFrames:
 
 
 class CameraWorker:
+    open_visits=None      # Per worker once used: area index -> the visit being measured.
+    on_visit_time=None    # Called with (visit id, seconds so far) while a visit to a restricted area lasts.
+
     def __init__(self, db, config, recognition=None, camera_id='main'):
         self.db,self.config=db,config
         self.camera_id=camera_id
@@ -123,7 +127,9 @@ class CameraWorker:
         self.on_presence=None  # Called with (camera_id, camera_name, time) when a presence record starts.
         # Called with (camera_id, camera_name, jpeg bytes, person name) when a restricted area visit starts.
         self.on_restricted=None
+        self.open_visits=None   # area index -> the visit being measured.
         self.pose_points=None   # Pose keypoints of the people in the last analysed frame (only while the hands rule is on).
+        self.on_visit_time=None   # Called with (visit id, seconds so far) while a visit to a restricted area lasts.
         self.on_street=None   # Called every analysed frame of a guarded camera: (camera id, name, stranger in view, time, jpeg maker).
         self.on_visit=None   # Called with (camera id, time, name) at the start of every visit to a restricted area.
         self.on_reminder=None   # Called with (camera id, text) when the father goes into a restricted area (a sound on the kitchen screen).
@@ -197,16 +203,31 @@ class CameraWorker:
                     log.exception('Falha ao registrar possível queda')
         return lying
 
-    def log_visits(self, now, settings, person, kind='unknown'):
-        """One visit per area each time someone goes in after it was empty, so a report can say how often the fridge or the cupboard was opened."""
+    def log_visits(self, now, settings, person, kind='unknown', snapshot=None):
+        """One visit per area each time someone goes in after it was empty, so a report can say how often the fridge or the cupboard was opened.
+
+        `snapshot` makes the picture of the moment (only called for a new visit); the visit's length is kept up to date while it lasts.
+        """
         names=settings.restricted_zone_names
+        if self.open_visits is None:
+            self.open_visits={}
         for index in self.restricted.areas:
             if now-self.area_seen.get(index,-AREA_GAP)>=AREA_GAP and self.on_visit:
                 name=(names[index] if index<len(names) else '') or (f'Área {index+1}' if len(settings.restricted_zones)>1 else 'Área restrita')
                 try:
-                    self.on_visit(self.camera_id,now,name,person,kind)
+                    visit=self.on_visit(self.camera_id,now,name,person,kind,snapshot)
+                    self.open_visits[index]={'id':visit,'start':now,'written':now} if visit else None
+                    if not visit:
+                        self.open_visits.pop(index,None)
                 except Exception:
                     log.exception('Falha ao registrar ida à área restrita')
+            current=self.open_visits.get(index)
+            if current and self.on_visit_time and now-current['written']>=2:
+                current['written']=now
+                try:
+                    self.on_visit_time(current['id'],now-current['start'])
+                except Exception:
+                    log.exception('Falha ao medir a ida à área restrita')
             self.area_seen[index]=now
 
     def check_street(self, boxes, ids, labels, frame, now, settings):
@@ -223,7 +244,7 @@ class CameraWorker:
     def check_restricted(self, zone, boxes, ids, labels, frame, now, settings):
         """Update the restricted area visit; alert once when it starts, if enabled."""
         height,width=frame.shape[:2]
-        inside=self.restricted.update(boxes,ids,labels,(width,height),settings.restricted_zones,settings.restricted_who,now,settings.restricted_min_seconds,settings.restricted_still,self.pose_points if settings.restricted_hands else None)
+        inside=self.restricted.update(boxes,ids,labels,(width,height),settings.restricted_zones,settings.restricted_who,now,settings.restricted_min_seconds,settings.restricted_still,self.pose_points if settings.restricted_hands else None,settings.restricted_floor)
         started=zone.update(now,len(inside))=='start'
         if any(key in self.restricted.watched for key in inside):
             kind='father'
@@ -231,7 +252,10 @@ class CameraWorker:
             kind='family'   # Someone registered who is not monitored is in view: probably them at the fridge.
         else:
             kind='unknown'
-        self.log_visits(now,settings,next((labels.get(str(k),{}).get('name') for k in inside if labels.get(str(k),{}).get('name')),None),kind)
+        def snapshot():
+            encoded,data=cv2.imencode('.jpg',resize_width(draw_zones(annotate(frame,boxes,ids,labels),settings.restricted_zones,RESTRICTED_COLOR),960),[cv2.IMWRITE_JPEG_QUALITY,80])
+            return data.tobytes() if encoded else None
+        self.log_visits(now,settings,next((labels.get(str(k),{}).get('name') for k in inside if labels.get(str(k),{}).get('name')),None),kind,snapshot)
         if started and settings.restricted_pause_with_family and any(
                 label.get('person_id') and not label.get('monitored') and label['person_id']!=FATHER for label in labels.values()):
             return   # Family is with him: the visit is still counted, but nobody needs a warning.
@@ -552,7 +576,7 @@ class CameraWorker:
                     if analysis_active and current.fall_detection_enabled:
                         preview=draw_zones(preview,current.fall_zones)
                     if analysis_active and current.restricted_enabled:
-                        preview=draw_zones(preview,current.restricted_zones,RESTRICTED_COLOR)
+                        preview=draw_zones(draw_zones(preview,current.restricted_floor,FLOOR_COLOR),current.restricted_zones,RESTRICTED_COLOR)
                     encoded,jpeg=cv2.imencode('.jpg',preview,[cv2.IMWRITE_JPEG_QUALITY,78])
                     if encoded:
                         with self.lock:

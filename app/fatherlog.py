@@ -1,6 +1,7 @@
 """Follow the monitored people through the day: how many times they showed up and how many times they went to each restricted area."""
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from .db import TZ
 
@@ -21,12 +22,55 @@ VISITS = f'''SELECT v.id,v.started,v.camera_id,v.area,v.verdict,
 
 
 class FatherLog:
-    def __init__(self, db):
+    def __init__(self, db, photos=None):
         self.db = db
+        self.photos = Path(photos) if photos else None   # Folder of the pictures taken when a visit started.
+        if self.photos:
+            self.photos.mkdir(parents=True, exist_ok=True)
 
-    def record_visit(self, camera_id, now, area='', person=None, kind='father'):
-        """A visit to a restricted area (the fridge, a cupboard) started; `kind` is who the camera thought it was (father, family, unknown)."""
-        self.db.execute('INSERT INTO restricted_visits(camera_id,started,person,area,kind) VALUES(?,?,?,?,?)', (camera_id, now, person, area or 'Área restrita', kind))
+    def record_visit(self, camera_id, now, area='', person=None, kind='father', make_jpeg=None):
+        """A visit to a restricted area (the fridge, a cupboard) started; `kind` is who the camera thought it was (father, family, unknown).
+
+        `make_jpeg` builds a picture of the moment; returns the visit's id.
+        """
+        visit = self.db.execute('INSERT INTO restricted_visits(camera_id,started,person,area,kind) VALUES(?,?,?,?,?)', (camera_id, now, person, area or 'Área restrita', kind))
+        if make_jpeg and self.photos:
+            jpeg = make_jpeg()
+            if jpeg:
+                (self.photos / f'{visit}.jpg').write_bytes(jpeg)
+        return visit
+
+    def set_seconds(self, visit_id, seconds):
+        self.db.execute('UPDATE restricted_visits SET seconds=? WHERE id=?', (round(seconds, 1), visit_id))
+
+    def photo_path(self, visit_id):
+        path = self.photos / f'{int(visit_id)}.jpg' if self.photos else None
+        return path if path and path.is_file() else None
+
+    def cleanup(self, days=21, now=None):
+        """Pictures of old visits go away; the visits stay in the report."""
+        if not self.photos:
+            return
+        cutoff = (now or time.time()) - days * 86400
+        for row in self.db.rows('SELECT id FROM restricted_visits WHERE started<?', (cutoff,)):
+            (self.photos / f"{row['id']}.jpg").unlink(missing_ok=True)
+
+    def calibration(self, current_min=3.0, now=None):
+        """From the answers given in the triage: the minimum stay that best separates the father's visits from the others'."""
+        rows = self.db.rows("SELECT verdict,seconds FROM restricted_visits WHERE verdict IS NOT NULL AND seconds IS NOT NULL AND started>?", ((now or time.time()) - 30 * 86400,))
+        father = sorted(r['seconds'] for r in rows if r['verdict'] == 'father')
+        other = sorted(r['seconds'] for r in rows if r['verdict'] == 'other')
+        result = {'father': len(father), 'other': len(other), 'current': current_min, 'suggested': None}
+        if len(father) < 5 or len(other) < 5:
+            return result
+        best = None
+        for step in range(int(current_min * 2), 41):   # From the current value to 20 s, in half-seconds.
+            limit = step / 2
+            score = sum(1 for s in other if s < limit) / len(other) + sum(1 for s in father if s >= limit) / len(father)
+            if best is None or score > best[0] + 1e-9:
+                best = (score, limit, sum(1 for s in other if s < limit) / len(other), sum(1 for s in father if s >= limit) / len(father))
+        result['suggested'] = {'seconds': best[1], 'others_removed': round(best[2], 2), 'father_kept': round(best[3], 2)}
+        return result
 
     def midnight(self, now, days_back=0):
         day = datetime.fromtimestamp(now, TZ).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days_back)
@@ -76,7 +120,9 @@ class FatherLog:
         return rows
 
     def picture(self, visit):
-        """A photo of the record the visit belongs to: the one taken closest to the visit, or the video's cover."""
+        """The picture taken when the visit started; for older ones, a photo of the record: the one closest to the visit, or the video's cover."""
+        if self.photo_path(visit['id']):
+            return f"visit-{visit['id']}"
         if visit['event_id'] is None:
             return None
         photos = self.db.rows('SELECT id,created FROM event_photos WHERE event_id=?', (visit['event_id'],))

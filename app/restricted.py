@@ -39,6 +39,12 @@ class RestrictedWatch:
         self.watched.clear()
         self.stay.clear()
 
+    @staticmethod
+    def feet_on(box, floor, width, height):
+        """True when the bottom-center of the person's box (the feet) is on one of the marked floor strips."""
+        x, y = (box[0] + box[2]) / 2 / width, box[3] / height
+        return any(strip[0] <= x <= strip[2] and strip[1] <= y <= strip[3] for strip in floor)
+
     def hands_in(self, points, zone, width, height):
         """True when a wrist the pose model is sure about lies in the area."""
         for index in WRISTS:
@@ -59,11 +65,12 @@ class RestrictedWatch:
             state['since'], state['anchor'] = now, center   # Walking through: the count starts over.
         return now - state['since'] >= min_seconds
 
-    def update(self, boxes, ids, labels, frame_size, zones, who, now=None, min_seconds=0, still=False, keypoints=None):
+    def update(self, boxes, ids, labels, frame_size, zones, who, now=None, min_seconds=0, still=False, keypoints=None, floor=()):
         """Return the track ids of watched people inside a restricted area.
 
         With `now` and `min_seconds` (and/or `still`) someone just walking past is not counted; with `keypoints`
-        (pose model) the hands must be in the area instead of a share of the body.
+        (pose model) the hands must be in the area instead of a share of the body; with `floor` strips the feet must also
+        be on one of them (someone far behind the fridge in the picture is not in front of it).
         """
         visible = {key for key in ids if key is not None}
         for key in self.identities.keys() - visible:
@@ -85,7 +92,7 @@ class RestrictedWatch:
                 hit = [index for index, zone in enumerate(zones) if self.hands_in(points, zone, width, height)]
             else:
                 hit = [index for index, zone in enumerate(zones) if overlap(box, zone, width, height) >= OVERLAP]
-            if not hit:
+            if not hit or (floor and not self.feet_on(box, floor, width, height)):
                 continue
             touched.add(key)
             if timed and not self.stayed(key, box, now, min_seconds, still):

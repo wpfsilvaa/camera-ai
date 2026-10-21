@@ -156,6 +156,8 @@ class Database:
             visit_columns = {r['name'] for r in db.execute('PRAGMA table_info(restricted_visits)')}
             if 'kind' not in visit_columns:
                 db.execute("ALTER TABLE restricted_visits ADD COLUMN kind TEXT NOT NULL DEFAULT ''")   # father / family / unknown, as seen when it happened.
+            if 'seconds' not in visit_columns:
+                db.execute('ALTER TABLE restricted_visits ADD COLUMN seconds REAL')   # How long the visit lasted.
             if 'verdict' not in visit_columns:
                 db.execute('ALTER TABLE restricted_visits ADD COLUMN verdict TEXT')   # What a person said afterwards: father / other.
             if 'area' not in {r['name'] for r in db.execute('PRAGMA table_info(restricted_visits)')}:

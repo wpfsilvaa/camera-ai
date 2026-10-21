@@ -95,8 +95,10 @@ reminders = Reminders(db)
 photos = Photos(db)
 person_messages = PersonMessages(db)
 journal = Journal(db)
-father_log = FatherLog(db)
+father_log = FatherLog(db, DATA / 'visits')
 cameras.visit_handler = father_log.record_visit
+cameras.visit_time_handler = father_log.set_seconds
+jobs.extra_cleanups.append(father_log.cleanup)
 push.sightings_today = father_log.count_today
 avatars = Avatars()
 weather = Weather(config)
@@ -442,6 +444,20 @@ def father_visits():
 def father_visit_verdict(visit_id: int, body: VisitVerdict):
     call_service(father_log.decide, visit_id, body.father)
     return {'ok': True}
+
+
+@app.get('/api/father/calibration')
+def father_calibration():
+    return father_log.calibration(config.get().restricted_min_seconds)
+
+
+@app.get('/visit-media/{filename}')
+def visit_media(filename: str):
+    match = re.fullmatch(r'visit-(\d{1,12})\.jpg', filename)
+    path = father_log.photo_path(match[1]) if match else None
+    if path is None:
+        raise HTTPException(404)
+    return FileResponse(path, media_type='image/jpeg')
 
 
 @app.get('/api/father/today')

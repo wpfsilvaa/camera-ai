@@ -51,6 +51,7 @@ class Jobs:
     def __init__(self, db, config, recognition=None, alerts=None, auth=None, learning=None, backups=None, notebook=None):
         self.db, self.config = db, config
         self.recognition, self.alerts, self.auth, self.learning, self.backups = recognition, alerts, auth, learning, backups
+        self.extra_cleanups = []   # Other parts of the application that tidy their own files hourly.
         self.notebook = notebook
         self.stop_event = threading.Event()
         self.threads = []
@@ -104,6 +105,8 @@ class Jobs:
             self.recognition.cleanup(settings.retention_days)
         if self.alerts:
             self.alerts.cleanup()
+        for extra in self.extra_cleanups:
+            extra()
         if self.auth:
             self.auth.prune_sessions()
 

@@ -94,5 +94,30 @@ class FatherLogTests(unittest.TestCase):
         self.assertEqual(self.log.summary(NOON)['today']['areas'], {'Geladeira': [NOON - 550]})
 
 
+    def test_snapshot_is_kept_and_served_for_the_triage(self):
+        folder = Path(self.tmp.name) / 'visits'
+        log = FatherLog(self.db, folder)
+        visit = log.record_visit('main', NOON - 100, 'Geladeira', None, 'unknown', lambda: b'jpg')
+        log.set_seconds(visit, 7.26)
+        self.assertEqual((folder / f'{visit}.jpg').read_bytes(), b'jpg')
+        pending = log.pending(NOON)
+        self.assertEqual((pending[0]['photo'], self.db.rows('SELECT seconds FROM restricted_visits')[0]['seconds']), (f'visit-{visit}', 7.3))
+        log.cleanup(days=1, now=NOON + 3 * 86400)
+        self.assertIsNone(log.photo_path(visit))
+
+    def test_calibration_suggests_the_stay_that_separates_the_answers(self):
+        for seconds, father in [(4, 0), (5, 0), (5, 0), (6, 0), (6, 0), (12, 1), (14, 1), (15, 1), (18, 1), (20, 1)]:
+            visit = self.log.record_visit('main', NOON - 100, 'Geladeira', None, 'unknown')
+            self.log.set_seconds(visit, seconds)
+            self.log.decide(visit, bool(father))
+        result = self.log.calibration(3, NOON)
+        self.assertEqual((result['father'], result['other']), (5, 5))
+        self.assertTrue(6 < result['suggested']['seconds'] <= 12)
+        self.assertEqual((result['suggested']['others_removed'], result['suggested']['father_kept']), (1.0, 1.0))
+
+    def test_calibration_waits_for_enough_answers(self):
+        self.assertIsNone(self.log.calibration(3, NOON)['suggested'])
+
+
 if __name__ == '__main__':
     unittest.main()

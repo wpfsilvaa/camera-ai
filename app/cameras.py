@@ -15,6 +15,7 @@ class CameraManager:
         self.presence_handler = None  # Receives each new presence record from every camera.
         self.restricted_handler = None  # Receives each visit to a restricted area (restricted mode).
         self.visit_handler = None  # Receives (camera id, time, name) for every visit to a restricted area.
+        self.visit_time_handler = None  # Receives (visit id, seconds) as a visit to a restricted area goes on.
         self.reminder_handler = None  # Receives (camera id, reminder text) when the father goes into a restricted area.
         self.street_handler = None  # Receives (camera id, name, a stranger is in view, time, jpeg maker) from guarded cameras.
         self.workers = {}
@@ -27,6 +28,7 @@ class CameraManager:
         worker.on_restricted = lambda *args: self.restricted_handler and self.restricted_handler(*args)
         worker.on_visit = lambda *args: self.visit_handler and self.visit_handler(*args)
         worker.on_street = lambda *args: self.street_handler and self.street_handler(*args)
+        worker.on_visit_time = lambda *args: self.visit_time_handler and self.visit_time_handler(*args)
         worker.on_reminder = lambda *args: self.reminder_handler and self.reminder_handler(*args)
         self.workers[camera_id] = worker
         return worker

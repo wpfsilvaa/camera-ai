@@ -37,12 +37,26 @@ setInterval(() => { if (activePage === 'overview' && !document.hidden) loadFathe
 
 // Triage of the visits nobody could place: one tap says whether it was the father.
 async function loadVisitReview() {
-  const items = await api('/api/father/visits');
+  const [items, calibration] = await Promise.all([api('/api/father/visits'), api('/api/father/calibration')]);
+  const hint = calibration.suggested
+    ? `Com ${calibration.father + calibration.other} respostas suas, o tempo mínimo que melhor separa é ${String(calibration.suggested.seconds).replace('.', ',')} s (hoje: ${String(calibration.current).replace('.', ',')} s): tira ${Math.round(calibration.suggested.others_removed * 100)}% das idas “Não foi” e mantém ${Math.round(calibration.suggested.father_kept * 100)}% das dele. <button type="button" class="text-button" data-apply-min="${calibration.suggested.seconds}">Aplicar</button>`
+    : `Responda pelo menos 5 “Foi ele” e 5 “Não foi” para o sistema sugerir o tempo mínimo ideal (agora: ${calibration.father} e ${calibration.other}).`;
+  $('#visits-calibration').innerHTML = hint;
   $('#visits-empty').classList.toggle('hidden', items.length > 0);
-  $('#visits-list').innerHTML = items.map(item => `<article class="example-card" data-visit="${item.id}">${item.photo ? `<img class="example-photo" style="height:150px" src="/media/${item.photo}.jpg" alt="Momento da ida" loading="lazy">` : '<div class="muted small">Sem foto deste momento.</div>'}<strong>${escapeHTML(item.area)}</strong><small>${day(item.started)} às ${time(item.started)}</small><div class="label-buttons"><button class="button primary compact" data-verdict="father">Foi ele</button><button class="button secondary compact" data-verdict="other">Não foi</button></div></article>`).join('');
+  $('#visits-list').innerHTML = items.map(item => `<article class="example-card" data-visit="${item.id}">${item.photo ? `<img class="example-photo" style="height:150px" src="${item.photo.startsWith('visit-') ? '/visit-media/' : '/media/'}${item.photo}.jpg" alt="Momento da ida" loading="lazy">` : '<div class="muted small">Sem foto deste momento.</div>'}<strong>${escapeHTML(item.area)}</strong><small>${day(item.started)} às ${time(item.started)}</small><div class="label-buttons"><button class="button primary compact" data-verdict="father">Foi ele</button><button class="button secondary compact" data-verdict="other">Não foi</button></div></article>`).join('');
 }
 document.addEventListener('click', event => {
   if (event.target.closest('#review-visits')) { $('#visits-dialog').showModal(); loadVisitReview().catch(error => toast(error.message, true)); return; }
+  const apply = event.target.closest('[data-apply-min]');
+  if (apply) {
+    action(apply, async () => {
+      await api(cameraPath('/api/settings'), {method: 'PUT', body: JSON.stringify({...settings, restricted_min_seconds: Number(apply.dataset.applyMin)})});
+      settings.restricted_min_seconds = Number(apply.dataset.applyMin);
+      toast('Tempo mínimo atualizado.');
+      $('#visits-calibration').textContent = 'Aplicado. Confira nos próximos dias.';
+    });
+    return;
+  }
   const button = event.target.closest('#visits-list [data-verdict]');
   if (!button) return;
   const card = button.closest('[data-visit]');
