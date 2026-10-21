@@ -20,6 +20,7 @@ INTRUDER_BELOW = .20
 BLURRY_SHARE = .2         # Sharpness under this share of the person's median ...
 BLURRY_FLOOR = 25         # ... or under this value.
 MAX_LISTED = 120
+PRESELECT_SHARE = .30     # At most this share of a person's gallery is pre-marked for removal in one pass (the worst first); the rest is only listed.
 PROFILE_PERSON = .25      # A person with more than this share of clear profiles is mostly seen from the side: their profiles are kept.
 
 SEVERITY = {'swapped': 'high', 'intruder': 'medium', 'unclear': 'medium', 'profile': 'low', 'blurry': 'low'}
@@ -123,8 +124,15 @@ class GalleryCleanup:
                               'own': round(float(own[i]), 2), 'other': round(float(best_other), 2), 'quality': round(float(quality[i]))})
         found.sort(key=lambda item: (['high', 'medium', 'low'].index(item['severity']), item['own']))
         found = found[:MAX_LISTED]
-        return {'items': found, 'total': len(rows), 'validation': self.validate(rows, vectors, owners, [item['sample_id'] for item in found if item['severity'] != 'low'], settings),
-                'preselected': [item['sample_id'] for item in found if item['severity'] != 'low']}
+        per_person = {person: int((owners == person).sum()) for person in people}
+        taken, preselected = {}, []
+        for item in found:   # Already ordered worst first.
+            if item['severity'] == 'low':
+                continue
+            if taken.get(item['person_id'], 0) < int(PRESELECT_SHARE * per_person[item['person_id']]):
+                taken[item['person_id']] = taken.get(item['person_id'], 0) + 1
+                preselected.append(item['sample_id'])
+        return {'items': found, 'total': len(rows), 'validation': self.validate(rows, vectors, owners, preselected, settings), 'preselected': preselected}
 
     def validate(self, rows, vectors, owners, removed, settings):
         """Accuracy of the gallery on the faces that stay: with the proposed ones still in it, and without them."""
