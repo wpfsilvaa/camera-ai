@@ -90,11 +90,12 @@ def evaluate(data, now=None):
         memory = 100 * resources['mem_used'] / resources['mem_total']
         if memory > 80:
             problems.append(f'memória {memory:.0f}%'); level = 'error' if memory > 92 else max(level, 'warn', key=RANK.get)
-        if resources['cpu'] > 85:
-            problems.append(f"CPU {resources['cpu']:.0f}%"); level = max(level, 'warn', key=RANK.get)
+        cpu = resources.get('cpu')   # The very first reading after a start has no CPU figure yet.
+        if cpu is not None and cpu > 85:
+            problems.append(f'CPU {cpu:.0f}%'); level = max(level, 'warn', key=RANK.get)
         if limits and level == 'ok':
             level = 'warn'
-        text = ' · '.join(problems) if problems else f"CPU {resources['cpu']:.0f}% · memória {memory:.0f}%" + (f" · {resources['temp']:.0f} °C" if resources.get('temp') is not None else '')
+        text = ' · '.join(problems) if problems else (f'CPU {cpu:.0f}% · ' if cpu is not None else '') + f'memória {memory:.0f}%' + (f" · {resources['temp']:.0f} °C" if resources.get('temp') is not None else '')
         if limits:
             joined = '; '.join(limits)
             text += f' · {joined[0].upper()}{joined[1:]}'

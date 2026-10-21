@@ -54,6 +54,10 @@ class HealthTests(unittest.TestCase):
         self.assertIn('1200 MHz', items['resources']['detail'])
         self.assertIn('powerprofilesctl', items['resources']['hint'])
 
+    def test_first_reading_after_a_start_has_no_cpu_figure(self):
+        report = evaluate(base(resources={'mem_used': 2, 'mem_total': 8, 'temp': 50}), now=1000 + 3600)
+        self.assertEqual({i['key']: i['level'] for i in report['items']}['resources'], 'ok')
+
     def test_a_fast_processor_is_not_blamed(self):
         free = {'cpu': 30, 'mem_used': 2, 'mem_total': 8, 'temp': 50, 'power_profile': 'balanced', 'cpu_power': {'cur': 2300, 'max': 2600, 'cap': 2600, 'governor': 'performance'}}
         report = evaluate(base(resources=free), now=1000 + 3600)
