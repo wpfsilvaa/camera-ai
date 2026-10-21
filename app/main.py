@@ -42,8 +42,9 @@ from .push import Push
 from .recognition import Recognition
 from .storage import Storage
 from .street import StreetMode
+from .cleanup import GalleryCleanup
 from .viewers import Viewers
-from .routes import alerts as alert_routes, auth as auth_routes, backup as backup_routes, intercom as intercom_routes, people as people_routes, photos as photos_routes, push as push_routes, storage as storage_routes
+from .routes import cleanup as cleanup_routes, alerts as alert_routes, auth as auth_routes, backup as backup_routes, intercom as intercom_routes, people as people_routes, photos as photos_routes, push as push_routes, storage as storage_routes
 from .services import call_service
 
 db = Database()
@@ -54,6 +55,7 @@ offline = OfflineAnalysis(db)
 auth = Auth(db)
 alerts = Alerts(db, config, cameras)
 learning = LearningSuggestions(db, recognition, config)
+gallery_cleanup = GalleryCleanup(db, recognition, config)
 backups = Backups(db, config, alerts)
 push = Push(db)
 storage = Storage(db)
@@ -101,6 +103,7 @@ cameras.visit_handler = father_log.record_visit
 cameras.visit_time_handler = father_log.set_seconds
 jobs.busy = lambda: any(c.get('people') for c in cameras.snapshots())
 jobs.extra_cleanups.append(father_log.cleanup)
+jobs.extra_cleanups.append(gallery_cleanup.purge)
 push.sightings_today = father_log.count_today
 avatars = Avatars()
 weather = Weather(config)
@@ -291,7 +294,7 @@ async def protect(request: Request, call_next):
             return JSONResponse({'detail': 'Entre novamente para continuar.'}, status_code=401)
         user = request.state.user
         if user and user['role'] != 'admin':
-            if request.method not in ('GET', 'HEAD', 'OPTIONS') and path not in FAMILY_WRITES and not path.startswith(('/api/reminders', '/api/photos', '/api/messages', '/api/journal')) or path.startswith(('/api/users', '/api/backup', '/api/learning', '/api/storage')):
+            if request.method not in ('GET', 'HEAD', 'OPTIONS') and path not in FAMILY_WRITES and not path.startswith(('/api/reminders', '/api/photos', '/api/messages', '/api/journal')) or path.startswith(('/api/users', '/api/backup', '/api/learning', '/api/cleanup', '/api/storage')):
                 return JSONResponse({'detail': 'Seu acesso é somente para visualização. Peça a um administrador.'}, status_code=403)
     # Prevent other sites from changing local settings through the browser.
     if request.method not in ('GET', 'HEAD', 'OPTIONS'):
@@ -824,6 +827,7 @@ def author_renamed(user_id, name):
 
 app.include_router(auth_routes.build(auth, on_profile=author_renamed))
 app.include_router(people_routes.build(recognition, learning, on_forget=avatars.delete))
+app.include_router(cleanup_routes.build(gallery_cleanup))
 app.include_router(alert_routes.build(alerts, config))
 app.include_router(backup_routes.build(backups))
 app.include_router(intercom_routes.build(config))

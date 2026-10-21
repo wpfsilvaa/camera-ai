@@ -91,6 +91,7 @@
         <div class="learning-guide"><div><span class="step-number">1</span><strong>Cadastre a pessoa</strong><p>Seu pai já tem um perfil. Adicione outras pessoas que aparecem na casa.</p></div><div><span class="step-number">2</span><strong>Cadastre rostos</strong><p>Use “Cadastrar foto do rosto” ou confirme um rosto capturado no histórico.</p></div><div><span class="step-number">3</span><strong>Receba sugestões</strong><p>Cadastre uma foto nítida do rosto. O nome aparece após a comparação concordar em vários quadros.</p></div></div>
         <div id="recognition-status" class="inline-note">Preparando reconhecimento facial…</div>
         <form id="person-form" class="person-create"><label for="person-name">Cadastrar pessoa</label><input id="person-name" name="name" maxlength="60" placeholder="Ex.: Maria" required><button class="button primary" type="submit">Adicionar pessoa +</button></form>
+        <section id="cleanup-panel" class="panel hidden"><div class="panel-heading"><div><h2>Limpeza inteligente das fotos</h2><p class="small muted">Procura fotos ruins entre as ensinadas: rosto de lado ou coberto, borradas, pouco parecidas com a pessoa ou parecidas com outra pessoa. Só roda quando você pedir, e nada é apagado na hora: vai para a quarentena por 30 dias.</p></div><button type="button" class="button primary compact" id="cleanup-run">Analisar fotos</button></div><div class="panel-body"><p id="cleanup-quarantine-note" class="small muted"></p><button type="button" class="text-button hidden" id="cleanup-open-quarantine">Ver a quarentena</button></div></section>
         <section id="learning-panel" class="panel learning-panel hidden"><div class="panel-heading"><div><h2>Sugestões para aprender</h2><p class="small muted">Rostos nítidos que o sistema reconheceu com alta semelhança. Só entram no aprendizado se você aprovar.</p></div><span id="learning-count" class="pill amber"></span></div><div id="learning-list" class="learning-list"></div></section>
         <div id="people-profiles" class="profiles-grid"></div>
         <p class="footnote">Só imagens confirmadas ou aprovadas por você entram no aprendizado. Rostos pequenos, de perfil ou com pouca luz podem permanecer desconhecidos. Os exemplos confirmados ficam salvos até você esquecê-los ou excluir o perfil; imagens não confirmadas seguem o prazo das gravações.</p>
@@ -197,6 +198,8 @@
     <div id="examples-grid" class="examples-grid"></div>
   </dialog>
   <dialog id="visits-dialog" class="examples-dialog" aria-labelledby="visits-title"><div class="dialog-heading"><h2 id="visits-title">Quem foi à geladeira?</h2><button type="button" class="icon-button close-dialog" aria-label="Fechar">×</button></div><p class="small muted">Confirme as idas que o sistema não soube identificar. “Foi ele” entra na contagem do pai; “Não foi” vai para a família.</p><p id="visits-calibration" class="small"></p><div id="visits-list" class="examples-grid"></div><p id="visits-empty" class="muted hidden">Tudo identificado por enquanto. 🎉</p></dialog>
+  <dialog id="cleanup-dialog" class="examples-dialog" aria-labelledby="cleanup-title"><div class="dialog-heading"><h2 id="cleanup-title">Limpeza inteligente</h2><button type="button" class="icon-button close-dialog" aria-label="Fechar">×</button></div><p id="cleanup-summary" class="small"></p><div id="cleanup-list" class="examples-grid"></div><div class="face-actions"><button type="button" class="button secondary compact" id="cleanup-select-high">Marcar só as graves</button><button type="button" class="button primary" id="cleanup-apply">Mover marcadas para a quarentena</button></div></dialog>
+  <dialog id="quarantine-dialog" class="examples-dialog" aria-labelledby="quarantine-title"><div class="dialog-heading"><h2 id="quarantine-title">Quarentena</h2><button type="button" class="icon-button close-dialog" aria-label="Fechar">×</button></div><p class="small muted">Estas fotos não são usadas no reconhecimento. Se alguma foi retirada por engano, restaure. Depois de 30 dias elas são apagadas de vez.</p><div id="quarantine-list" class="examples-grid"></div><p id="quarantine-empty" class="muted hidden">A quarentena está vazia.</p></dialog>
   <dialog id="example-photo-dialog" aria-labelledby="example-photo-title">
     <div class="dialog-heading"><h2 id="example-photo-title">Foto do exemplo</h2><button id="example-photo-close" class="icon-button" aria-label="Fechar foto">×</button></div>
     <img id="example-photo" alt="Rosto usado como exemplo" class="example-photo">
@@ -210,6 +213,7 @@
   <script src="/static/call.js" defer></script>
   <script src="/static/fall-zones.js" defer></script>
   <script src="/static/learning.js" defer></script>
+  <script src="/static/cleanup.js" defer></script>
   <script src="/static/backup.js" defer></script>
   <script src="/static/push.js" defer></script>
   <script src="/static/storage.js" defer></script>

@@ -219,3 +219,84 @@ class LearningTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SmartCleanupTests(unittest.TestCase):
+    def setUp(self):
+        from app import cleanup
+        self.cleanup_module = cleanup
+        self.tmp = tempfile.TemporaryDirectory()
+        path = Path(self.tmp.name)
+        self.db = Database(path / 'h.sqlite3')
+        self.config = Config(path / 's.json')
+        self.config.save(Settings())
+        self.recognition = Recognition(self.db, path / 'people')
+        self.cleaner = cleanup.GalleryCleanup(self.db, self.recognition, self.config)
+        self.original = cleanup.partial_view
+        cleanup.partial_view = lambda path: path.name in self.partial
+        self.partial = set()
+        self.rng = np.random.default_rng(7)
+        self.people = {'father': self.rng.normal(size=16), 'ana': self.rng.normal(size=16)}
+        self.ids = {'father': [], 'ana': []}
+
+    def tearDown(self):
+        self.cleanup_module.partial_view = self.original
+        self.tmp.cleanup()
+
+    def teach(self, person, vector=None, quality=100):
+        vector = self.people[person] + self.rng.normal(scale=.25, size=16) if vector is None else vector
+        event = self.db.start_event(100, 1)
+        self.db.end_event(event, 110, 'absence')
+        track = self.db.execute("INSERT INTO person_tracks(event_id,track_key,started,last_seen,person_id,reviewed) VALUES(?,?,?,?,?,1)", (event, str(len(self.ids[person])), 100, 110, person if person == 'father' else None))
+        sample = os.urandom(16).hex()
+        self.db.execute('INSERT INTO person_samples(id,track_id,created,feature,model,quality,person_id) VALUES(?,?,?,?,?,?,?)',
+                        (sample, track, 100, normalized(vector).tobytes(), 'sface-test', quality, person if person != 'ana' else self.ana))
+        self.ids[person].append(sample)
+        return sample
+
+    def gallery(self, count=30):
+        self.ana = self.recognition.create_person('Ana')
+        for _ in range(count):
+            self.teach('father')
+            self.teach('ana')
+
+    def test_finds_swapped_blurry_and_partial_faces_and_checks_the_accuracy(self):
+        self.gallery()
+        swapped = self.teach('father', vector=self.people['ana'] + self.rng.normal(scale=.1, size=16))   # A face of Ana taught as the father.
+        blurry = self.teach('father', quality=5)
+        profile = self.teach('father')
+        self.partial.add(f'{profile}.jpg')
+        result = self.cleaner.analyze()
+        found = {item['sample_id']: item for item in result['items']}
+        self.assertIn('swapped', found[swapped]['reasons'])
+        self.assertEqual(found[swapped]['severity'], 'high')
+        self.assertIn('blurry', found[blurry]['reasons'])
+        self.assertIn('profile', found[profile]['reasons'])
+        self.assertNotIn(profile, [i['sample_id'] for i in result['items'] if i['severity'] == 'high'])
+        clean = [s for s in self.ids['ana'] if s in found]
+        self.assertLessEqual(len(clean), 3)   # Healthy faces are mostly left alone.
+        validation = result['validation']
+        self.assertTrue(validation['better_or_equal'])
+        self.assertGreaterEqual(validation['after']['right'], validation['before']['right'])
+
+    def test_quarantine_hides_from_recognition_and_can_be_restored_and_purged(self):
+        self.gallery()
+        swapped = self.teach('father', vector=self.people['ana'])
+        taught = lambda: self.db.rows('SELECT person_id FROM person_samples WHERE id=?', (swapped,))[0]['person_id']
+        self.assertEqual(self.cleaner.apply([swapped]), 1)
+        self.assertIsNone(taught())
+        self.assertEqual([q['sample_id'] for q in self.cleaner.quarantined()], [swapped])
+        self.recognition.cleanup(retention_days=0)   # The ordinary tidy-up must not delete it.
+        self.assertEqual(len(self.db.rows('SELECT id FROM person_samples WHERE id=?', (swapped,))), 1)
+        self.assertEqual(self.cleaner.restore([swapped]), 1)
+        self.assertEqual(taught(), 'father')
+        self.cleaner.apply([swapped])
+        self.cleaner.purge(now=time.time() + 31 * 86400)
+        self.assertEqual(self.db.rows('SELECT id FROM person_samples WHERE id=?', (swapped,)), [])
+
+    def test_never_leaves_a_person_with_too_few_references(self):
+        self.gallery(count=10)
+        with self.assertRaises(ValueError):
+            self.cleaner.apply(self.ids['father'][:5])
+        with self.assertRaises(ValueError):
+            self.cleaner.apply([])

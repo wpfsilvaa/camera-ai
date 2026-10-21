@@ -704,7 +704,8 @@ class Recognition:
     def cleanup(self, retention_days):
         with self.lock:
             rows=self.db.rows('''SELECT s.id FROM person_samples s JOIN person_tracks t ON t.id=s.track_id
-                JOIN events e ON e.id=t.event_id WHERE s.person_id IS NULL AND s.created<? AND e.ended IS NOT NULL AND e.analysis_state!='running' ''',(time.time()-retention_days*86400,))
+                JOIN events e ON e.id=t.event_id WHERE s.person_id IS NULL AND s.created<? AND e.ended IS NOT NULL AND e.analysis_state!='running'
+                AND s.id NOT IN (SELECT sample_id FROM gallery_quarantine) ''',(time.time()-retention_days*86400,))
             for row in rows:
                 (self.directory/f"{row['id']}.jpg").unlink(missing_ok=True)
                 self.db.execute('DELETE FROM person_samples WHERE id=?',(row['id'],))

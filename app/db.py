@@ -116,6 +116,11 @@ class Database:
                     id TEXT PRIMARY KEY, author TEXT NOT NULL, user_id TEXT, text TEXT NOT NULL, tag TEXT NOT NULL DEFAULT 'geral', created REAL NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS idx_journal_created ON journal(created);
+                -- Faces taken out of recognition by the smart clean-up; kept for a while so they can be restored.
+                CREATE TABLE IF NOT EXISTS gallery_quarantine (
+                    sample_id TEXT PRIMARY KEY REFERENCES person_samples(id) ON DELETE CASCADE,
+                    person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE, created REAL NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS face_enrollments (
                     id TEXT PRIMARY KEY, person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
                     created REAL NOT NULL, feature BLOB NOT NULL, model TEXT NOT NULL, quality REAL NOT NULL
