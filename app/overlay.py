@@ -51,6 +51,41 @@ def annotate(frame, boxes, ids, labels, lying=None):
     return output
 
 
+# COCO keypoints: 0 nose, 1-2 eyes, 3-4 ears, 5-6 shoulders, 7-8 elbows, 9-10 wrists, 11-12 hips, 13-14 knees, 15-16 ankles.
+SKELETON=((5,6),(5,7),(7,9),(6,8),(8,10),(5,11),(6,12),(11,12),(11,13),(13,15),(12,14),(14,16),(0,1),(0,2),(1,3),(2,4))
+JOINT_CONFIDENCE=.4
+
+
+def draw_skeleton(frame, people, scale=1.0):
+    """Limbs and joints of every person, plus an arrow from the nose showing which way the head is turned. `people`: keypoints (17 x 3) or None."""
+    output=frame.copy()
+    for points in people:
+        if points is None:
+            continue
+        def at(index):
+            x,y,confidence=points[index]
+            return (round(float(x)*scale),round(float(y)*scale)) if confidence>=JOINT_CONFIDENCE else None
+        for a,b in SKELETON:
+            start,end=at(a),at(b)
+            if start and end:
+                cv2.line(output,start,end,(60,200,255),2,cv2.LINE_AA)
+        for index in range(17):
+            joint=at(index)
+            if joint:
+                cv2.circle(output,joint,3,(40,40,230),-1,cv2.LINE_AA)
+        nose,left,right=at(0),at(3),at(4)
+        ears=[p for p in (left,right) if p]
+        if nose and ears:
+            # From the middle of the ears (or the one ear seen) through the nose: where the face points.
+            back=(sum(p[0] for p in ears)/len(ears),sum(p[1] for p in ears)/len(ears))
+            dx,dy=nose[0]-back[0],nose[1]-back[1]
+            length=(dx*dx+dy*dy)**.5
+            if length>2:
+                reach=max(24,length*1.6)/length
+                cv2.arrowedLine(output,nose,(round(nose[0]+dx*reach),round(nose[1]+dy*reach)),(0,230,255),3,cv2.LINE_AA,tipLength=.35)
+    return output
+
+
 def draw_zones(frame, zones, color=(190,160,90)):
     """Shade marked areas on the live preview: where lying down is expected, or restricted areas."""
     if not zones:

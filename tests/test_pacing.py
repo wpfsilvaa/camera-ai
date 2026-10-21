@@ -191,5 +191,20 @@ class TranscodeDeferralTests(unittest.TestCase):
         self.assertTrue(transcode_due(True, clip, 1000 + DEFER_SECONDS))
 
 
+class SkeletonTests(unittest.TestCase):
+    def test_draws_limbs_and_the_head_direction_without_touching_the_input(self):
+        import numpy as np
+        from app.overlay import draw_skeleton
+        frame = np.zeros((200, 200, 3), np.uint8)
+        points = np.zeros((17, 3), np.float32)
+        for index, (x, y) in {0: (100, 40), 3: (90, 40), 4: (95, 40), 5: (80, 70), 6: (120, 70), 9: (60, 110), 11: (85, 120), 12: (115, 120)}.items():
+            points[index] = (x, y, .9)
+        drawn = draw_skeleton(frame, [points, None], 1.0)
+        self.assertEqual(int(frame.sum()), 0)                  # The original is left alone.
+        self.assertGreater(int(drawn.sum()), 0)
+        self.assertGreater(int(drawn[40, 110:150].sum()), 0)    # The arrow runs on from the nose, away from the ears.
+        self.assertEqual(draw_skeleton(frame, [None]).shape, frame.shape)
+
+
 if __name__ == '__main__':
     unittest.main()

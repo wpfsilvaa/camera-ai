@@ -20,7 +20,7 @@ import cv2
 import numpy as np
 
 from .falls import FallDetector
-from .overlay import annotate, draw_zones
+from .overlay import annotate, draw_skeleton, draw_zones
 from .pacing import DetectionPacing, MotionGate, TouchThrottle
 from .presence import Presence
 from .restricted import FATHER, PhotoSchedule, RestrictedWatch
@@ -462,7 +462,7 @@ class CameraWorker:
                         want_cuda=settings.device!='cpu' and torch.cuda.is_available()
                         if settings.device=='cuda' and not want_cuda:
                             raise RuntimeError('CUDA solicitado, mas a GPU não está acessível. Verifique o driver ou selecione Auto.')
-                        pose=current.fall_detection_enabled or (current.restricted_enabled and current.restricted_hands)
+                        pose=current.fall_detection_enabled or current.show_skeleton or (current.restricted_enabled and current.restricted_hands)
                         weights,task,engine,detector_ready=detectors.resolve(current.detector_model,current.detector_engine,pose,settings.detection_size)
                         # ONNX/OpenVINO run on the CPU; only the PyTorch engine uses CUDA.
                         cuda=want_cuda and engine=='pytorch'
@@ -507,7 +507,7 @@ class CameraWorker:
                             device=device,quantize=16 if half else 32,max_det=20,verbose=False)[0]
                         boxes,ids=tracker.update(result.boxes,original,now)
                         detected_lying=self.check_falls(result,tracker,boxes,ids,original,now,current)
-                        self.pose_points=[p for p in self.pose_of(result,tracker)] if current.restricted_enabled and current.restricted_hands else None
+                        self.pose_points=self.pose_of(result,tracker) if pose else None
                         count=len(boxes)
                         inference_ms=round((time.perf_counter()-begin)*1000,1)
                         result=None
@@ -577,6 +577,8 @@ class CameraWorker:
                     if preview_due(self.watchers()>0,last_preview,now):
                         last_preview=now
                         preview=resize_width(annotated,current.preview_width)
+                        if analysis_active and current.show_skeleton and self.pose_points:
+                            preview=draw_skeleton(preview,self.pose_points,preview.shape[1]/max(1,original.shape[1]))
                         if analysis_active and current.fall_detection_enabled:
                             preview=draw_zones(preview,current.fall_zones)
                         if analysis_active and current.restricted_enabled:
