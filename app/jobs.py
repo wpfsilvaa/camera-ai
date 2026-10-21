@@ -92,7 +92,7 @@ class Jobs:
                 if self.learning and time.time() - self.learning.last_scan >= LEARNING_INTERVAL:
                     if self.recognition:
                         self.recognition.merge_fragments(time.time() - 3 * 86400)
-                        self.recognition.merge_by_face(time.time() - 3 * 86400, time.time() - 600)
+                        self.recognition.merge_by_face(time.time() - 30 * 86400, time.time() - 600)
                         self.recognition.prune_ghosts(time.time() - 30 * 86400, time.time() - 600)
                     self.learning.scan()
                 if self.backups and self.backups.due():
