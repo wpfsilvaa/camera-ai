@@ -42,6 +42,7 @@ from .push import Push
 from .recognition import Recognition
 from .storage import Storage
 from .street import StreetMode
+from . import health as health_report
 from .cleanup import GalleryCleanup
 from .viewers import Viewers
 from .routes import cleanup as cleanup_routes, alerts as alert_routes, auth as auth_routes, backup as backup_routes, intercom as intercom_routes, people as people_routes, photos as photos_routes, push as push_routes, storage as storage_routes
@@ -702,6 +703,30 @@ async def health():
     return JSONResponse({'ok': ok, 'whatsapp': whatsapp, 'disk_free_gb': free_gb,
                          'cameras': [{'id': c['id'], 'state': c['state'] if c['enabled'] else 'paused'} for c in snapshots]},
                         status_code=200 if ok else 503)
+
+
+STARTED_AT = time.time()
+
+
+@app.get('/api/health/report')
+async def system_health():
+    """Every component with its level and what to do; also feeds the little chip on the overview."""
+    settings = config.get()
+    now = time.time()
+    day = now - 86400
+    count = lambda sql, *args: db.rows(sql, args)[0]['n']
+    whatsapp = await gateway('GET', '/status')
+    snapshot = resources.monitor.snapshot(5)
+    data = {'cameras': cameras.snapshots(), 'whatsapp': whatsapp, 'whatsapp_enabled': settings.whatsapp_enabled, 'notebook': notebook.status(),
+            'disk_free_gb': round(shutil.disk_usage(DATA).free / 1024**3, 1), 'min_free_gb': settings.min_free_gb, 'resources': snapshot['now'],
+            'backup': backups.status(), 'backup_enabled': settings.backup_enabled, 'recognition': recognition.status(),
+            'failed_clips': count("SELECT COUNT(*) AS n FROM clips WHERE state='failed' AND started>?", day),
+            'processing_clips': count("SELECT COUNT(*) AS n FROM clips WHERE state='processing'"),
+            'failed_deliveries': count("SELECT COUNT(*) AS n FROM clip_deliveries d JOIN clips c ON c.id=d.clip_id WHERE d.delivery='failed' AND c.started>?", day),
+            'alerts': db.rows(f"SELECT id,kind,created,message FROM alerts WHERE kind IN ({','.join('?' * len(health_report.SYSTEM_ALERTS))}) AND created>? ORDER BY created DESC LIMIT 8",
+                              (*health_report.SYSTEM_ALERTS, day)),
+            'uptime': round(now - STARTED_AT)}
+    return health_report.evaluate(data, now)
 
 
 @app.get('/api/events')

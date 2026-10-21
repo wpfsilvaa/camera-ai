@@ -114,6 +114,29 @@ class LearningTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.recognition.split_track(track, [])
 
+    def test_tracks_with_the_same_face_are_joined_even_when_two_people_were_around(self):
+        event = self.event()
+        self.db.execute('UPDATE events SET max_people=2 WHERE id=?', (event,))
+        times = lambda track, a, b: self.db.execute('UPDATE person_tracks SET started=?,last_seen=? WHERE id=?', (self.now - a, self.now - b, track))
+        one, (s1,) = self.track(event, suggested=None, faces=[((1, .1, 0), 80)])
+        other, _ = self.track(event, suggested=None, faces=[((0, 1, .1), 80)])               # Someone else, on screen at the same time.
+        again, (s2,) = self.track(event, suggested=None, faces=[((1, .12, 0), 80)])          # The first person under a new number.
+        times(one, 60, 50); times(other, 58, 35); times(again, 45, 32)
+        self.assertEqual(self.recognition.merge_by_face(self.now - 3600, self.now), 1)
+        left = {t['id'] for t in self.db.rows('SELECT id FROM person_tracks WHERE event_id=?', (event,))}
+        self.assertEqual(len(left), 2)
+        self.assertIn(other, left)                                                           # The other person is untouched.
+        merged = next(iter(left - {other}))
+        self.assertEqual({r['id'] for r in self.db.rows('SELECT id FROM person_samples WHERE track_id=?', (merged,))}, {s1, s2})
+
+    def test_tracks_on_screen_together_are_never_joined_by_face(self):
+        event = self.event()
+        a, _ = self.track(event, suggested=None, faces=[((1, .1, 0), 80)])
+        b, _ = self.track(event, suggested=None, faces=[((1, .11, 0), 80)])
+        for track in (a, b):
+            self.db.execute('UPDATE person_tracks SET started=?,last_seen=? WHERE id=?', (self.now - 60, self.now - 40, track))
+        self.assertEqual(self.recognition.merge_by_face(self.now - 3600, self.now), 0)
+
     def test_faceless_ghost_tracks_are_pruned_but_one_stays_when_nothing_else_is(self):
         event = self.event()
         real, _ = self.track(event, suggested=None, faces=[((.97, .2, .1), 90)])

@@ -288,3 +288,18 @@ dialog .dialog-heading{position:sticky;top:0;z-index:5;background:var(--surface)
 .ghost-tracks summary{cursor:pointer}
 .ghost-tracks ul{margin:8px 0 0;padding-left:18px}
 .ghost-actions{margin-top:8px}
+
+/* Health: a coloured dot per component, a list on its own page, a chip on the overview only when something needs a look. */
+.health-dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#7a8a80;flex-shrink:0}
+.health-dot[data-level=ok]{background:#3f9a62}.health-dot[data-level=warn]{background:#d9a021}.health-dot[data-level=error]{background:#cc4b37}.health-dot[data-level=off]{background:#9aa5a0}
+.nav-link .health-dot{margin-left:auto}
+.health-chip{display:flex;align-items:center;gap:10px;margin-bottom:16px;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface);font-size:13px;color:var(--ink)}
+.health-chip[data-level=warn]{background:var(--amber-bg);color:var(--amber-ink)}
+.health-chip[data-level=error]{background:var(--red-bg);color:var(--red-ink)}
+.health-list{display:grid;gap:10px;margin-bottom:22px}
+.health-item{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.health-item .health-dot{margin-top:6px}
+.health-item p{margin:4px 0 0}
+.health-item[data-level=error]{border-color:var(--red-ink)}
+.health-item[data-level=warn]{border-color:var(--amber)}
+@media(max-width:960px){.nav-link .health-dot{position:absolute;top:8px;right:14px;margin:0}}

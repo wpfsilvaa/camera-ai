@@ -26,6 +26,7 @@
       <a href="#history" class="nav-link" data-page="history"><span><svg class="ic" aria-hidden="true"><use href="#ic-clock"/></svg></span>Histórico <span class="nav-count" id="nav-count">0</span></a>
       <a href="#people" class="nav-link" data-page="people"><span><svg class="ic" aria-hidden="true"><use href="#ic-users"/></svg></span>Pessoas</a>
       <a href="#messages" class="nav-link" data-page="messages"><span><svg class="ic" aria-hidden="true"><use href="#ic-mail"/></svg></span>Recados</a>
+      <a href="#health" class="nav-link" data-page="health"><span><svg class="ic" aria-hidden="true"><use href="#ic-heart"/></svg></span>Saúde <span class="health-dot" id="health-dot" aria-hidden="true"></span></a>
       <a href="#settings" class="nav-link admin-only" data-page="settings"><span><svg class="ic" aria-hidden="true"><use href="#ic-sliders"/></svg></span>Configurações</a>
       <a href="#users" class="nav-link admin-only" data-page="users"><span><svg class="ic" aria-hidden="true"><use href="#ic-user"/></svg></span>Usuários</a>
     </nav>
@@ -41,6 +42,7 @@
       <section id="page-overview" class="page">
         <div class="page-heading"><div><div class="eyebrow">CADA MOMENTO, MAIS PERTO</div><h1>Um olhar sobre a rotina<span class="green-period">.</span></h1><p>Acompanhe a presença do seu pai e reveja os registros da casa.</p></div><button class="button secondary" data-go="history">Ver histórico <span><svg class="ic" aria-hidden="true"><use href="#ic-arrow-ur"/></svg></span></button></div>
         <div id="attention" class="attention hidden" role="status" aria-live="polite"></div>
+        <a href="#health" id="health-chip" class="health-chip hidden" role="status"><span class="health-dot" id="health-chip-dot"></span><span id="health-chip-text"></span></a>
         <div class="stats-grid">
           <article class="stat-card"><div class="stat-top">Registros do pai <span class="stat-icon"><svg class="ic" aria-hidden="true"><use href="#ic-heart"/></svg></span></div><div class="stat-value" id="father-count">0</div><div class="stat-caption">confirmados por você hoje</div></article>
           <article class="stat-card"><div class="stat-top">A identificar <span class="stat-icon amber"><svg class="ic" aria-hidden="true"><use href="#ic-target"/></svg></span></div><div class="stat-value" id="unknown-count">0</div><div class="stat-caption">registros de presença hoje</div></article>
@@ -74,9 +76,17 @@
           <article class="panel activity-panel"><div class="panel-heading"><h2>Presença na semana</h2><span class="muted small">Últimos 7 dias</span></div><div class="chart-summary"><strong id="week-count">0</strong><span>registros de presença<br><small>Uma entrada e saída = um registro</small></span></div><div id="weekly-chart" class="chart" aria-label="Registros de presença nos últimos sete dias"></div><div class="chart-legend"><span><i class="legend-total"></i> Todas as presenças</span><span><i class="legend-father"></i> Pai confirmado</span></div></article>
           <article class="panel recent-panel"><div class="panel-heading"><h2>Últimos registros</h2><button class="text-button" data-go="history">Ver todos <svg class="ic" aria-hidden="true"><use href="#ic-arrow-ur"/></svg></button></div><div id="recent-list"></div></article>
         </div>
-        <article class="panel routine-panel"><div class="panel-heading"><h2>Rotina aprendida</h2><span class="muted small" id="routine-days"></span></div><div class="routine-body"><p id="routine-text" class="routine-text"></p><div id="routine-chart" class="routine-chart" role="img" aria-label="Média de registros por hora do dia"></div><p id="routine-caption" class="muted small"></p></div></article><article class="panel resources-panel hidden" id="resources-panel"><div class="panel-heading"><h2>Recursos do servidor</h2><select id="resources-minutes" aria-label="Período do gráfico"><option value="10">Últimos 10 min</option><option value="30" selected>Últimos 30 min</option><option value="60">Última hora</option></select></div><div class="panel-body"><div id="resources-tiles" class="res-tiles" aria-live="polite"></div><div id="resources-chart" class="res-chart" role="img" aria-label="Gráfico de CPU, memória e temperatura"></div><div class="res-legend"><span><i class="res-cpu"></i>CPU %</span><span><i class="res-mem"></i>Memória %</span><span><i class="res-temp"></i>Temperatura °C</span></div><h3 class="res-subtitle">Quem mais usa CPU</h3><ul id="resources-top" class="res-top"></ul><p id="resources-camera" class="muted small"></p></div></article>
-        <article class="panel alerts-panel"><div class="panel-heading"><h2>Alertas recentes</h2><span class="muted small" id="alerts-state"></span></div><ul id="alerts-list" class="alerts-list"></ul></article>
+        <article class="panel routine-panel"><div class="panel-heading"><h2>Rotina aprendida</h2><span class="muted small" id="routine-days"></span></div><div class="routine-body"><p id="routine-text" class="routine-text"></p><div id="routine-chart" class="routine-chart" role="img" aria-label="Média de registros por hora do dia"></div><p id="routine-caption" class="muted small"></p></div></article>
+        
         <footer class="page-footer"><span><span class="dot gray"></span> <span id="storage-info">Armazenamento local</span></span><span>Presença na câmera não confirma que está tudo bem.</span></footer>
+      </section>
+
+      <section id="page-health" class="page hidden">
+        <div class="page-heading"><div><div class="eyebrow">TUDO FUNCIONANDO?</div><h1>Saúde do sistema<span class="green-period">.</span></h1><p id="health-summary">Verificando…</p></div></div>
+        <div id="health-list" class="health-list" aria-live="polite"></div>
+        <article class="panel alerts-panel"><div class="panel-heading"><h2>Alertas recentes</h2><span class="muted small" id="alerts-state"></span></div><ul id="alerts-list" class="alerts-list"></ul></article>
+        <article class="panel resources-panel hidden" id="resources-panel"><div class="panel-heading"><h2>Recursos do computador</h2><select id="resources-minutes" aria-label="Período do gráfico"><option value="10">Últimos 10 min</option><option value="30" selected>Últimos 30 min</option><option value="60">Última hora</option></select></div><div class="panel-body"><div id="resources-tiles" class="res-tiles" aria-live="polite"></div><div id="resources-chart" class="res-chart" role="img" aria-label="Gráfico de CPU, memória e temperatura"></div><div class="res-legend"><span><i class="res-cpu"></i>CPU %</span><span><i class="res-mem"></i>Memória %</span><span><i class="res-temp"></i>Temperatura °C</span></div><h3 class="res-subtitle">Quem mais usa CPU</h3><ul id="resources-top" class="res-top"></ul><p id="resources-camera" class="muted small"></p></div></article>
+        <p class="footnote health-footnote"><span id="health-uptime"></span></p>
       </section>
 
       <section id="page-history" class="page hidden">
@@ -217,6 +227,7 @@
   <script src="/static/backup.js" defer></script>
   <script src="/static/push.js" defer></script>
   <script src="/static/storage.js" defer></script>
+  <script src="/static/health.js" defer></script>
   <script src="/static/detectors.js" defer></script>
   <script src="/static/resources.js" defer></script>
   <script src="/static/reminders.js" defer></script>

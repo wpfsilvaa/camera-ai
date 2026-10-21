@@ -1,4 +1,4 @@
-// Resource monitor beside "Rotina aprendida" on the overview: tiles, a 3-line chart and the busiest processes.
+// Resource monitor on the "Saúde" page: tiles, a 3-line chart and the busiest processes.
 const resNumber = (value, digits = 0) => value === null || value === undefined ? '–' : Number(value).toFixed(digits).replace('.', ',');
 const resBytes = bytes => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1).replace('.', ',')} GB` : `${Math.round(bytes / 1024 ** 2)} MB`;
 let resTimer = null;
@@ -52,7 +52,7 @@ function resourcesVisible() {
   const panel = $('#resources-panel');
   if (!panel) return false;
   panel.classList.toggle('hidden', !isAdmin());   // Server numbers are for administrators.
-  return activePage === 'overview' && !panel.classList.contains('hidden') && !document.hidden;
+  return activePage === 'health' && !panel.classList.contains('hidden') && !document.hidden;
 }
 
 $('#resources-minutes')?.addEventListener('change', () => loadResources().catch(() => {}));

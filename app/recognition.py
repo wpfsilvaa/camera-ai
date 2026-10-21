@@ -15,6 +15,7 @@ from .config import PEOPLE
 from .faces import FaceEncoder, normalized
 
 
+MERGE_FACE = .65        # Two unconfirmed tracks of one record whose faces are at least this alike (and never on screen together) are the same person.
 HANDOFF_SECONDS = 6      # A new track that appears this soon where a recognised one vanished inherits its identity (until its own face says otherwise).
 BODY_HOLD = 10          # Seconds an identity from the body/clothes survives a failed comparison.
 EXAMPLE_LIMIT = 100   # Taught faces kept per person.
@@ -482,6 +483,49 @@ class Recognition:
                     joined += self._join(group)
                     group = [track]
             joined += self._join(group)
+        return joined
+
+    def merge_by_face(self, since, before):
+        """Records with several numbers for what the faces say are the same person: join them (also when two people were around).
+
+        Only unconfirmed tracks are touched; two tracks that were ever on screen at the same time are different people.
+        Returns how many numbers were joined.
+        """
+        joined = 0
+        events = self.db.rows("SELECT id FROM events WHERE ended IS NOT NULL AND ended<? AND started>=? AND (kind!='manual' OR analysis_state='complete')", (before, since))
+        for event in events:
+            tracks = self.db.rows('SELECT id,started,last_seen FROM person_tracks WHERE event_id=? AND reviewed=0 AND person_id IS NULL', (event['id'],))
+            vectors = {}
+            for track in tracks:
+                rows = self.db.rows("SELECT feature FROM person_samples WHERE track_id=? AND model LIKE 'sface-%'", (track['id'],))
+                if rows:
+                    vectors[track['id']] = np.stack([normalized(np.frombuffer(r['feature'], dtype=np.float32)) for r in rows])
+            tracks = [t for t in tracks if t['id'] in vectors]
+            if len(tracks) < 2:
+                continue
+            edges = []
+            for i, a in enumerate(tracks):
+                for b in tracks[i + 1:]:
+                    if vectors[a['id']].shape[1] != vectors[b['id']].shape[1]:
+                        continue
+                    similarity = float((vectors[a['id']] @ vectors[b['id']].T).max())
+                    if similarity >= MERGE_FACE:
+                        edges.append((similarity, a, b))
+            groups = {t['id']: [t] for t in tracks}
+            overlap = lambda x, y: x['started'] < y['last_seen'] - 1 and y['started'] < x['last_seen'] - 1
+            for similarity, a, b in sorted(edges, key=lambda e: -e[0]):
+                first, second = groups[a['id']], groups[b['id']]
+                if first is second or any(overlap(x, y) for x in first for y in second):
+                    continue
+                first.extend(second)
+                for member in second:
+                    groups[member['id']] = first
+            done = set()
+            for group in groups.values():
+                if id(group) in done or len(group) < 2:
+                    continue
+                done.add(id(group))
+                joined += self._join([{**t, 'suggested_id': None} for t in group])
         return joined
 
     def prune_ghosts(self, since, before):
