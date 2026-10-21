@@ -303,3 +303,9 @@ dialog .dialog-heading{position:sticky;top:0;z-index:5;background:var(--surface)
 .health-item[data-level=error]{border-color:var(--red-ink)}
 .health-item[data-level=warn]{border-color:var(--amber)}
 @media(max-width:960px){.nav-link .health-dot{position:absolute;top:8px;right:14px;margin:0}}
+
+/* Street mode lives in the top bar, next to the account. */
+.street-button{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--border);border-radius:999px;background:var(--surface-2);color:var(--muted);font-size:12px;font-weight:600;white-space:nowrap}
+.street-button .ic{width:16px;height:16px}
+.street-button.on{background:var(--red-bg);color:var(--red-ink);border-color:var(--red-ink)}
+@media(max-width:500px){.street-button span{display:none}.street-button{padding:7px}}
