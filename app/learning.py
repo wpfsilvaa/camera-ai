@@ -16,6 +16,8 @@ from .recognition import match_person
 LOOKBACK_SECONDS = 3 * 86400
 DUPLICATE_SIMILARITY = .97   # Nearly the same image as an existing example teaches nothing new.
 MAX_PENDING_PER_PERSON = 12
+FULL_GALLERY = 100            # From this many references a person's gallery is full: only clearly new views are worth proposing.
+FULL_NOVELTY = .92            # ... meaning a face less alike than this to every example (or clearly sharper than most of them).
 
 
 def as_vector(blob):
@@ -86,10 +88,14 @@ class LearningSuggestions:
         if person != row['person_id']:
             return None
         own = [item for item in gallery if item['person_id'] == person]
-        if max(float(feature @ item['feature']) for item in own) >= DUPLICATE_SIMILARITY:
+        closest = max(float(feature @ item['feature']) for item in own)
+        if closest >= DUPLICATE_SIMILARITY:
             return None
-        if row['quality'] < statistics.median(item['quality'] for item in own):
+        qualities = sorted(item['quality'] for item in own)
+        if row['quality'] < statistics.median(qualities):
             return None
+        if len(own) >= FULL_GALLERY and closest >= FULL_NOVELTY and row['quality'] < qualities[int(len(qualities) * .75)]:
+            return None   # Full gallery: it must show a new view or be among the sharpest.
         return round(score, 3)
 
     def pending(self):

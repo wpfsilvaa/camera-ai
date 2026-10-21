@@ -4,6 +4,8 @@ import time
 import unittest
 from pathlib import Path
 
+import numpy as np
+
 TEMP = tempfile.TemporaryDirectory()
 os.environ['CAMERA_DATA_DIR'] = TEMP.name
 os.environ['DASHBOARD_PASSWORD'] = ''
@@ -141,6 +143,40 @@ class LearningTests(unittest.TestCase):
         self.assertEqual(taught, {a, b})
         with self.assertRaises(ValueError):
             self.recognition.confirm(track, 'father', sample_ids=['0' * 32])
+
+    def test_over_the_limit_the_most_redundant_example_goes_not_the_oldest(self):
+        from app.recognition import EXAMPLE_LIMIT
+        person = self.recognition.create_person('Teste')
+
+        def teach(vector, quality):
+            track, (sample,) = self.track(self.event(), None, [(vector, quality)])
+            self.recognition.confirm(track, person, sample_ids=[sample])
+            return sample
+        unique = teach((0, 0, 1), 50)                       # The oldest, but a view nothing else has.
+        weak_twin = teach((1, .001, 0), 40)                 # Two almost identical faces; this one is less sharp.
+        strong_twin = teach((1, .002, 0), 90)
+        for index in range(EXAMPLE_LIMIT - 3):              # Fill up with distinct views.
+            angle = 0.2 + index * 0.05
+            teach((np.cos(angle) * .8, np.sin(angle) * .8, .6 + (index % 7) * .1), 80)
+        count = lambda: self.db.rows('SELECT COUNT(*) AS n FROM person_samples WHERE person_id=?', (person,))[0]['n']
+        self.assertEqual(count(), EXAMPLE_LIMIT)
+        fresh = teach((.2, .9, .4), 85)
+        taught = {r['id'] for r in self.db.rows('SELECT id FROM person_samples WHERE person_id=?', (person,))}
+        self.assertEqual(len(taught), EXAMPLE_LIMIT)
+        self.assertIn(fresh, taught)
+        self.assertIn(unique, taught)                       # Oldest, yet kept: it is unique.
+        self.assertIn(strong_twin, taught)
+        self.assertNotIn(weak_twin, taught)                 # The redundant, less sharp one went.
+
+    def test_matrix_gallery_gives_the_same_answer_as_the_loop(self):
+        from app.recognition import Gallery, match_person
+        rng = np.random.default_rng(3)
+        items = [{'person_id': person, 'feature': normalized(rng.normal(size=16).astype(np.float32))} for person in 'abc' for _ in range(20)]
+        for _ in range(30):
+            probe = items[int(rng.integers(len(items)))]['feature'] + rng.normal(scale=.3, size=16).astype(np.float32)
+            plain, fast = match_person(probe, items, .1, .0), match_person(probe, Gallery(items), .1, .0)
+            self.assertEqual(plain[0], fast[0])
+            self.assertAlmostEqual(plain[1], fast[1], places=5)
 
     def test_approve_teaches_and_reject_is_remembered(self):
         track, (sample,) = self.track(self.event(), faces=[((.9, .1, .42), 200)])

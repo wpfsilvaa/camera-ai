@@ -15,12 +15,36 @@ from .config import PEOPLE
 from .faces import FaceEncoder, normalized
 
 
+EXAMPLE_LIMIT = 100   # Taught faces kept per person.
 MERGE_GAP = 10   # Seconds between two tracker numbers of one person for them to count as the same person.
+
+
+class Gallery(list):
+    """The reference faces, with the vectors also kept as one matrix per size so a face is compared with all of them at once."""
+
+    def __init__(self, items=()):
+        super().__init__(items)
+        self.groups = {}
+        by_size = {}
+        for item in self:
+            by_size.setdefault(item['feature'].shape, []).append(item)
+        for shape, items in by_size.items():
+            people = {}
+            for index, item in enumerate(items):
+                people.setdefault(item['person_id'], []).append(index)
+            self.groups[shape] = (np.stack([item['feature'] for item in items]), {person: np.array(indexes) for person, indexes in people.items()})
 
 
 def match_person(feature, gallery, threshold=.50, margin=.08):
     vector = normalized(feature)
     grouped = {}
+    if isinstance(gallery, Gallery):
+        matrix, people = gallery.groups.get(vector.shape, (None, {}))
+        if matrix is not None:
+            similarity = matrix @ vector
+            for person, indexes in people.items():
+                grouped[person] = similarity[indexes].tolist()
+        gallery = ()
     for item in gallery:
         reference = item['feature']
         if reference.shape == vector.shape:
@@ -303,6 +327,43 @@ class Recognition:
             self.invalidate(db)
         (self.directory / f'{sample_id}.jpg').unlink(missing_ok=True)
 
+    def trim_examples(self, db, person_id, keep, limit=EXAMPLE_LIMIT):
+        """Keep at most `limit` taught faces per person by dropping the most redundant ones, not the oldest.
+
+        A face that is nearly the same as another one adds nothing; the rare views (profile, glasses, low light) stay.
+        The faces just taught (`keep`) are never the ones dropped. A dropped face loses its name and is cleaned up with the other unconfirmed ones.
+        """
+        rows = db.execute("SELECT id,feature,quality,model,created FROM person_samples WHERE person_id=?", (person_id,)).fetchall()
+        excess = len(rows) - limit
+        if excess <= 0:
+            return
+        removable = [row for row in rows if row['id'] not in keep]
+        dropped = []
+        by_model = {}
+        for row in rows:
+            by_model.setdefault(row['model'], []).append(row)
+        for _ in range(min(excess, len(removable))):
+            worst, worst_key = None, None
+            for group in by_model.values():
+                alive = [row for row in group if row['id'] not in dropped]
+                if len(alive) < 2:
+                    continue
+                vectors = np.stack([normalized(np.frombuffer(row['feature'], dtype=np.float32)) for row in alive])
+                similarity = vectors @ vectors.T
+                np.fill_diagonal(similarity, -1)
+                nearest = similarity.max(axis=1)
+                for row, closest in zip(alive, nearest):
+                    if row['id'] in keep:
+                        continue
+                    key = (round(float(closest), 3), -row['quality'], row['created'])   # Most alike, then least sharp, then oldest.
+                    if worst_key is None or key > worst_key:
+                        worst, worst_key = row, key
+            if worst is None:
+                worst = min(removable, key=lambda row: row['created'])   # Nothing comparable: fall back to the oldest.
+            dropped.append(worst['id'])
+            removable = [row for row in removable if row['id'] != worst['id']]
+        db.executemany('UPDATE person_samples SET person_id=NULL WHERE id=?', [(sample,) for sample in dropped])
+
     def confirm(self, track_id, person_id, sample_id=None, sample_ids=()):
         with self.lock, self.db.connect() as db:
             track = db.execute('''SELECT t.*,e.ended,e.kind,e.analysis_state FROM person_tracks t JOIN events e ON e.id=t.event_id
@@ -326,8 +387,7 @@ class Recognition:
             db.execute('UPDATE person_tracks SET person_id=?,reviewed=?,suggested_id=NULL,similarity=NULL WHERE id=?', (person_id,int(person_id is not None),track_id))
             if person_id and chosen:
                 db.executemany('UPDATE person_samples SET person_id=? WHERE id=?', [(person_id,chosen_id) for chosen_id in chosen])
-                db.execute('''UPDATE person_samples SET person_id=NULL WHERE person_id=? AND id NOT IN
-                    (SELECT id FROM person_samples WHERE person_id=? ORDER BY created DESC LIMIT 100)''', (person_id,person_id))
+                self.trim_examples(db,person_id,set(chosen))
             recompute_identity(db,track['event_id'])
             self.invalidate(db)
 
@@ -460,7 +520,7 @@ class Recognition:
             rows = self.db.rows('''SELECT s.person_id,s.feature FROM person_samples s
                 WHERE s.person_id IS NOT NULL AND s.model=? UNION ALL
                 SELECT person_id,feature FROM face_enrollments WHERE model=?''', (self.encoder.version,self.encoder.version))
-            self.gallery = [{**r,'feature':normalized(np.frombuffer(r['feature'],dtype=np.float32))} for r in rows]
+            self.gallery = Gallery({**r,'feature':normalized(np.frombuffer(r['feature'],dtype=np.float32))} for r in rows)
             self.names = {p['id']:p['name'] for p in self.db.rows('SELECT id,name FROM people')}
             self.monitored = {p['id'] for p in self.db.rows('SELECT id FROM people WHERE is_father=1')}
             self.revision = revision
