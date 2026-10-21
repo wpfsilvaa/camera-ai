@@ -37,6 +37,8 @@ def cameras_items(snapshots, limits=()):
         elif camera['state'] == 'online':
             slow = camera.get('analysis_active') and (camera.get('fps') or 0) < 4
             detail = f"{camera.get('fps') or 0} quadros/s · análise {'ativa' if camera.get('analysis_active') else 'pausada'}"
+            if camera.get('analysis_active') and camera.get('inference_ms'):
+                detail += f" · cada detecção leva {round(camera['inference_ms'])} ms" + (f" ({camera['detector']})" if camera.get('detector') else '')
             if slow and limits:
                 hint = f"Provável causa: {limits[0]}. Mude para o perfil Equilibrado ou Desempenho (ou ligue na tomada)."
             else:

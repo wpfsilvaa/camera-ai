@@ -54,6 +54,12 @@ class HealthTests(unittest.TestCase):
         self.assertIn('1200 MHz', items['resources']['detail'])
         self.assertIn('powerprofilesctl', items['resources']['hint'])
 
+    def test_camera_line_shows_how_long_each_detection_takes(self):
+        camera = [{'id': 'main', 'name': 'Cozinha', 'enabled': True, 'state': 'online', 'fps': 15, 'analysis_active': True, 'inference_ms': 132.4, 'detector': 'openvino'}]
+        detail = next(i for i in evaluate(base(cameras=camera), now=1000 + 3600)['items'] if i['key'] == 'camera-main')['detail']
+        self.assertIn('132 ms', detail)
+        self.assertIn('openvino', detail)
+
     def test_first_reading_after_a_start_has_no_cpu_figure(self):
         report = evaluate(base(resources={'mem_used': 2, 'mem_total': 8, 'temp': 50}), now=1000 + 3600)
         self.assertEqual({i['key']: i['level'] for i in report['items']}['resources'], 'ok')
