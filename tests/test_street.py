@@ -72,6 +72,8 @@ class ViewersTests(unittest.TestCase):
                 self.assertEqual(viewers.total(), 3)
             self.assertEqual(viewers.total(), 1)
         self.assertEqual(viewers.total(), 0)
+        with viewers.watch('main'):
+            self.assertEqual((viewers.count('main'), viewers.count('door')), (1, 0))
 
 
 if __name__ == '__main__':

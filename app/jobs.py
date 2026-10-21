@@ -23,6 +23,14 @@ PROBABLE_FATHER = """EXISTS (SELECT 1 FROM person_tracks t JOIN people p ON p.id
 UNCONFIRMED = 'Sem confirmação de envio. Confira o WhatsApp antes de reenviar.'
 
 
+DEFER_SECONDS = 180   # A finished clip waits this long at most for the camera to be free of people before it is converted.
+
+
+def transcode_due(busy, clip, now):
+    """Converting a clip competes with the detection for the processor, so it waits while someone is in view (but not forever)."""
+    return not busy or now - (clip['ended'] or clip['started']) >= DEFER_SECONDS
+
+
 def gateway_connected(client):
     try:
         return client.get(f'{WA_URL}/status').json().get('state') == 'connected'
@@ -51,6 +59,7 @@ class Jobs:
     def __init__(self, db, config, recognition=None, alerts=None, auth=None, learning=None, backups=None, notebook=None):
         self.db, self.config = db, config
         self.recognition, self.alerts, self.auth, self.learning, self.backups = recognition, alerts, auth, learning, backups
+        self.busy = lambda: False   # True while somebody is in view of a camera (set by the application).
         self.extra_cleanups = []   # Other parts of the application that tidy their own files hourly.
         self.notebook = notebook
         self.stop_event = threading.Event()
@@ -78,7 +87,7 @@ class Jobs:
         while not self.stop_event.is_set():
             try:
                 pending = self.db.rows("SELECT * FROM clips WHERE state='processing' ORDER BY started LIMIT 1")
-                if pending:
+                if pending and transcode_due(self.busy(), pending[0], time.time()):
                     transcode(self.db, pending[0])
                 if self.learning and time.time() - self.learning.last_scan >= LEARNING_INTERVAL:
                     if self.recognition:

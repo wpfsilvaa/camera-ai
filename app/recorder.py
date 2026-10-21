@@ -2,6 +2,7 @@ import logging
 import queue
 import shutil
 import signal
+import os
 import subprocess
 import threading
 import time
@@ -170,6 +171,14 @@ def audio_offset(sound, video_start):
     return min(max(offset, 0.0), 30.0)
 
 
+def lower_priority():
+    """Runs in the child before ffmpeg starts: converting a clip must never slow down the detection."""
+    try:
+        os.nice(19)
+    except OSError:
+        pass
+
+
 def transcode(db, row, directory=CLIPS):
     clip_id = row['id']
     source = directory / f'{clip_id}.avi'
@@ -187,12 +196,12 @@ def transcode(db, row, directory=CLIPS):
             command += ['-an']
         command += ['-c:v', 'libx264', '-preset', 'veryfast', '-threads', '2', '-crf', '23', '-maxrate', '4000k', '-bufsize', '8000k',
                     '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(temporary)]
-        result = subprocess.run(command, capture_output=True, timeout=180)
+        result = subprocess.run(command, capture_output=True, timeout=600, preexec_fn=lower_priority)
         if (result.returncode or not temporary.exists()) and offset is not None:
             # The sound file was unusable: keep the video without it.
             result = subprocess.run(['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-i', str(source), '-an', '-c:v', 'libx264',
                                      '-preset', 'veryfast', '-threads', '2', '-crf', '23', '-maxrate', '4000k', '-bufsize', '8000k',
-                                     '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(temporary)], capture_output=True, timeout=180)
+                                     '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(temporary)], capture_output=True, timeout=600, preexec_fn=lower_priority)
         if result.returncode or not temporary.exists() or temporary.stat().st_size < 100:
             raise RuntimeError('Falha ao converter o vídeo. Verifique FFmpeg e espaço em disco.')
         temporary.replace(output)

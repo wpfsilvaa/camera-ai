@@ -79,6 +79,16 @@ class MotionGate:
         return True
 
 
+IDLE_PREVIEW_SECONDS = 1.0   # Nobody watching: the picture used for snapshots and thumbnails is refreshed this often.
+
+
+def preview_due(watched, last, now):
+    """Whether the annotated live picture must be drawn and encoded for this frame.
+
+    It is for the people watching the stream; with nobody watching, one a second keeps snapshots fresh and saves the work."""
+    return watched or last is None or now - last >= IDLE_PREVIEW_SECONDS
+
+
 def analysis_wanted(settings, hour):
     """Whether detection runs. A manual pause wins, except inside the watch-mode hours (a safety net for the night);
     "watch mode all day" only lowers the pace, it does not override the pause button."""

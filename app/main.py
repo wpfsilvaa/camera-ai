@@ -66,6 +66,7 @@ cameras.presence_handler = push.presence
 cameras.restricted_handler = alerts.restricted
 street = StreetMode()
 viewers = Viewers()
+cameras.viewer_count = viewers.count
 
 
 def guard_house(camera_id, camera_name, stranger, now, make_jpeg):
@@ -98,6 +99,7 @@ journal = Journal(db)
 father_log = FatherLog(db, DATA / 'visits')
 cameras.visit_handler = father_log.record_visit
 cameras.visit_time_handler = father_log.set_seconds
+jobs.busy = lambda: any(c.get('people') for c in cameras.snapshots())
 jobs.extra_cleanups.append(father_log.cleanup)
 push.sightings_today = father_log.count_today
 avatars = Avatars()

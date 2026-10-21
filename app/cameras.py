@@ -17,6 +17,7 @@ class CameraManager:
         self.visit_handler = None  # Receives (camera id, time, name) for every visit to a restricted area.
         self.visit_time_handler = None  # Receives (visit id, seconds) as a visit to a restricted area goes on.
         self.reminder_handler = None  # Receives (camera id, reminder text) when the father goes into a restricted area.
+        self.viewer_count = None  # Callable (camera id) -> how many people watch its live picture; None = assume always.
         self.street_handler = None  # Receives (camera id, name, a stranger is in view, time, jpeg maker) from guarded cameras.
         self.workers = {}
         self.add_worker('main', recognition)
@@ -27,6 +28,7 @@ class CameraManager:
         worker.on_presence = lambda *args: self.presence_handler and self.presence_handler(*args)
         worker.on_restricted = lambda *args: self.restricted_handler and self.restricted_handler(*args)
         worker.on_visit = lambda *args: self.visit_handler and self.visit_handler(*args)
+        worker.watchers = lambda: self.viewer_count(camera_id) if self.viewer_count else 1
         worker.on_street = lambda *args: self.street_handler and self.street_handler(*args)
         worker.on_visit_time = lambda *args: self.visit_time_handler and self.visit_time_handler(*args)
         worker.on_reminder = lambda *args: self.reminder_handler and self.reminder_handler(*args)

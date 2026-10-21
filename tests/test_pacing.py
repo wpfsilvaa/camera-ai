@@ -4,7 +4,7 @@ from pathlib import Path
 
 from app.config import CameraSettings
 from app.db import Database
-from app.pacing import DetectionPacing, TouchThrottle, analysis_wanted
+from app.pacing import DetectionPacing, TouchThrottle, analysis_wanted, preview_due
 
 
 class DetectionPacingTests(unittest.TestCase):
@@ -172,6 +172,23 @@ class AnalysisPauseTests(unittest.TestCase):
         self.assertTrue(analysis_wanted(paused, 23))    # The night net stays.
         self.assertTrue(analysis_wanted(CameraSettings(analysis_enabled=True), 14))
         self.assertFalse(analysis_wanted(CameraSettings(analysis_enabled=False), 23))
+
+
+class PreviewTests(unittest.TestCase):
+    def test_drawn_for_every_frame_only_while_somebody_watches(self):
+        self.assertTrue(preview_due(True, 100.0, 100.01))        # Watched: every frame.
+        self.assertTrue(preview_due(False, None, 100.0))         # First one is always made.
+        self.assertFalse(preview_due(False, 100.0, 100.4))       # Nobody: skipped...
+        self.assertTrue(preview_due(False, 100.0, 101.0))        # ... but refreshed once a second.
+
+
+class TranscodeDeferralTests(unittest.TestCase):
+    def test_waits_for_a_free_camera_but_not_forever(self):
+        from app.jobs import DEFER_SECONDS, transcode_due
+        clip = {'ended': 1000.0, 'started': 990.0}
+        self.assertTrue(transcode_due(False, clip, 1001))
+        self.assertFalse(transcode_due(True, clip, 1001))
+        self.assertTrue(transcode_due(True, clip, 1000 + DEFER_SECONDS))
 
 
 if __name__ == '__main__':

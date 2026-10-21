@@ -19,6 +19,10 @@ class Viewers:
             with self.lock:
                 self.counts[camera_id] -= 1
 
+    def count(self, camera_id):
+        with self.lock:
+            return self.counts.get(camera_id, 0)
+
     def total(self):
         with self.lock:
             return sum(self.counts.values())

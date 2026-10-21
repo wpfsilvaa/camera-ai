@@ -10,7 +10,7 @@ from pathlib import Path
 
 from . import detectors
 from .db import TZ
-from .pacing import FORCE_SECONDS, SENTINEL_FORCE_SECONDS, analysis_wanted, in_window
+from .pacing import FORCE_SECONDS, SENTINEL_FORCE_SECONDS, analysis_wanted, in_window, preview_due
 from .sources import local_device
 from .config import CLIPS, DATA, CAMERA_FIELDS
 os.environ.setdefault('YOLO_CONFIG_DIR', str(DATA / 'ultralytics'))
@@ -110,6 +110,7 @@ class LiveFrames:
 
 
 class CameraWorker:
+    watchers=staticmethod(lambda: 1)   # How many people are watching this camera's live picture (set by the manager); 1 = always draw it.
     open_visits=None      # Per worker once used: area index -> the visit being measured.
     on_visit_time=None    # Called with (visit id, seconds so far) while a visit to a restricted area lasts.
 
@@ -368,6 +369,7 @@ class CameraWorker:
                     source_fps=30
                 self.update(source_width=int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),source_height=int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),source_fps=round(source_fps,1))
                 next_frame=next_detection=0
+                last_preview=None
                 detected_boxes=[];detected_ids=[];last_inference_ms=None;detected_lying={}
                 detections=deque(maxlen=90)
                 sentinel_on=False
@@ -572,16 +574,18 @@ class CameraWorker:
                         if touch.due(now,count):
                             self.db.touch_event(manual_event,now,count)
                     lap.append(time.perf_counter())
-                    preview=resize_width(annotated,current.preview_width)
-                    if analysis_active and current.fall_detection_enabled:
-                        preview=draw_zones(preview,current.fall_zones)
-                    if analysis_active and current.restricted_enabled:
-                        preview=draw_zones(draw_zones(preview,current.restricted_floor,FLOOR_COLOR),current.restricted_zones,RESTRICTED_COLOR)
-                    encoded,jpeg=cv2.imencode('.jpg',preview,[cv2.IMWRITE_JPEG_QUALITY,78])
-                    if encoded:
-                        with self.lock:
-                            self.jpeg=jpeg.tobytes()
-                            self.sequence+=1
+                    if preview_due(self.watchers()>0,last_preview,now):
+                        last_preview=now
+                        preview=resize_width(annotated,current.preview_width)
+                        if analysis_active and current.fall_detection_enabled:
+                            preview=draw_zones(preview,current.fall_zones)
+                        if analysis_active and current.restricted_enabled:
+                            preview=draw_zones(draw_zones(preview,current.restricted_floor,FLOOR_COLOR),current.restricted_zones,RESTRICTED_COLOR)
+                        encoded,jpeg=cv2.imencode('.jpg',preview,[cv2.IMWRITE_JPEG_QUALITY,78])
+                        if encoded:
+                            with self.lock:
+                                self.jpeg=jpeg.tobytes()
+                                self.sequence+=1
                     lap.append(time.perf_counter())
                     self.report_stall(lap,event_id is not None)
                     rates.append(time.perf_counter())
