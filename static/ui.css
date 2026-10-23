@@ -309,3 +309,11 @@ dialog .dialog-heading{position:sticky;top:0;z-index:5;background:var(--surface)
 .street-button .ic{width:16px;height:16px}
 .street-button.on{background:var(--red-bg);color:var(--red-ink);border-color:var(--red-ink)}
 @media(max-width:500px){.street-button span{display:none}.street-button{padding:7px}}
+
+/* Camera picture profiles. */
+.image-custom{display:grid;gap:12px;margin:10px 0}
+.image-slider{display:grid;gap:4px;font-size:12px;font-weight:550}
+.image-slider span{display:flex;gap:10px;align-items:center}
+.image-slider input[type=range]{flex:1;min-height:0;padding:0}
+.image-slider output{min-width:36px;text-align:right;font-variant-numeric:tabular-nums}
+.image-actions{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}

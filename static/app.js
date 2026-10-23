@@ -115,7 +115,7 @@ function route() {
   if (activePage === 'people') { renderProfiles(); loadLearning().catch(error => toast(error.message, true)); }
   if (activePage === 'messages') window.loadMessages?.().catch(error => toast(error.message, true));
   if (activePage === 'messages') window.loadJournal?.().catch(error => toast(error.message, true));
-  if (activePage === 'settings') renderZoneEditor();
+  if (activePage === 'settings') { renderZoneEditor(); window.loadImageControls?.(); }
   if (activePage === 'health') window.loadHealth?.();
   if (activePage === 'users') loadUsers().catch(error => toast(error.message, true));
   updateStream();

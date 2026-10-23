@@ -12,6 +12,7 @@ from . import detectors
 from .db import TZ
 from .pacing import FORCE_SECONDS, SENTINEL_FORCE_SECONDS, analysis_wanted, in_window, preview_due
 from .sources import local_device
+from . import image_controls
 from .config import CLIPS, DATA, CAMERA_FIELDS
 os.environ.setdefault('YOLO_CONFIG_DIR', str(DATA / 'ultralytics'))
 os.environ.setdefault('OPENCV_FFMPEG_CAPTURE_OPTIONS', 'rtsp_transport;tcp')
@@ -107,6 +108,10 @@ class LiveFrames:
     def close(self):
         self.stopping.set()
         self.thread.join(timeout=7)
+
+
+def current_profile(settings):
+    return image_controls.controls_for(settings.image_profile,settings.image_custom)
 
 
 class CameraWorker:
@@ -364,6 +369,11 @@ class CameraWorker:
                     raise RuntimeError('Não foi possível abrir a câmera USB. Ela pode estar ausente ou em uso por outro programa (como o MediaMTX).' if local
                                        else 'Não foi possível abrir a câmera. Confira endereço, rede e transmissão.')
                 cap.set(cv2.CAP_PROP_BUFFERSIZE,1)
+                if local and current_profile(settings):
+                    try:
+                        image_controls.apply(source,current_profile(settings))
+                    except Exception:
+                        log.exception('Falha ao aplicar o perfil de imagem da câmera')
                 source_fps=cap.get(cv2.CAP_PROP_FPS)
                 if not np.isfinite(source_fps) or source_fps<1 or source_fps>120:
                     source_fps=30

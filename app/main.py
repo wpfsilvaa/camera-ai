@@ -45,7 +45,7 @@ from .street import StreetMode
 from . import health as health_report
 from .cleanup import GalleryCleanup
 from .viewers import Viewers
-from .routes import cleanup as cleanup_routes, alerts as alert_routes, auth as auth_routes, backup as backup_routes, intercom as intercom_routes, people as people_routes, photos as photos_routes, push as push_routes, storage as storage_routes
+from .routes import image as image_routes, cleanup as cleanup_routes, alerts as alert_routes, auth as auth_routes, backup as backup_routes, intercom as intercom_routes, people as people_routes, photos as photos_routes, push as push_routes, storage as storage_routes
 from .services import call_service
 
 db = Database()
@@ -858,6 +858,7 @@ def author_renamed(user_id, name):
 app.include_router(auth_routes.build(auth, on_profile=author_renamed))
 app.include_router(people_routes.build(recognition, learning, on_forget=avatars.delete))
 app.include_router(cleanup_routes.build(gallery_cleanup))
+app.include_router(image_routes.build(config))
 app.include_router(alert_routes.build(alerts, config))
 app.include_router(backup_routes.build(backups))
 app.include_router(intercom_routes.build(config))

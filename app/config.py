@@ -69,6 +69,8 @@ class CameraSettings(BaseModel):
     restricted_alert: bool = False
     restricted_min_seconds: float = Field(default=3, ge=0, le=30)   # Stay this long in the area before it counts (walking past does not).
     restricted_still: bool = True      # ... and be standing still, not crossing the room.
+    image_profile: str = Field(default='keep', pattern='^(keep|auto|balanced|low_light|motion|bright_day|close_faces|custom)$')   # USB camera picture profile, applied each time the camera opens.
+    image_custom: dict[str, int] = Field(default_factory=dict)   # Values of the "custom" profile.
     show_skeleton: bool = False   # Draw limbs and head direction on the live picture (uses the pose model).
     restricted_floor: list[list[float]] = Field(default_factory=list, max_length=10)   # Strips of floor in front of the area: the person's feet must be on one of them.
     restricted_hands: bool = False     # Count only when a hand is in the area (needs the pose model, like fall detection).
