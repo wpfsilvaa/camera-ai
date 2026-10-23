@@ -19,7 +19,8 @@ RANGES = {'brightness': (0, 255), 'contrast': (0, 255), 'saturation': (0, 255), 
           'white_balance_temperature': (2000, 6500), 'auto_exposure': (0, 3), 'exposure_time_absolute': (3, 2047),
           'exposure_dynamic_framerate': (0, 1), 'focus_automatic_continuous': (0, 1), 'focus_absolute': (0, 250)}
 FIRST = ('auto_exposure', 'focus_automatic_continuous', 'white_balance_automatic', 'exposure_dynamic_framerate')   # Modes first, then the values they unlock.
-CUSTOM_KEYS = ('exposure_time_absolute', 'gain', 'sharpness', 'brightness', 'contrast', 'focus_absolute')
+CUSTOM_KEYS = ('exposure_time_absolute', 'gain', 'sharpness', 'brightness', 'contrast', 'saturation', 'focus_absolute')
+EDITABLE = ('auto', 'balanced', 'low_light', 'motion', 'bright_day', 'close_faces', 'custom')   # Profiles whose values can be fine-tuned.
 
 AUTO = {'auto_exposure': 3, 'exposure_dynamic_framerate': 0, 'white_balance_automatic': 1, 'focus_automatic_continuous': 1, 'gain': 0,
         'sharpness': 128, 'brightness': 128, 'contrast': 128, 'saturation': 128, 'backlight_compensation': 0, 'power_line_frequency': 2}
@@ -27,17 +28,17 @@ MANUAL = {'auto_exposure': 1, 'exposure_dynamic_framerate': 0, 'white_balance_au
           'power_line_frequency': 2, 'saturation': 128, 'backlight_compensation': 0, 'brightness': 128, 'contrast': 128}
 
 PROFILES = {
-    'keep': {'label': 'Não mexer (como a câmera está)', 'description': 'O programa não altera nenhum ajuste da câmera.', 'controls': {}},
-    'auto': {'label': 'Automático (padrão da câmera)', 'description': 'Exposição, foco e balanço de branco automáticos. Em pouca luz a câmera reduz os quadros por segundo.', 'controls': AUTO},
+    'keep': {'label': 'Não mexer', 'description': 'O programa não altera nenhum ajuste: a câmera fica como está.', 'controls': {}},
+    'auto': {'label': 'Automático', 'description': 'Padrão da câmera: exposição, foco e balanço de branco automáticos. Em pouca luz a câmera reduz os quadros por segundo.', 'controls': AUTO},
     'balanced': {'label': 'Manual equilibrado', 'description': 'Exposição fixa média, ganho moderado, foco fixo para 1 a 3 m. Bom ponto de partida para a cozinha.',
                  'controls': {**MANUAL, 'exposure_time_absolute': 200, 'gain': 140, 'sharpness': 110, 'focus_absolute': 30}},
-    'low_light': {'label': 'Pouca luz (o seu teste)', 'description': 'Exposição longa e ganho no máximo: clareia bastante, mas tem ruído e borra quem anda. Foco no infinito.',
+    'low_light': {'label': 'Pouca luz', 'description': 'Exposição longa e ganho no máximo: clareia bastante, mas tem ruído e borra quem anda. Foco no infinito.',
                   'controls': {**MANUAL, 'exposure_time_absolute': 333, 'gain': 255, 'sharpness': 100, 'focus_absolute': 0}},
-    'motion': {'label': 'Anti-borrão (quem anda)', 'description': 'Exposição curta para congelar o movimento, com ganho alto para compensar. Pede um ambiente razoavelmente iluminado.',
+    'motion': {'label': 'Anti-borrão', 'description': 'Bom para quem anda: exposição curta para congelar o movimento, com ganho alto para compensar. Pede um ambiente razoavelmente iluminado.',
                'controls': {**MANUAL, 'exposure_time_absolute': 120, 'gain': 200, 'sharpness': 120, 'focus_absolute': 30}},
     'bright_day': {'label': 'Dia claro', 'description': 'Exposição bem curta e ganho baixo: imagem limpa e sem ruído quando há muita luz.',
                    'controls': {**MANUAL, 'exposure_time_absolute': 60, 'gain': 40, 'sharpness': 128, 'focus_absolute': 30}},
-    'close_faces': {'label': 'Rostos próximos (exposição automática)', 'description': 'A câmera decide a exposição; o foco fica fixo para perto (cerca de 1 m), sem “caçar” foco.',
+    'close_faces': {'label': 'Rostos próximos', 'description': 'A câmera decide a exposição; o foco fica fixo para perto (cerca de 1 m), sem “caçar” foco.',
                     'controls': {**AUTO, 'focus_automatic_continuous': 0, 'focus_absolute': 50, 'sharpness': 115}},
     'custom': {'label': 'Personalizado', 'description': 'Os valores dos controles deslizantes abaixo.', 'controls': {}},
 }
@@ -53,10 +54,20 @@ def clean(values):
     return out
 
 
-def controls_for(profile, custom=None):
+def controls_for(profile, custom=None, presets=None):
+    """The values of a profile: its own, with the fine-tuning saved for it (`presets`) on top; \"custom\" is whatever was set by hand."""
     if profile == 'custom':
         return {**MANUAL, **clean(custom)}
-    return dict(PROFILES.get(profile, PROFILES['keep'])['controls'])
+    base = dict(PROFILES.get(profile, PROFILES['keep'])['controls'])
+    if profile in EDITABLE:
+        base.update(clean((presets or {}).get(profile)))
+    return base
+
+
+def fine_tuning(profile, values):
+    """What to store for a profile after editing: only the values that differ from the profile's own (empty = back to the default)."""
+    base = PROFILES[profile]['controls']
+    return {name: value for name, value in clean(values).items() if name in CUSTOM_KEYS and base.get(name) != value}
 
 
 def device_of(source):

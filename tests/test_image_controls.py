@@ -51,5 +51,21 @@ class ImageControlsTests(unittest.TestCase):
         self.assertEqual(ic.controls_for('keep'), {})
 
 
+    def test_fine_tuning_overrides_a_profile_and_only_the_changes_are_kept(self):
+        base = ic.PROFILES['balanced']['controls']
+        tuned = ic.fine_tuning('balanced', {**base, 'gain': 170, 'sharpness': 110})
+        self.assertEqual(tuned, {'gain': 170})                      # Sharpness equals the profile's own: nothing to store.
+        self.assertEqual(ic.controls_for('balanced', presets={'balanced': tuned})['gain'], 170)
+        self.assertEqual(ic.controls_for('balanced', presets={'balanced': tuned})['exposure_time_absolute'], 200)
+        self.assertEqual(ic.controls_for('motion', presets={'balanced': tuned})['gain'], 200)   # Other profiles are untouched.
+        self.assertEqual(ic.fine_tuning('balanced', base), {})                                  # Back to the default.
+        self.assertEqual(ic.controls_for('keep', presets={'keep': {'gain': 1}}), {})
+
+    def test_settings_keep_only_valid_fine_tuning(self):
+        from app.config import CameraSettings
+        settings = CameraSettings(image_presets={'balanced': {'gain': 999, 'bogus': 1}, 'keep': {'gain': 5}, 'nope': {'gain': 5}, 'motion': {}})
+        self.assertEqual(settings.image_presets, {'balanced': {'gain': 255}})
+
+
 if __name__ == '__main__':
     unittest.main()

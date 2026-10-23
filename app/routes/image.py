@@ -21,6 +21,7 @@ class Rule(BaseModel):
 class ImageProfile(BaseModel):
     profile: str = Field(pattern=PROFILE)
     custom: dict[str, int] = Field(default_factory=dict)
+    values: dict[str, int] | None = None   # The sliders of the profile being edited.
     save: bool = False
     mode: str | None = Field(default=None, pattern='^(fixed|schedule|adaptive)$')
     schedule: list[Rule] | None = Field(default=None, max_length=8)
@@ -36,6 +37,7 @@ def build(config, cameras):
         device = image_controls.device_of(settings.camera_source)
         worker = cameras.get(camera_id)
         return {'supported': bool(device) and image_controls.available(), 'profile': settings.image_profile, 'custom': settings.image_custom,
+                'presets': settings.image_presets, 'base': {key: image_controls.PROFILES[key]['controls'] for key in image_controls.EDITABLE if key != 'custom'},
                 'mode': settings.image_mode, 'schedule': [r.model_dump() for r in settings.image_schedule], 'ladder': settings.image_ladder,
                 'active': worker.image_active, 'luma': worker.image_luma and round(worker.image_luma),
                 'profiles': [{'id': key, **{k: v for k, v in value.items() if k != 'controls'}} for key, value in image_controls.PROFILES.items()],
@@ -54,11 +56,18 @@ def build(config, cameras):
             raise HTTPException(409, 'Os ajustes de imagem só funcionam com uma câmera USB deste computador.')
         if not image_controls.available():
             raise HTTPException(503, 'O programa v4l2-ctl não está instalado neste computador.')
-        controls = image_controls.controls_for(body.profile, body.custom)
+        custom, presets = dict(body.custom), dict(settings.image_presets)
+        if body.values is not None:
+            if body.profile == 'custom':
+                custom = body.values
+            elif body.profile in image_controls.EDITABLE:
+                tuned = image_controls.fine_tuning(body.profile, body.values)
+                presets = {**{k: v for k, v in presets.items() if k != body.profile}, **({body.profile: tuned} if tuned else {})}
+        controls = image_controls.controls_for(body.profile, custom, presets)
         worker = cameras.get(camera_id)
         applied = await run_in_threadpool(image_controls.apply, settings.camera_source, controls)
         if body.save:
-            changes = {'image_profile': body.profile, 'image_custom': image_controls.clean(body.custom)}
+            changes = {'image_profile': body.profile, 'image_custom': image_controls.clean(custom), 'image_presets': presets}
             if body.mode is not None:
                 changes['image_mode'] = body.mode
             if body.schedule is not None:

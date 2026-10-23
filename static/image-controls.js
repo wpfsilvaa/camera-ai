@@ -1,22 +1,36 @@
 // Picture profiles of a USB camera: a live preview, try a profile right now, and choose how it is picked (always the same, by the hour, or by brightness).
 (() => {
-  const LABELS = {exposure_time_absolute: 'Exposição', gain: 'Ganho', sharpness: 'Nitidez', brightness: 'Brilho', contrast: 'Contraste', focus_absolute: 'Foco (0 = longe)'};
+  const LABELS = {exposure_time_absolute: 'Exposição', gain: 'Ganho', sharpness: 'Nitidez', brightness: 'Brilho', contrast: 'Contraste', saturation: 'Saturação', focus_absolute: 'Foco (0 = longe)'};
   const HELP = {fixed: 'O perfil escolhido abaixo fica sempre ligado.', schedule: 'Um perfil para cada faixa de horas (por exemplo, noite, manhã e tarde).', adaptive: 'A câmera troca de perfil sozinha conforme a imagem fica mais clara ou mais escura.'};
   const RUNGS = ['Cena muito clara', 'Cena média', 'Cena escura'];
   let state = null, rules = [], ladder = [], dirty = false;
 
-  const profileOptions = selected => state.profiles.map(p => `<option value="${p.id}" ${p.id === selected ? 'selected' : ''}>${escapeHTML(p.label)}</option>`).join('');
+  const edited = id => Boolean(state.presets && state.presets[id] && Object.keys(state.presets[id]).length);
+  const profileOptions = selected => state.profiles.map(p => `<option value="${p.id}" ${p.id === selected ? 'selected' : ''}>${escapeHTML(p.label)}${edited(p.id) ? ' ✎' : ''}</option>`).join('');
   const hourOptions = selected => Array.from({length: 24}, (_, h) => `<option value="${h}" ${h === selected ? 'selected' : ''}>${String(h).padStart(2, '0')}h</option>`).join('');
-  const customValues = () => Object.fromEntries([...document.querySelectorAll('#image-custom input[type=range]')].map(input => [input.dataset.key, Number(input.value)]));
+  const sliderValues = () => Object.fromEntries([...document.querySelectorAll('#image-custom input[type=range]')].map(input => [input.dataset.key, Number(input.value)]));
 
-  function renderCustom() {
-    const box = $('#image-custom');
-    box.classList.toggle('hidden', $('#image-profile').value !== 'custom');
-    if (box.dataset.ready) return;
-    box.dataset.ready = '1';
-    const start = {...(state.current || {}), ...(state.custom || {})};
-    box.innerHTML = Object.entries(state.custom_keys).map(([key, [low, high]]) => `<label class="image-slider">${LABELS[key] || key}<span><input type="range" min="${low}" max="${high}" step="${key === 'focus_absolute' ? 5 : 1}" value="${start[key] ?? low}" data-key="${key}"><output>${start[key] ?? low}</output></span></label>`).join('');
+  // Sliders of the selected profile: its own values with the saved fine-tuning on top (or the hand-made "custom" set).
+  let tuneOpen = false;
+  function profileValues(id, original = false) {
+    const keys = Object.keys(state.custom_keys), now = state.current || {};
+    const own = id === 'custom' ? (state.custom || {}) : {...(state.base[id] || {}), ...(original ? {} : (state.presets[id] || {}))};
+    return Object.fromEntries(keys.map(key => [key, own[key] ?? now[key] ?? state.custom_keys[key][0]]));
   }
+  function renderCustom(force = false) {
+    const id = $('#image-profile').value, box = $('#image-custom');
+    const show = id !== 'keep' && (id === 'custom' || tuneOpen);
+    box.classList.toggle('hidden', !show);
+    $('#image-tune').classList.toggle('hidden', id === 'keep' || id === 'custom');
+    $('#image-tune').textContent = tuneOpen ? 'Fechar o ajuste dos valores' : 'Ajustar os valores deste perfil';
+    if (!show || (box.dataset.ready === id && !force)) return;
+    box.dataset.ready = id;
+    const values = profileValues(id);
+    const note = id === 'auto' || id === 'close_faces' ? '<p class="muted small">Com a exposição automática, exposição e ganho são decididos pela câmera.</p>' : '';
+    box.innerHTML = note + Object.entries(state.custom_keys).map(([key, [low, high]]) => `<label class="image-slider">${LABELS[key] || key}<span><input type="range" min="${low}" max="${high}" step="${key === 'focus_absolute' ? 5 : 1}" value="${values[key]}" data-key="${key}"><output>${values[key]}</output></span></label>`).join('')
+      + (id === 'custom' ? '' : '<button type="button" class="text-button" id="image-reset">Restaurar o padrão deste perfil</button>');
+  }
+  const editorOpen = () => !$('#image-custom').classList.contains('hidden');
   document.addEventListener('input', event => {
     const slider = event.target.closest?.('#image-custom input[type=range]');
     if (slider) slider.nextElementSibling.textContent = slider.value;
@@ -75,9 +89,16 @@
   window.addEventListener('hashchange', () => setTimeout(previewTick, 100));
 
   const touch = () => { dirty = true; };
-  $('#image-profile')?.addEventListener('change', () => { touch(); if (state) paint(); });
+  $('#image-profile')?.addEventListener('change', () => { touch(); tuneOpen = false; if (state) paint(); });
   $('#image-mode')?.addEventListener('change', () => { touch(); paintMode(); });
   $('#image-custom')?.addEventListener('input', touch);
+  $('#image-custom')?.addEventListener('click', event => {
+    if (!event.target.closest('#image-reset')) return;
+    const original = profileValues($('#image-profile').value, true);
+    document.querySelectorAll('#image-custom input[type=range]').forEach(input => { input.value = original[input.dataset.key]; input.nextElementSibling.textContent = input.value; });
+    touch();
+  });
+  $('#image-tune')?.addEventListener('click', () => { tuneOpen = !tuneOpen; renderCustom(); });
   $('#image-rules')?.addEventListener('change', event => {
     const field = event.target.dataset.field, row = event.target.closest('[data-rule]');
     if (field && row) { rules[Number(row.dataset.rule)][field] = field === 'profile' ? event.target.value : Number(event.target.value); touch(); }
@@ -91,9 +112,10 @@
 
   const send = (button, save) => action(button, async () => {
     const profile = $('#image-profile').value;
-    state = await api(cameraPath('/api/camera/image'), {method: 'POST', body: JSON.stringify({profile, custom: profile === 'custom' ? customValues() : {}, save,
+    state = await api(cameraPath('/api/camera/image'), {method: 'POST', body: JSON.stringify({profile, custom: {}, save, ...(editorOpen() ? {values: sliderValues()} : {}),
       ...(save ? {mode: $('#image-mode').value, schedule: rules, ladder} : {})})});
     if (save) dirty = false;
+    $('#image-custom').dataset.ready = '';
     paint();
     toast(save ? 'Salvo. As regras serão aplicadas toda vez que a câmera abrir.' : `Perfil aplicado na câmera (${state.applied} ajustes). As regras automáticas ficam pausadas por 2 minutos.`);
   });

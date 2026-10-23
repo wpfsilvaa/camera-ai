@@ -79,6 +79,7 @@ class CameraSettings(BaseModel):
     image_mode: str = Field(default='fixed', pattern='^(fixed|schedule|adaptive)$')   # fixed: image_profile; schedule: by the hour; adaptive: by the brightness of the picture.
     image_schedule: list[ImageRule] = Field(default_factory=list, max_length=8)
     image_ladder: list[str] = Field(default_factory=lambda: ['bright_day', 'balanced', 'low_light'], min_length=2, max_length=5)
+    image_presets: dict[str, dict[str, int]] = Field(default_factory=dict)   # Fine-tuning of the profiles: only the values changed from the profile's own.
     image_custom: dict[str, int] = Field(default_factory=dict)   # Values of the "custom" profile.
     show_skeleton: bool = False   # Draw limbs and head direction on the live picture (uses the pose model).
     restricted_floor: list[list[float]] = Field(default_factory=list, max_length=10)   # Strips of floor in front of the area: the person's feet must be on one of them.
@@ -118,6 +119,12 @@ class CameraSettings(BaseModel):
             if len(zone) != 4 or not all(0 <= v <= 1 for v in zone) or zone[0] >= zone[2] or zone[1] >= zone[3]:
                 raise ValueError('Área marcada inválida.')
         return [[round(v, 4) for v in zone] for zone in zones]
+
+    @field_validator('image_presets')
+    @classmethod
+    def presets_valid(cls, presets):
+        from .image_controls import EDITABLE, clean
+        return {name: clean(values) for name, values in presets.items() if name in EDITABLE and name != 'custom' and clean(values)}
 
     @field_validator('image_ladder')
     @classmethod

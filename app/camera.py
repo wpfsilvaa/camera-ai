@@ -111,7 +111,7 @@ class LiveFrames:
 
 
 def current_profile(settings):
-    return image_controls.controls_for(settings.image_profile,settings.image_custom)
+    return image_controls.controls_for(settings.image_profile,settings.image_custom,settings.image_presets)
 
 
 def wanted_profile(settings, hour, ladder=None):
@@ -268,7 +268,7 @@ class CameraWorker:
         profile=wanted_profile(settings,datetime.now(TZ).hour,self.image_ladder)
         if profile!=self.image_active:
             try:
-                image_controls.apply(source,image_controls.controls_for(profile,settings.image_custom))
+                image_controls.apply(source,image_controls.controls_for(profile,settings.image_custom,settings.image_presets))
                 log.info('Perfil de imagem da câmera %s: %s (brilho %.0f)',self.camera_id,profile,self.image_luma)
             except Exception:
                 log.exception('Falha ao aplicar o perfil de imagem da câmera')
