@@ -325,3 +325,11 @@ dialog .dialog-heading{position:sticky;top:0;z-index:5;background:var(--surface)
 .image-rule{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .image-rule select{width:auto;min-width:84px}
 .image-rule .rung{min-width:130px;font-size:12px;font-weight:600}
+
+/* Focus assist: live sharpness meter and the calibrate button. */
+.focus-row{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.focus-meter{flex:1;min-width:220px}
+.focus-bar{position:relative;height:10px;border-radius:6px;background:var(--surface-2);overflow:hidden}
+.focus-bar i{display:block;height:100%;width:0;background:var(--green-ink,#3f9a62);transition:width .25s}
+.focus-numbers{display:flex;gap:10px;align-items:baseline;margin-top:4px}
+.focus-numbers strong{font-size:20px;font-variant-numeric:tabular-nums;min-width:44px}

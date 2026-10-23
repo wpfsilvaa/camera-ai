@@ -121,4 +121,50 @@
   });
   $('#image-test')?.addEventListener('click', event => send(event.currentTarget, false));
   $('#image-save')?.addEventListener('click', event => send(event.currentTarget, true));
+
+  // Live sharpness (higher = sharper) and the assisted focus sweep.
+  let peak = 0, peakAt = 0, calibrating = false;
+  async function focusTick() {
+    if (activePage !== 'settings' || document.hidden || !state?.supported) return;
+    let data;
+    try { data = await api(cameraPath('/api/camera/focus')); } catch { return; }
+    const now = Date.now();
+    if (data.score != null) {
+      if (data.score >= peak || now - peakAt > 60000) { peak = data.score; peakAt = now; }
+      $('#focus-score').textContent = data.score;
+      $('#focus-fill').style.width = `${Math.min(100, data.score / Math.max(peak, 1) * 100)}%`;
+      $('#focus-info').textContent = `medindo ${data.region === 'pessoa' ? 'a pessoa na imagem' : 'o centro da imagem'} · pico recente ${peak}`;
+    } else $('#focus-info').textContent = 'Aguardando imagem da câmera…';
+    $('#focus-calibrate').disabled = data.calibrating;
+    if (data.calibrating) {
+      calibrating = true;
+      $('#focus-result').textContent = `Calibrando o foco… ${data.progress[0]} de ${data.progress[1]}. Fique parado(a) na frente da câmera e não mexa nos ajustes.`;
+    } else if (calibrating) {
+      calibrating = false;
+      showSweep(data.result);
+    }
+  }
+  function showSweep(result) {
+    const box = $('#focus-result');
+    if (!result) return;
+    if (result.error) { box.textContent = `A calibração falhou: ${result.error}`; return; }
+    if (result.best == null) { box.textContent = 'Não consegui ler a nitidez. Confira se a câmera está mostrando imagem e tente de novo.'; return; }
+    const where = result.region === 'pessoa' ? 'a pessoa na frente da câmera' : 'o centro da imagem (nenhuma pessoa detectada)';
+    if (!result.clear) {
+      box.textContent = `Não achei um ponto de foco claramente melhor (medindo ${where}). O foco voltou para ${result.applied ?? 'onde estava'}. Fique em pé, parado(a), no lugar de costume e tente de novo; com pouca luz ou muito ruído o resultado fica incerto.`;
+      return;
+    }
+    box.textContent = `Melhor foco: ${result.best} (nitidez ${Math.round(result.best_score)}, medindo ${where}).${result.before != null ? ` Antes: ${result.before}.` : ''} Já está aplicado na câmera. Para guardar, salve o perfil com o foco manual (o ajuste de foco abaixo já veio preenchido).`;
+    tuneOpen = true;
+    dirty = true;
+    renderCustom(true);
+    const slider = document.querySelector('#image-custom input[data-key=focus_absolute]');
+    if (slider) { slider.value = result.best; slider.nextElementSibling.textContent = result.best; }
+  }
+  $('#focus-calibrate')?.addEventListener('click', event => action(event.currentTarget, async () => {
+    $('#focus-result').textContent = 'Iniciando a calibração…';
+    await api(cameraPath('/api/camera/focus/calibrate'), {method: 'POST'});
+    calibrating = true;
+  }));
+  setInterval(focusTick, 900);
 })();
