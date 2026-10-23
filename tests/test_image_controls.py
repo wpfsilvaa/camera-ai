@@ -67,5 +67,46 @@ class ImageControlsTests(unittest.TestCase):
         self.assertEqual(settings.image_presets, {'balanced': {'gain': 255}})
 
 
+class FocusTests(unittest.TestCase):
+    def curve(self, peak):
+        """Sharpness by focus position: a hill around `peak`."""
+        return lambda position: 100 + 400 * max(0, 1 - abs(position - peak) / 70)
+
+    def run_sweep(self, peak, noisy=False):
+        from app.focus import Sweep
+        state = {'position': 0}
+        sharp = self.curve(peak)
+        read = (lambda window: [100.0, 101.0, 99.0]) if noisy else (lambda window: [sharp(state['position'])] * 4)
+        sweep = Sweep(lambda position: state.update(position=position), read, sleep=lambda seconds: None)
+        return sweep.run()
+
+    def test_finds_the_sharpest_position(self):
+        result = self.run_sweep(peak=130)
+        self.assertEqual(result['best'], 130)
+        self.assertTrue(result['clear'])
+        self.assertGreater(len(result['scores']), 12)       # Coarse pass plus the fine one around the best.
+
+    def test_a_flat_curve_has_no_clear_peak(self):
+        result = self.run_sweep(peak=0, noisy=True)
+        self.assertFalse(result['clear'])
+
+    def test_not_enough_readings_leaves_no_score(self):
+        from app.focus import Sweep
+        sweep = Sweep(lambda position: None, lambda window: [5.0], sleep=lambda seconds: None)
+        self.assertEqual(sweep.run()['best'], None)
+
+    def test_sharpness_is_higher_for_a_detailed_region_than_a_blurred_one(self):
+        import cv2
+        import numpy as np
+        from app.focus import region_sharpness
+        rng = np.random.default_rng(1)
+        detailed = (rng.random((360, 640, 3)) * 255).astype(np.uint8)
+        blurred = cv2.GaussianBlur(detailed, (0, 0), 6)
+        sharp, region = region_sharpness(detailed, [])
+        self.assertEqual(region, 'centro')
+        self.assertGreater(sharp, 10 * region_sharpness(blurred, [])[0])
+        self.assertEqual(region_sharpness(detailed, [[100, 50, 300, 300]])[1], 'pessoa')
+
+
 if __name__ == '__main__':
     unittest.main()

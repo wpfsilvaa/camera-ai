@@ -12,7 +12,7 @@ from . import detectors
 from .db import TZ
 from .pacing import FORCE_SECONDS, SENTINEL_FORCE_SECONDS, analysis_wanted, in_window, preview_due
 from .sources import local_device
-from . import image_auto, image_controls
+from . import focus, image_auto, image_controls
 from .config import CLIPS, DATA, CAMERA_FIELDS
 os.environ.setdefault('YOLO_CONFIG_DIR', str(DATA / 'ultralytics'))
 os.environ.setdefault('OPENCV_FFMPEG_CAPTURE_OPTIONS', 'rtsp_transport;tcp')
@@ -127,6 +127,9 @@ class CameraWorker:
     watchers=staticmethod(lambda: 1)   # How many people are watching this camera's live picture (set by the manager); 1 = always draw it.
     image_active=None     # Picture profile applied to the USB camera by this worker (None until the first check).
     image_checked=None
+    focus_probe_until=0.0    # While in the future the sharpness of the picture is measured (someone is looking at it).
+    focus_scores=None        # Recent (time, sharpness) readings.
+    focus_region=''
     image_hold=0.0
     image_luma=None
     image_ladder=None
@@ -249,6 +252,17 @@ class CameraWorker:
                 except Exception:
                     log.exception('Falha ao medir a ida à área restrita')
             self.area_seen[index]=now
+
+    def measure_focus(self, frame, boxes, now):
+        """Sharpness of the person (or the middle of the picture), a few times a second, only while somebody is looking at it."""
+        if self.focus_scores is None:
+            self.focus_scores=deque(maxlen=60)
+        if self.focus_scores and now-self.focus_scores[-1][0]<.12:
+            return
+        found=focus.region_sharpness(frame,boxes)
+        if found:
+            self.focus_scores.append((now,found[0]))
+            self.focus_region=found[1]
 
     def manage_image(self, frame, now, settings, source):
         """USB camera picture profile: apply the one the mode asks for (by the hour, or by the brightness); checked every few seconds."""
@@ -591,6 +605,8 @@ class CameraWorker:
                         inference_ms=last_inference_ms
                         labels=self.recognition.labels(ids,boxes,now,current.face_hold_seconds) if current.recognition_enabled else {}
                     latest_time=now
+                    if time.time()<self.focus_probe_until:
+                        self.measure_focus(original,detected_boxes,time.time())
                     if local and (current.image_mode!='fixed' or current.image_profile!='keep'):
                         self.manage_image(original,now,current,source)
                     annotated=annotate(original,boxes,ids,labels,lying) if analysis_active else original
