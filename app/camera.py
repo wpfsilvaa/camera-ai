@@ -12,7 +12,7 @@ from . import detectors
 from .db import TZ
 from .pacing import FORCE_SECONDS, SENTINEL_FORCE_SECONDS, analysis_wanted, in_window, preview_due
 from .sources import local_device
-from . import image_controls
+from . import image_auto, image_controls
 from .config import CLIPS, DATA, CAMERA_FIELDS
 os.environ.setdefault('YOLO_CONFIG_DIR', str(DATA / 'ultralytics'))
 os.environ.setdefault('OPENCV_FFMPEG_CAPTURE_OPTIONS', 'rtsp_transport;tcp')
@@ -114,8 +114,22 @@ def current_profile(settings):
     return image_controls.controls_for(settings.image_profile,settings.image_custom)
 
 
+def wanted_profile(settings, hour, ladder=None):
+    """The picture profile that should be active now, by the chosen mode."""
+    if settings.image_mode=='schedule':
+        return image_auto.scheduled_profile([r.model_dump() for r in settings.image_schedule],hour,settings.image_profile)
+    if settings.image_mode=='adaptive' and ladder is not None:
+        return ladder.profile
+    return settings.image_profile
+
+
 class CameraWorker:
     watchers=staticmethod(lambda: 1)   # How many people are watching this camera's live picture (set by the manager); 1 = always draw it.
+    image_active=None     # Picture profile applied to the USB camera by this worker (None until the first check).
+    image_checked=None
+    image_hold=0.0
+    image_luma=None
+    image_ladder=None
     open_visits=None      # Per worker once used: area index -> the visit being measured.
     on_visit_time=None    # Called with (visit id, seconds so far) while a visit to a restricted area lasts.
 
@@ -235,6 +249,31 @@ class CameraWorker:
                 except Exception:
                     log.exception('Falha ao medir a ida à área restrita')
             self.area_seen[index]=now
+
+    def manage_image(self, frame, now, settings, source):
+        """USB camera picture profile: apply the one the mode asks for (by the hour, or by the brightness); checked every few seconds."""
+        if self.image_checked is not None and now-self.image_checked<5:
+            return
+        if time.time()<self.image_hold:
+            return   # Someone is trying a profile by hand: leave the picture alone for a while.
+        self.image_checked=now
+        if settings.image_mode=='fixed' and self.image_active==settings.image_profile:
+            return
+        level=float(cv2.resize(cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY),(32,18),interpolation=cv2.INTER_AREA).mean())
+        self.image_luma=level if self.image_luma is None else self.image_luma*.7+level*.3
+        if self.image_ladder is None or self.image_ladder.profiles!=list(settings.image_ladder):
+            self.image_ladder=image_auto.Ladder(settings.image_ladder,start=self.image_active)
+        if settings.image_mode=='adaptive':
+            self.image_ladder.update(self.image_luma,now)
+        profile=wanted_profile(settings,datetime.now(TZ).hour,self.image_ladder)
+        if profile!=self.image_active:
+            try:
+                image_controls.apply(source,image_controls.controls_for(profile,settings.image_custom))
+                log.info('Perfil de imagem da câmera %s: %s (brilho %.0f)',self.camera_id,profile,self.image_luma)
+            except Exception:
+                log.exception('Falha ao aplicar o perfil de imagem da câmera')
+            self.image_active=profile
+        self.update(image_active=self.image_active,image_luma=round(self.image_luma))
 
     def check_street(self, boxes, ids, labels, frame, now, settings):
         """Street mode: tell the application whether someone nobody recognised is in view."""
@@ -369,11 +408,7 @@ class CameraWorker:
                     raise RuntimeError('Não foi possível abrir a câmera USB. Ela pode estar ausente ou em uso por outro programa (como o MediaMTX).' if local
                                        else 'Não foi possível abrir a câmera. Confira endereço, rede e transmissão.')
                 cap.set(cv2.CAP_PROP_BUFFERSIZE,1)
-                if local and current_profile(settings):
-                    try:
-                        image_controls.apply(source,current_profile(settings))
-                    except Exception:
-                        log.exception('Falha ao aplicar o perfil de imagem da câmera')
+                self.image_active=self.image_checked=None   # A freshly opened camera gets its profile applied again.
                 source_fps=cap.get(cv2.CAP_PROP_FPS)
                 if not np.isfinite(source_fps) or source_fps<1 or source_fps>120:
                     source_fps=30
@@ -556,6 +591,8 @@ class CameraWorker:
                         inference_ms=last_inference_ms
                         labels=self.recognition.labels(ids,boxes,now,current.face_hold_seconds) if current.recognition_enabled else {}
                     latest_time=now
+                    if local and (current.image_mode!='fixed' or current.image_profile!='keep'):
+                        self.manage_image(original,now,current,source)
                     annotated=annotate(original,boxes,ids,labels,lying) if analysis_active else original
                     if event_id is not None:
                         if current.restricted_enabled and not zone.active:

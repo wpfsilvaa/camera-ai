@@ -28,6 +28,12 @@ PEOPLE.mkdir(exist_ok=True)
 WA_URL = f"http://127.0.0.1:{int(os.environ.get('WA_PORT', '3001'))}"
 
 
+class ImageRule(BaseModel):
+    start: int = Field(ge=0, le=23)
+    end: int = Field(ge=0, le=23)
+    profile: str = Field(pattern='^(keep|auto|balanced|low_light|motion|bright_day|close_faces|custom)$')
+
+
 class CameraSettings(BaseModel):
     camera_source: str = '0'
     camera_name: str = Field(default='Nova câmera', min_length=1, max_length=60)
@@ -70,6 +76,9 @@ class CameraSettings(BaseModel):
     restricted_min_seconds: float = Field(default=3, ge=0, le=30)   # Stay this long in the area before it counts (walking past does not).
     restricted_still: bool = True      # ... and be standing still, not crossing the room.
     image_profile: str = Field(default='keep', pattern='^(keep|auto|balanced|low_light|motion|bright_day|close_faces|custom)$')   # USB camera picture profile, applied each time the camera opens.
+    image_mode: str = Field(default='fixed', pattern='^(fixed|schedule|adaptive)$')   # fixed: image_profile; schedule: by the hour; adaptive: by the brightness of the picture.
+    image_schedule: list[ImageRule] = Field(default_factory=list, max_length=8)
+    image_ladder: list[str] = Field(default_factory=lambda: ['bright_day', 'balanced', 'low_light'], min_length=2, max_length=5)
     image_custom: dict[str, int] = Field(default_factory=dict)   # Values of the "custom" profile.
     show_skeleton: bool = False   # Draw limbs and head direction on the live picture (uses the pose model).
     restricted_floor: list[list[float]] = Field(default_factory=list, max_length=10)   # Strips of floor in front of the area: the person's feet must be on one of them.
@@ -109,6 +118,14 @@ class CameraSettings(BaseModel):
             if len(zone) != 4 or not all(0 <= v <= 1 for v in zone) or zone[0] >= zone[2] or zone[1] >= zone[3]:
                 raise ValueError('Área marcada inválida.')
         return [[round(v, 4) for v in zone] for zone in zones]
+
+    @field_validator('image_ladder')
+    @classmethod
+    def ladder_valid(cls, ladder):
+        known = {'keep', 'auto', 'balanced', 'low_light', 'motion', 'bright_day', 'close_faces', 'custom'}
+        if any(name not in known for name in ladder):
+            raise ValueError('Perfil de imagem desconhecido na escada de luminosidade.')
+        return ladder
 
     @field_validator('restricted_zone_names')
     @classmethod

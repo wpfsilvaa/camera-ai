@@ -858,7 +858,7 @@ def author_renamed(user_id, name):
 app.include_router(auth_routes.build(auth, on_profile=author_renamed))
 app.include_router(people_routes.build(recognition, learning, on_forget=avatars.delete))
 app.include_router(cleanup_routes.build(gallery_cleanup))
-app.include_router(image_routes.build(config))
+app.include_router(image_routes.build(config, cameras))
 app.include_router(alert_routes.build(alerts, config))
 app.include_router(backup_routes.build(backups))
 app.include_router(intercom_routes.build(config))

@@ -317,3 +317,11 @@ dialog .dialog-heading{position:sticky;top:0;z-index:5;background:var(--surface)
 .image-slider input[type=range]{flex:1;min-height:0;padding:0}
 .image-slider output{min-width:36px;text-align:right;font-variant-numeric:tabular-nums}
 .image-actions{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+
+.image-preview{border-radius:10px;overflow:hidden;background:#172d25;aspect-ratio:16/9;display:grid;place-items:center;max-width:640px}
+.image-preview img{width:100%;height:100%;object-fit:contain;display:block}
+.image-preview img:not([src]){display:none}
+.image-rules{display:grid;gap:8px;margin:8px 0}
+.image-rule{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.image-rule select{width:auto;min-width:84px}
+.image-rule .rung{min-width:130px;font-size:12px;font-weight:600}
