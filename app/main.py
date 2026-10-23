@@ -832,14 +832,19 @@ async def stream(request: Request, camera_id: str = 'main'):
     async def frames():
         previous = -1
         with viewers.watch(camera_id):
-            while not await request.is_disconnected() and not worker.stop_event.is_set():
+            rounds = 0
+            while not worker.stop_event.is_set():
                 with worker.lock:
                     sequence, jpeg = worker.sequence, worker.jpeg
                 if jpeg is not None and sequence != previous and worker.snapshot()['state'] == 'online':
                     previous = sequence
                     yield b'--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ' + str(len(jpeg)).encode() + b'\r\n\r\n' + jpeg + b'\r\n'
-                # Each viewer reads the latest frame; a slow client cannot queue old images.
-                await asyncio.sleep(.005)
+                # Each viewer reads the latest frame; a slow client cannot queue old images. Frames come at most every ~66 ms, so
+                # looking every 20 ms is plenty (the old 5 ms spin cost a whole slice of the event loop per viewer).
+                await asyncio.sleep(.02)
+                rounds += 1
+                if rounds % 25 == 0 and await request.is_disconnected():   # About twice a second.
+                    break
     return StreamingResponse(frames(), media_type='multipart/x-mixed-replace; boundary=frame',
                              headers={'X-Accel-Buffering': 'no'})
 
