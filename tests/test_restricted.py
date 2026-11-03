@@ -207,6 +207,16 @@ class ReminderTests(unittest.TestCase):
         worker.check_restricted(self.Zone(), [AT_FRIDGE], [8], {'8': FATHER}, frame, 2000, off)
         self.assertEqual(len(self.heard), 2)
 
+    def test_always_alert_works_with_the_mode_off(self):
+        worker, frame = self.worker()
+        worker.on_restricted = lambda *args: self.heard.append(('alert', args[3]))
+        always = CameraSettings(restricted_alert_always=True, restricted_zones=FRIDGE, restricted_who='anyone', restricted_min_seconds=0, restricted_still=False)
+        self.assertFalse(always.restricted_enabled)
+        worker.check_restricted(self.Zone(), [AT_FRIDGE], [7], {}, frame, 1000, always)   # Someone nobody recognised.
+        self.assertEqual(self.heard, [('alert', None)])
+        worker.check_restricted(self.Zone(), [AT_FRIDGE], [7], {}, frame, 1100, always.model_copy(update={'restricted_alert_always': False}))
+        self.assertEqual(len(self.heard), 1)
+
 
 class AreaVisitTests(unittest.TestCase):
     """Each named area counts its own visits (fridge and cupboard), a new one after it was empty for a few seconds."""

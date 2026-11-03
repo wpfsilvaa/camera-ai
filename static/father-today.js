@@ -10,7 +10,7 @@ function renderFatherToday(data) {
   $('#father-people').innerHTML = watched.length > 1 ? watched.map(p => `<span class="pill neutral">${escapeHTML(p.name)}: ${p.sightings}</span>`).join(' ') : '';
   $('#father-sightings-times').innerHTML = chips(sightings.map(s => s.started));
   // Every area with visits today, plus the ones named in the settings (so an area nobody used yet still shows 0).
-  const configured = (typeof settings !== 'undefined' && settings?.restricted_enabled ? (settings.restricted_zone_names || []).filter(Boolean) : []);
+  const configured = (typeof settings !== 'undefined' && (settings?.restricted_enabled || settings?.restricted_alert_always) ? (settings.restricted_zone_names || []).filter(Boolean) : []);
   const names = [...new Set([...Object.keys(areas), ...configured])];
   $('#father-areas').innerHTML = names.map(name => `<div class="father-row"><div class="father-count"><strong>${(areas[name] || []).length}</strong><span>idas: ${escapeHTML(name)}</span></div><div class="time-chips area-chips">${chips(areas[name] || [])}</div></div>`).join('');
   const previous = week.slice(0, -1), average = key => Math.round(previous.reduce((sum, day) => sum + day[key], 0) / Math.max(1, previous.length));

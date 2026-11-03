@@ -325,7 +325,7 @@ class CameraWorker:
                 self.on_reminder(self.camera_id,settings.restricted_reminder_text)
             except Exception:
                 log.exception('Falha ao lembrar o pai na área restrita')
-        if not started or not settings.restricted_alert or not self.on_restricted:
+        if not started or not (settings.restricted_alert or settings.restricted_alert_always) or not self.on_restricted:
             return
         name=next((labels.get(str(k),{}).get('name') for k in inside if labels.get(str(k),{}).get('name')),None)
         snapshot=draw_zones(annotate(frame,boxes,ids,labels),settings.restricted_zones,RESTRICTED_COLOR)
@@ -521,7 +521,7 @@ class CameraWorker:
                         want_cuda=settings.device!='cpu' and torch.cuda.is_available()
                         if settings.device=='cuda' and not want_cuda:
                             raise RuntimeError('CUDA solicitado, mas a GPU não está acessível. Verifique o driver ou selecione Auto.')
-                        pose=current.fall_detection_enabled or current.show_skeleton or (current.restricted_enabled and current.restricted_hands)
+                        pose=current.fall_detection_enabled or current.show_skeleton or ((current.restricted_enabled or current.restricted_alert_always) and current.restricted_hands)
                         weights,task,engine,detector_ready=detectors.resolve(current.detector_model,current.detector_engine,pose,settings.detection_size)
                         # ONNX/OpenVINO run on the CPU; only the PyTorch engine uses CUDA.
                         cuda=want_cuda and engine=='pytorch'
@@ -593,7 +593,7 @@ class CameraWorker:
                         labels=self.recognition.labels(ids,boxes,now,current.face_hold_seconds) if current.recognition_enabled else {}
                         if current.street_guard and self.on_street:
                             self.check_street(boxes,ids,labels,original,now,current)
-                        if current.restricted_enabled:
+                        if current.restricted_enabled or current.restricted_alert_always:
                             self.check_restricted(zone,boxes,ids,labels,original,now,current)
                         elif zone.active or zone.candidate is not None:
                             zone=Presence(settings.min_presence_seconds,settings.absence_seconds)
@@ -644,7 +644,7 @@ class CameraWorker:
                             preview=draw_skeleton(preview,self.pose_points,preview.shape[1]/max(1,original.shape[1]))
                         if analysis_active and current.fall_detection_enabled:
                             preview=draw_zones(preview,current.fall_zones)
-                        if analysis_active and current.restricted_enabled:
+                        if analysis_active and (current.restricted_enabled or current.restricted_alert_always):
                             preview=draw_zones(draw_zones(preview,current.restricted_floor,FLOOR_COLOR),current.restricted_zones,RESTRICTED_COLOR)
                         encoded,jpeg=cv2.imencode('.jpg',preview,[cv2.IMWRITE_JPEG_QUALITY,78])
                         if encoded:

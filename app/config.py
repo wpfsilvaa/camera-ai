@@ -73,6 +73,7 @@ class CameraSettings(BaseModel):
     restricted_who: str = 'father'
     restricted_zone_names: list[str] = Field(default_factory=list, max_length=10)   # Name of each restricted area, by position ("Geladeira", "Armário").
     restricted_alert: bool = False
+    restricted_alert_always: bool = False   # Watch the areas and alert on every visit even with restricted mode off (recording is not limited).
     restricted_min_seconds: float = Field(default=3, ge=0, le=30)   # Stay this long in the area before it counts (walking past does not).
     restricted_still: bool = True      # ... and be standing still, not crossing the room.
     image_profile: str = Field(default='keep', pattern='^(keep|auto|balanced|low_light|motion|bright_day|close_faces|custom)$')   # USB camera picture profile, applied each time the camera opens.
