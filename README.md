@@ -148,6 +148,7 @@ docs/         manual, guia do totem, estudos e capturas de tela
 | [docs/manual.md](docs/manual.md) | Manual completo: reconhecimento, gravação, WhatsApp, usuários, queda, backup, Tailscale, vários destinatários, diagnóstico |
 | [docs/totem.md](docs/totem.md) | Tela do notebook: instalação, fotos, recados, sons, noite |
 | [docs/cpu-capacity.md](docs/cpu-capacity.md) | Rodando sem GPU e dimensionamento |
+| [docs/fall-verify.md](docs/fall-verify.md) | Confirmar queda com IA local (experimental, desligado por padrão) |
 | [docs/c920-linux.md](docs/c920-linux.md) | Webcam C920/C922 no Linux (foco, MediaMTX) |
 | [docs/body-recognition-validation.md](docs/body-recognition-validation.md) | Validação do reconhecimento pelo corpo |
 | [docs/ux-estudo.md](docs/ux-estudo.md) | Estudo de interface |

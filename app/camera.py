@@ -13,13 +13,14 @@ from .db import TZ
 from .pacing import FORCE_SECONDS, SENTINEL_FORCE_SECONDS, analysis_wanted, in_window, preview_due
 from .sources import local_device
 from . import focus, image_auto, image_controls
-from .config import CLIPS, DATA, CAMERA_FIELDS
+from .config import CLIPS, DATA, CAMERA_FIELDS, LFM_DIR
 os.environ.setdefault('YOLO_CONFIG_DIR', str(DATA / 'ultralytics'))
 os.environ.setdefault('OPENCV_FFMPEG_CAPTURE_OPTIONS', 'rtsp_transport;tcp')
 
 import cv2
 import numpy as np
 
+from .fall_verify import FallVerifier, crop_person
 from .falls import FallDetector
 from .overlay import annotate, draw_skeleton, draw_zones
 from .pacing import DetectionPacing, MotionGate, Stillness, TouchThrottle
@@ -151,6 +152,8 @@ class CameraWorker:
         self.thread=None
         self.manual_requested=False
         self.falls=FallDetector()
+        self.fall_verifier=FallVerifier(LFM_DIR,int(os.environ.get('LFM_THREADS','2')))
+        self.fall_rearm=[]   # Track ids of suspected falls the model dismissed; re-armed on the next analysed frame.
         # Called with (camera_id, camera_name, jpeg bytes, seconds lying) when a fall is suspected.
         self.on_fall=None
         self.on_presence=None  # Called with (camera_id, camera_name, time) when a presence record starts.
@@ -221,16 +224,40 @@ class CameraWorker:
         points=result.keypoints.data.cpu().numpy()
         keypoints=[points[i] if i<len(points) else None for i in tracker.last_indices]
         height,width=frame.shape[:2]
+        while self.fall_rearm:
+            self.falls.rearm(self.fall_rearm.pop(),now)
         lying,falls=self.falls.update(now,boxes,ids,keypoints,(width,height),settings.fall_zones,settings.fall_seconds)
         if falls and self.on_fall:
             snapshot=annotate(frame,boxes,ids,{},lying)
             encoded,jpeg=cv2.imencode('.jpg',resize_width(snapshot,1280),[cv2.IMWRITE_JPEG_QUALITY,85])
             if encoded:
-                try:
-                    self.on_fall(self.camera_id,settings.camera_name,jpeg.tobytes(),max(lying[k] for k in falls))
-                except Exception:
-                    log.exception('Falha ao registrar possível queda')
+                seconds=max(lying[k] for k in falls)
+                crops=None
+                if settings.fall_verify_enabled and self.fall_verifier.available():
+                    by_id=dict(zip(ids,boxes))
+                    crops=[crop_person(frame,by_id[k]) if k in by_id else None for k in falls]
+                if crops:
+                    # The model takes seconds on a slow CPU: never hold up the detection loop.
+                    threading.Thread(target=self.verify_fall,args=(list(falls),crops,settings.camera_name,jpeg.tobytes(),seconds),daemon=True,name=f'fall-verify-{self.camera_id}').start()
+                else:
+                    self.report_fall(settings.camera_name,jpeg.tobytes(),seconds)
         return lying
+
+    def report_fall(self, camera_name, jpeg, seconds):
+        try:
+            self.on_fall(self.camera_id,camera_name,jpeg,seconds)
+        except Exception:
+            log.exception('Falha ao registrar possível queda')
+
+    def verify_fall(self, keys, crops, camera_name, jpeg, seconds):
+        """Drop the alert only when every flagged box was clearly judged "no person"; otherwise send it as usual."""
+        answers=[self.fall_verifier.has_person(crop) if crop else None for crop in crops]
+        if answers and all(answer is False for answer in answers):
+            log.warning('Câmera %s: possível queda descartada, o modelo não viu pessoa no recorte (caixas %s). Nova checagem após o tempo configurado.',
+                        self.camera_id,keys)
+            self.fall_rearm.append(keys)
+            return
+        self.report_fall(camera_name,jpeg,seconds)
 
     def log_visits(self, now, settings, person, kind='unknown', snapshot=None):
         """One visit per area each time someone goes in after it was empty, so a report can say how often the fridge or the cupboard was opened.

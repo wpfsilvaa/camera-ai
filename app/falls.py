@@ -66,6 +66,13 @@ class FallDetector:
     def reset(self):
         self.tracks.clear()
 
+    def rearm(self, keys, now):
+        """A suspected fall was dismissed: count a full period again before the same track can alert once more."""
+        for key in keys:
+            state = self.tracks.get(key)
+            if state is not None:
+                state['since'], state['alerted'] = now, False
+
     def update(self, now, boxes, ids, keypoints, frame_size, zones, seconds):
         """Return ({track id: seconds lying}, [track ids that just reached the limit])."""
         width, height = frame_size

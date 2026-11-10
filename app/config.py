@@ -20,6 +20,8 @@ CLIPS.mkdir(exist_ok=True)
 MODEL = os.environ.get('YOLO_MODEL', str(ROOT / 'yolo26n.pt'))
 # Same person detection plus body keypoints; used when fall detection is on.
 POSE_MODEL = os.environ.get('POSE_MODEL', str(ROOT / 'yolo26n-pose.pt'))
+# Folder with llama.cpp's llama-mtmd-cli and the LFM2.5-VL-450M GGUF files; used only when "Confirmar queda com IA" is on.
+LFM_DIR = os.environ.get('LFM_DIR', '')
 FACE_DETECTOR = os.environ.get('FACE_DETECTOR', str(ROOT / 'face_detection_yunet_2023mar.onnx'))
 FACE_ENCODER = os.environ.get('FACE_ENCODER', str(ROOT / 'face_recognition_sface_2021dec.onnx'))
 BODY_ENCODER = os.environ.get('REID_MODEL', str(ROOT / 'yolo26n-reid.onnx'))
@@ -230,6 +232,7 @@ class Settings(CameraSettings):
     cameras: list[ExtraCamera] = Field(default_factory=list, max_length=15)
     fall_detection_enabled: bool = False
     fall_seconds: int = Field(default=45, ge=10, le=300)
+    fall_verify_enabled: bool = False   # Ask a small local vision model whether a person is really in the box before alerting.
     # WhatsApp text alerts; zero turns each check off.
     alerts_enabled: bool = False
     inactivity_hours: float = Field(default=4, ge=0, le=24)
