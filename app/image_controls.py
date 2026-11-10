@@ -89,6 +89,11 @@ def available():
 def commands(device, controls):
     """The v4l2-ctl calls that set `controls`: modes first (so exposure and focus values are accepted), then the rest."""
     controls = clean(controls)
+    # The camera refuses (EACCES) a value whose automatic mode is on, and one refusal fails the whole call: leave those out.
+    if controls.get('auto_exposure', 1) != 1:
+        controls.pop('exposure_time_absolute', None)
+    if controls.get('focus_automatic_continuous', 0) == 1:
+        controls.pop('focus_absolute', None)
     first = [f'{name}={controls[name]}' for name in FIRST if name in controls]
     rest = [f'{name}={value}' for name, value in controls.items() if name not in FIRST]
     return [['v4l2-ctl', '-d', device, f'--set-ctrl={",".join(group)}'] for group in (first, rest) if group]

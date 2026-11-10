@@ -43,6 +43,15 @@ class MultiCameraTests(unittest.TestCase):
         self.assertEqual(self.db.history()['events'][0]['camera_id'], 'main')
         self.assertEqual(self.db.history(camera_id=self.extra.id)['total'], 0)
 
+    def test_updating_a_camera_keeps_the_image_schedule_as_models(self):
+        rules = [{'start': 6, 'end': 18, 'profile': 'bright_day'}]
+        self.config.update_camera('main', image_mode='schedule', image_schedule=rules)
+        self.config.update_camera(self.extra.id, image_schedule=rules)
+        for camera in ('main', self.extra.id):
+            schedule = self.config.for_camera(camera).image_schedule
+            self.assertEqual([r.model_dump() for r in schedule], [{**rules[0]}])   # Would fail on plain dicts.
+        self.assertEqual([r.model_dump() for r in self.config.get().image_schedule], rules)
+
     def test_stale_form_and_eof_cannot_overwrite_another_camera(self):
         stale = self.config.for_camera(self.extra.id)
         self.config.update_camera('main', analysis_enabled=False)

@@ -30,6 +30,16 @@ class ImageControlsTests(unittest.TestCase):
         self.assertIn('exposure_time_absolute=200', calls[1][3])
         self.assertNotIn('auto_exposure', calls[1][3])
 
+    def test_values_of_an_automatic_mode_are_left_out_so_the_rest_still_applies(self):
+        tuned = ic.controls_for('auto', presets={'auto': {'exposure_time_absolute': 128, 'focus_absolute': 0, 'gain': 10}})
+        text = ' '.join(call[3] for call in ic.commands('/dev/video2', tuned))
+        self.assertNotIn('exposure_time_absolute', text)
+        self.assertNotIn('focus_absolute', text)
+        self.assertIn('gain=10', text)
+        fixed = ' '.join(call[3] for call in ic.commands('/dev/video2', ic.PROFILES['close_faces']['controls']))
+        self.assertIn('focus_absolute=50', fixed)   # Focus is manual here, so it is kept.
+        self.assertNotIn('exposure_time_absolute', fixed)
+
     def test_device_comes_from_the_source_and_rtsp_has_none(self):
         self.assertEqual(ic.device_of('usb:/dev/v4l/by-id/cam-video-index0?1920x1080@15'), '/dev/v4l/by-id/cam-video-index0')
         self.assertEqual(ic.device_of('0'), '/dev/video0')

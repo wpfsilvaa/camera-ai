@@ -372,14 +372,14 @@ class Config:
         camera = next((c for c in settings.cameras if c.id == camera_id), None)
         if camera is None:
             raise KeyError('Câmera não encontrada.')
-        return settings.model_copy(update=camera.model_dump(exclude={'id'}))
+        return settings.model_copy(update={name: getattr(camera, name) for name in CAMERA_FIELDS})   # Model objects, not dumped dicts: model_copy does not validate.
 
     def update_camera(self, camera_id, **changes):
         with self.lock:
             settings = self.get()
             current = self.for_camera(camera_id)
             validated = CameraSettings.model_validate({**current.model_dump(), **changes})
-            values = validated.model_dump()
+            values = {name: getattr(validated, name) for name in CAMERA_FIELDS}   # Keeps nested models (image_schedule); model_copy would store plain dicts.
             if camera_id == 'main':
                 settings = settings.model_copy(update=values)
             else:
