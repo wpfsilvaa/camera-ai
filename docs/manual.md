@@ -49,6 +49,10 @@ Em **Configurações → Câmera**, **Modelo de detecção** (n, s, m, l: mais p
 
 Em **Endereço da câmera**, além de RTSP, aceita uma câmera USB ligada ao próprio servidor: escolha na lista (por exemplo `usb:/dev/v4l/by-id/...-video-index0`) ou digite `usb:/dev/video0`. Opcionalmente peça tamanho e taxa com `?1280x720@30` (padrão 1920x1080 a 30; usa MJPEG). Lendo direto do USB o servidor evita decodificar o H.264 do RTSP: no notebook da cozinha, 1080p custou cerca de 32% de um núcleo e 720p cerca de 16%. O dispositivo abre em um programa por vez: se o MediaMTX capturar a mesma câmera (caminho `cam`), ele precisa ser desligado, e o vídeo ao vivo do celular sem caixas, que vem dele, deixa de existir. Com câmera local, o monitor do notebook e o interfone passam a usar `127.0.0.1`.
 
+## Análise com todos parados
+
+Em **Configurações → Câmera**, **Quadros analisados com todos parados** (padrão 2). Quando todas as pessoas na imagem ficam paradas por uns 4 segundos (sentadas, na pia), a detecção desacelera para esse valor e **volta ao ritmo normal ao primeiro movimento**. Não desacelera se alguém está deitado ou numa área restrita. Use 0 para desligar.
+
 ## Modo vigia (noite)
 
 Em **Configurações → Câmera → Modo vigia (noite)**, no horário escolhido (padrão 22h às 6h, Brasília) e enquanto não houver ninguém, a câmera é lida em ritmo baixo (padrão 5 quadros por segundo) e só o movimento acorda a análise; uma análise completa ainda roda a cada 30 s. No horário do modo a análise fica armada mesmo que tenha sido pausada na mão. O aviso de presença só sai depois que o detector confirma uma pessoa, pelos aparelhos que ativaram **Avisar quando alguém aparecer**. Com câmera USB o vídeo entre um quadro e outro nem é decodificado; em RTSP o ganho é menor. No notebook da cozinha, parado, o app foi de ~70% para ~40% de um núcleo.
@@ -287,14 +291,30 @@ Com **Usar a rotina aprendida** (padrão), após 7 dias com registros o sistema 
 
 A visão geral mostra a rotina e um gráfico da média de registros por hora nos últimos 28 dias. São estatísticas simples (mediana e percentil 90), recalculadas a cada 10 minutos, sem enviar dados para fora.
 
+## Marcar áreas na imagem (geladeira, chão, cama)
+
+O mesmo editor serve para as **áreas restritas**, a **faixa do chão** e as **áreas ignoradas da queda**. Cada área é um retângulo ou um polígono, então acompanha o ângulo da câmera.
+
+- **Retângulo:** arraste sobre a imagem.
+- **Pontos:** escolha **Pontos** e clique nos cantos (de 3 a 12), na ordem. Feche clicando no primeiro ponto, com duplo clique, com Enter ou em **Concluir**. Para uma geladeira vista de lado, marque os 4 cantos dela. Se os pontos ficarem fora de ordem (a área se cruzaria), o editor os reordena.
+- **Mover:** arraste a área pelo meio. **Deformar:** arraste um canto (um retângulo vira um quadrilátero livre; um canto que faria a área se cruzar volta ao lugar). Duplo clique numa borda adiciona um canto; duplo clique num canto o remove (mínimo 3).
+- **Mover todas:** se a câmera foi mexida, escolha **Mover todas** e arraste a imagem, ou use as setas do teclado (Shift anda mais). As setas movem só a área selecionada fora desse modo.
+- **Desfazer:** botão **Desfazer** ou Ctrl+Z. **Delete** apaga a área selecionada.
+- **Copiar de outra câmera:** com mais de uma câmera, o seletor acrescenta as áreas e os nomes da outra câmera às daqui.
+
+Salve as configurações depois de mexer.
+
 ## Modo restrito (a geladeira, um armário)
 
-Em **Configurações → Câmera → Modo restrito**, desenhe uma área na imagem e escolha **quem a ativa**: o pai, o pai ou uma pessoa
+Em **Configurações → Câmera → Modo restrito: onde e quando**, marque a área na imagem (veja acima) e escolha **quem a ativa**: o pai, o pai ou uma pessoa
 não reconhecida, ou qualquer pessoa. Com o modo ligado, o **vídeo só é gravado enquanto uma pessoa vigiada está dentro da
 área**; nas demais presenças ficam só registros com fotos. Quem já foi reconhecido como outra pessoa (por exemplo, você) não
 ativa a opção "pai ou não reconhecida", então use "qualquer pessoa" para testar.
 
+Os avisos ficam no painel seguinte, **Avisos da área restrita**; o **Modo rua** desta câmera tem painel próprio. Os ajustes finos de quando uma ida conta (tempo mínimo, parada, mão na área) ficam recolhidos em **Ajustes finos**. Se não achar uma opção, use a **busca** no alto das Configurações.
+
 - **Enviar alerta ao entrar na área:** foto e notificação, uma por visita.
+- **Sempre avisar quando alguém entrar na área:** vale **mesmo com o Modo restrito desligado**. A câmera então grava normalmente, como sem o modo, e manda o alerta com foto a cada ida à área; quem dispara é decidido por **Quem ativa a área**.
 - **Enviar pelo WhatsApp:** desligue para receber só as **notificações do painel no celular**. O alerta não vai ao WhatsApp
   e os vídeos gravados por esse modo não entram na fila de envio (ficam no histórico). Ligado (padrão), continua como antes.
 
@@ -309,7 +329,7 @@ Em **Configurações → 06 · Possível queda**, ative **Detectar pessoa deitad
 - O tronco (quadril → ombros) na horizontal indica pessoa deitada. Sem pontos confiáveis, uma silhueta bem mais larga que alta também conta.
 - Deitado por mais que o tempo configurado (padrão 45 s), fora das áreas ignoradas, gera alerta **imediato** com foto no WhatsApp e notificação urgente no app. Um aviso por episódio; levantar-se encerra o episódio.
 - Brechas de até 3 s na detecção não zeram a contagem.
-- **Áreas ignoradas:** desenhe sobre a imagem da câmera os lugares onde deitar é normal (cama, sofá, poltrona). Vale a posição do quadril.
+- **Áreas ignoradas:** marque sobre a imagem da câmera os lugares onde deitar é normal (cama, sofá, poltrona), com retângulos ou polígonos. Vale a posição do quadril.
 
 ### Calibrar na sua câmera
 

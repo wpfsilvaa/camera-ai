@@ -24,4 +24,4 @@ if __name__ == '__main__':
     host = os.environ.get('HOST', '127.0.0.1')
     if host not in ('127.0.0.1', 'localhost', '::1') and not os.environ.get('DASHBOARD_PASSWORD') and not has_users():
         raise SystemExit('Crie um usuário no painel (acessando por localhost) ou defina DASHBOARD_PASSWORD no .env antes de liberar acesso pela rede.')
-    uvicorn.run('app.main:app', host=host, port=int(os.environ.get('PORT', '8000')), workers=1, timeout_graceful_shutdown=10)
+    uvicorn.run('app.main:app', host=host, port=int(os.environ.get('PORT', '8000')), workers=1, timeout_graceful_shutdown=3)   # A browser keeping the live picture open would otherwise hold a restart for the full time.
