@@ -7,7 +7,11 @@ import logging
 import re
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
+
+import httpx
 
 from .sources import local_device
 
@@ -20,7 +24,7 @@ RANGES = {'brightness': (0, 255), 'contrast': (0, 255), 'saturation': (0, 255), 
           'exposure_dynamic_framerate': (0, 1), 'focus_automatic_continuous': (0, 1), 'focus_absolute': (0, 250)}
 FIRST = ('auto_exposure', 'focus_automatic_continuous', 'white_balance_automatic', 'exposure_dynamic_framerate')   # Modes first, then the values they unlock.
 CUSTOM_KEYS = ('exposure_time_absolute', 'gain', 'sharpness', 'brightness', 'contrast', 'saturation', 'focus_absolute')
-EDITABLE = ('auto', 'balanced', 'low_light', 'motion', 'bright_day', 'close_faces', 'custom')   # Profiles whose values can be fine-tuned.
+EDITABLE = ('auto', 'backlit', 'balanced', 'low_light', 'motion', 'bright_day', 'close_faces', 'custom')   # Profiles whose values can be fine-tuned.
 
 AUTO = {'auto_exposure': 3, 'exposure_dynamic_framerate': 0, 'white_balance_automatic': 1, 'focus_automatic_continuous': 1, 'gain': 0,
         'sharpness': 128, 'brightness': 128, 'contrast': 128, 'saturation': 128, 'backlight_compensation': 0, 'power_line_frequency': 2}
@@ -30,6 +34,8 @@ MANUAL = {'auto_exposure': 1, 'exposure_dynamic_framerate': 0, 'white_balance_au
 PROFILES = {
     'keep': {'label': 'Não mexer', 'description': 'O programa não altera nenhum ajuste: a câmera fica como está.', 'controls': {}},
     'auto': {'label': 'Automático', 'description': 'Padrão da câmera: exposição, foco e balanço de branco automáticos. Em pouca luz a câmera reduz os quadros por segundo.', 'controls': AUTO},
+    'backlit': {'label': 'Contraluz', 'description': 'Exposição automática com compensação de contraluz: segura a janela ou a luz forte atrás de quem está na imagem, sem escurecer o rosto. Bom contra janelas.',
+                'controls': {**AUTO, 'backlight_compensation': 1, 'sharpness': 115}},
     'balanced': {'label': 'Manual equilibrado', 'description': 'Exposição fixa média, ganho moderado, foco fixo para 1 a 3 m. Bom ponto de partida para a cozinha.',
                  'controls': {**MANUAL, 'exposure_time_absolute': 200, 'gain': 140, 'sharpness': 110, 'focus_absolute': 30}},
     'low_light': {'label': 'Pouca luz', 'description': 'Exposição longa e ganho no máximo: clareia bastante, mas tem ruído e borra quem anda. Foco no infinito.',
@@ -82,6 +88,34 @@ def device_of(source):
     return f'/dev/video{device}' if isinstance(device, int) else device
 
 
+@dataclass(frozen=True)
+class Remote:
+    """Câmera ligada ao totem (notebook da cozinha): os ajustes vão por HTTP ao monitor, que roda o v4l2-ctl lá."""
+    url: str
+    token: str
+
+
+def target_for(settings):
+    """Onde aplicar os ajustes: o endereço da câmera (USB local), um Remote (a câmera está no totem) ou None."""
+    source = settings.camera_source
+    if device_of(source):
+        return source
+    host = urlsplit(source).hostname if '://' in source else None
+    if not host:
+        return None
+    from .notebook import notebook_token, notebook_url
+    url, token = notebook_url(source, settings.notebook_url), notebook_token()
+    if url and token and urlsplit(url).hostname == host:   # Só se o totem é mesmo o computador que serve esta câmera.
+        return Remote(url.rstrip('/'), token)
+    return None
+
+
+def supported(target):
+    if isinstance(target, Remote):
+        return True
+    return bool(device_of(target)) and available()
+
+
 def available():
     return shutil.which('v4l2-ctl') is not None
 
@@ -101,6 +135,19 @@ def commands(device, controls):
 
 def apply(source, controls):
     """Set the controls on the camera of `source`. Returns how many controls were set (0 when nothing to do)."""
+    if isinstance(source, Remote):
+        controls = clean(controls)
+        if not controls:
+            return 0
+        try:
+            response = httpx.post(f'{source.url}/camera/controls', json={'controls': controls}, headers={'Authorization': f'Bearer {source.token}'}, timeout=15)
+        except httpx.HTTPError:
+            log.warning('Totem inalcançável ao ajustar a imagem da câmera.')
+            return 0
+        if response.status_code != 200:
+            log.warning('O totem recusou os ajustes de imagem: %s', response.text[:200])
+            return 0
+        return int(response.json().get('applied', 0))
     device = device_of(source)
     if not device or not controls or not available():
         return 0
@@ -119,6 +166,12 @@ LINE = re.compile(r'^\s*(\w+)\s+(?:0x[0-9a-f]+\s+)?\(\w+\)\s*:\s*(.*)$')
 
 def read(source):
     """Current values of the camera: {control: value}, or None when it cannot be read."""
+    if isinstance(source, Remote):
+        try:
+            response = httpx.get(f'{source.url}/camera/controls', headers={'Authorization': f'Bearer {source.token}'}, timeout=10)
+            return (response.json().get('values') or None) if response.status_code == 200 else None
+        except (httpx.HTTPError, ValueError):
+            return None
     device = device_of(source)
     if not device or not available():
         return None

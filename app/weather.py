@@ -1,9 +1,13 @@
-"""Weather forecast for the kitchen screen, from Open-Meteo (free, no account or key).
+"""Weather forecast for the kitchen screen, from Open-Meteo.
+
+A API gratuita do Open-Meteo é só para uso NÃO comercial. Em instalações vendidas, contrate o plano comercial e
+defina OPEN_METEO_API_KEY no .env: o módulo passa a usar os endereços "customer-*" com a chave.
 
 Only the chosen city's coordinates leave the house, and only when the feature is switched on. The server
 fetches the forecast every 20 minutes and hands the result to the screen, which therefore needs no internet.
 """
 import logging
+import os
 import threading
 import time
 
@@ -12,6 +16,16 @@ import httpx
 log = logging.getLogger(__name__)
 GEOCODE = 'https://geocoding-api.open-meteo.com/v1/search'
 FORECAST = 'https://api.open-meteo.com/v1/forecast'
+GEOCODE_COMMERCIAL = 'https://customer-geocoding-api.open-meteo.com/v1/search'
+FORECAST_COMMERCIAL = 'https://customer-api.open-meteo.com/v1/forecast'
+
+
+def endpoint(free, commercial):
+    """(url, parâmetros extras): com OPEN_METEO_API_KEY usa o plano comercial; sem ela, a API gratuita (uso não comercial)."""
+    key = os.environ.get('OPEN_METEO_API_KEY', '').strip()
+    return (commercial, {'apikey': key}) if key else (free, {})
+
+
 REFRESH_SECONDS = 20 * 60
 STALE_SECONDS = 3 * 3600
 RETRY_SECONDS = 60   # After a failed fetch wait before asking again (the free service rate-limits).
@@ -38,7 +52,8 @@ def search(query, client=None):
         return []
     owner = client or httpx.Client(timeout=8)
     try:
-        data = owner.get(GEOCODE, params={'name': query, 'count': 6, 'language': 'pt', 'format': 'json'}).json()
+        url, extra = endpoint(GEOCODE, GEOCODE_COMMERCIAL)
+        data = owner.get(url, params={'name': query, 'count': 6, 'language': 'pt', 'format': 'json', **extra}).json()
     finally:
         if client is None:
             owner.close()
@@ -50,8 +65,9 @@ def fetch(lat, lon, now=None, client=None):
     """Current conditions plus today and the next two days, ready for the screen."""
     owner = client or httpx.Client(timeout=10)
     try:
-        data = owner.get(FORECAST, params={
-            'latitude': round(lat, 4), 'longitude': round(lon, 4), 'timezone': 'auto', 'forecast_days': 4,
+        url, extra = endpoint(FORECAST, FORECAST_COMMERCIAL)
+        data = owner.get(url, params={
+            **extra, 'latitude': round(lat, 4), 'longitude': round(lon, 4), 'timezone': 'auto', 'forecast_days': 4,
             'current': 'temperature_2m,weather_code', 'daily': 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max'}).json()
     finally:
         if client is None:

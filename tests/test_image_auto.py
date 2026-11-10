@@ -36,3 +36,22 @@ class LadderTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class BlownHighlightsTests(unittest.TestCase):
+    def test_blown_highlights_step_down_fast_even_with_a_good_mean(self):
+        from app.image_auto import CLIP_CONFIRM_SECONDS, CLIP_LIMIT
+        ladder = Ladder(('bright_day', 'balanced', 'low_light'), start='balanced')
+        self.assertEqual(ladder.update(120, 0, CLIP_LIMIT + .01), 'balanced')
+        self.assertEqual(ladder.update(120, CLIP_CONFIRM_SECONDS - 1, CLIP_LIMIT + .01), 'balanced')
+        self.assertEqual(ladder.update(120, CLIP_CONFIRM_SECONDS, CLIP_LIMIT + .01), 'bright_day')   # Bem antes dos 90 s normais.
+
+    def test_blown_does_not_also_ask_for_more_exposure(self):
+        ladder = Ladder(('bright_day', 'balanced', 'low_light'), start='balanced')
+        ladder.update(50, 0, .2)   # Média escura, mas há estouro: nunca sobe para "pouca luz".
+        self.assertEqual(ladder.update(50, 500, .2), 'bright_day')
+
+    def test_small_clipping_is_ignored(self):
+        ladder = Ladder(('bright_day', 'balanced', 'low_light'), start='balanced')
+        ladder.update(120, 0, .02)
+        self.assertEqual(ladder.update(120, 1000, .02), 'balanced')

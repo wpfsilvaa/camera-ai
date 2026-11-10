@@ -33,6 +33,11 @@ conversa com o painel por um pequeno serviço local (`notebook/monitor.py`).
 
 ## Instalação no notebook
 
+**Automática (recomendada):** no notebook, dentro de uma cópia desta pasta, rode
+`./scripts/install-totem.sh --server-ip <IP do computador do painel> --token "$(cat data/notebook.token)"` (o token é criado pelo
+`scripts/install-server.sh` no servidor). O script detecta rede, webcam e codificação por GPU (ou usa software), gera o
+`mediamtx.yml` com `scripts/render_mediamtx.py`, instala os serviços e o eco da chamada. O passo a passo manual abaixo continua válido.
+
 1. Copie `notebook/monitor.py` e a pasta `notebook/kiosk/` para `~/.config/casa-monitor/` e instale
    `notebook/casa-monitor.service` como serviço de usuário (`systemctl --user enable --now casa-monitor`).
 2. Crie `~/.config/casa-monitor/token` (32 caracteres ou mais) e copie o mesmo valor para
@@ -163,7 +168,7 @@ O monitor do notebook é um microsserviço independente: o painel só precisa al
 Se o servidor do painel e o notebook são computadores diferentes, defina no `.env` do servidor:
 
 ```bash
-NOTEBOOK_URL=http://192.168.1.103:8765     # endereço do notebook (o padrão é o host do RTSP)
+NOTEBOOK_URL=http://IP-DO-NOTEBOOK:8765     # endereço do notebook (o padrão é o host do RTSP)
 ```
 
 e mantenha o mesmo token nos dois lados (`data/notebook.token` no servidor e `~/.config/casa-monitor/token`

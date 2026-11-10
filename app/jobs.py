@@ -8,6 +8,7 @@ import httpx
 
 from .alerts import CHECK_INTERVAL
 from .config import WA_URL, gateway_token
+from .elder import terms
 from .db import TZ
 from .recorder import cleanup, free_space, transcode
 
@@ -40,8 +41,9 @@ def gateway_connected(client):
 
 def caption_for(clip, event, settings, probable):
     when = datetime.fromtimestamp(clip['started'], TZ).strftime('%d/%m às %H:%M')
-    who = ('Meu pai (confirmado no painel)' if event['identity'] == 'father'
-           else 'Provável presença do pai (reconhecimento facial automático)' if probable
+    e = terms(settings.elder_relation)
+    who = (f'{e["label"]} (confirmad{"a" if e["feminine"] else "o"} no painel)' if event['identity'] == 'father'
+           else f'Provável presença {e["of_the"]} {e["rel"]} (reconhecimento facial automático)' if probable
            else 'Presença detectada')
     return f'{who} · {event["camera_name"] or settings.camera_name}\n{when} · {round(clip["duration"])} s\nRegistro #{clip["event_id"]}'
 

@@ -35,7 +35,7 @@ function renderProfiles() {
 
 function diagnosticHTML(track) {
   const d=track.diagnostic || {};
-  const reasons={no_face:'Rosto não localizado: pode estar de costas, encoberto ou fora do enquadramento.',small_face:'Rosto pequeno demais para comparação. Aproxime ou ajuste o enquadramento.',small_person:'Pessoa pequena demais na imagem para extrair o rosto.',blurred_face:'Rosto descartado por pouca nitidez. Confira foco, movimento e iluminação.',multiple_faces:'Mais de um rosto no mesmo recorte; associação incerta.',ambiguous_owner:'O rosto pode pertencer a mais de uma pessoa detectada.',no_references:'Nenhum exemplo facial compatível disponível.',below_threshold:'A semelhança ficou abaixo do limite configurado.',ambiguous_match:'Os melhores candidatos ficaram próximos demais entre si.',waiting_agreement:'Aguardando três comparações concordantes.',matched:'Rosto reconhecido após comparações concordantes.',usable_face:'Rosto adequado para comparação.'};
+  const reasons={no_face:'Rosto não localizado: pode estar de costas, encoberto ou fora do enquadramento.',small_face:'Rosto pequeno demais para comparação. Aproxime ou ajuste o enquadramento.',small_person:'Pessoa pequena demais na imagem para extrair o rosto.',blurred_face:'Rosto descartado por pouca nitidez. Confira foco, movimento e iluminação.',blown_face:'Rosto estourado de luz (branco demais): não há detalhe para comparar. Use o perfil Contraluz da câmera ou reduza a luz atrás da pessoa.',multiple_faces:'Mais de um rosto no mesmo recorte; associação incerta.',ambiguous_owner:'O rosto pode pertencer a mais de uma pessoa detectada.',no_references:'Nenhum exemplo facial compatível disponível.',below_threshold:'A semelhança ficou abaixo do limite configurado.',ambiguous_match:'Os melhores candidatos ficaram próximos demais entre si.',waiting_agreement:'Aguardando três comparações concordantes.',matched:'Rosto reconhecido após comparações concordantes.',usable_face:'Rosto adequado para comparação.'};
   const message=reasons[d.reason] || 'Este registro antigo não possui diagnóstico facial.';
   const details=[d.face_pixels!=null?`Rosto: ${d.face_pixels} px`:null,d.sharpness!=null?`Nitidez: ${d.sharpness}`:null,d.score!=null?`Semelhança: ${Number(d.score).toFixed(2)} (limite ${Number(d.threshold).toFixed(2)})`:null,d.reason==='waiting_agreement'?`${d.agreement}/${d.required} comparações`:null].filter(Boolean);
   const b=d.body;
@@ -93,6 +93,7 @@ function deliveryLabel(clip, event) {
 }
 function fillSettings() {
   const form = $('#settings-form');
+  window.setElderRelation?.(settings.elder_relation);
   setTimeout(() => window.syncVolumeLabels?.(), 0);
   if (activePage === 'settings') { renderZoneEditor(); loadBackup().catch(() => {}); loadStorage().catch(() => {}); }
   for (const [name, value] of Object.entries(settings)) {

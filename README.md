@@ -56,6 +56,10 @@ ainda oferece uma tela no notebook da cozinha para chamar a família, ver fotos,
 
 ## Começando
 
+**Instalação guiada (recomendada):** `./scripts/install-server.sh` instala tudo (Python, modelos, Node, serviço automático) e, ao abrir
+`http://127.0.0.1:8000`, o assistente de primeira configuração pede quem é acompanhado, a câmera, o WhatsApp e a senha do
+administrador. O notebook da cozinha usa `./scripts/install-totem.sh` (veja `docs/totem.md`). Os passos manuais seguem abaixo.
+
 **Requisitos:** Linux de 64 bits, Python 3.11+, Node 22+, FFmpeg com `libx264`. Uma GPU NVIDIA ajuda, mas não é
 necessária: em CPU, use o modelo n com ONNX ou OpenVINO.
 
@@ -147,3 +151,7 @@ docs/         manual, guia do totem, estudos e capturas de tela
 | [docs/c920-linux.md](docs/c920-linux.md) | Webcam C920/C922 no Linux (foco, MediaMTX) |
 | [docs/body-recognition-validation.md](docs/body-recognition-validation.md) | Validação do reconhecimento pelo corpo |
 | [docs/ux-estudo.md](docs/ux-estudo.md) | Estudo de interface |
+
+## Licenças e venda
+
+Antes de distribuir ou vender, leia `docs/licencas-e-venda.md` e `NOTICE` (YOLO é AGPL-3.0, WhatsApp via Baileys é não oficial, clima exige plano comercial).

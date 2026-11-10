@@ -66,7 +66,8 @@
     const now = state.current || {};
     const active = state.profiles.find(p => p.id === state.active)?.label;
     $('#image-current').textContent = state.current ? `${active && state.mode !== 'fixed' ? `Perfil ativo agora: ${active}. ` : ''}Na câmera: exposição ${now.auto_exposure === 1 ? 'manual ' + (now.exposure_time_absolute ?? '?') : 'automática'} · ganho ${now.gain ?? '?'} · nitidez ${now.sharpness ?? '?'} · foco ${now.focus_automatic_continuous ? 'automático' : (now.focus_absolute ?? '?')}.` : '';
-    $('#image-luma').textContent = state.luma != null ? `Brilho medido da imagem: ${state.luma} (faixa boa: 70 a 185).` : '';
+    const white = state.clipped != null ? Math.round(state.clipped * 100) : null;
+    $('#image-luma').textContent = state.luma != null ? `Brilho medido da imagem: ${state.luma} (faixa boa: 70 a 185)${white != null ? ` · ${white}% da imagem estourada em branco${white >= 12 ? ' — use o perfil Contraluz ou Dia claro' : ''}` : ''}.${state.remote ? ' Ajustes aplicados pela câmera do totem.' : ''}` : '';
     paintMode(); renderCustom();
   }
 

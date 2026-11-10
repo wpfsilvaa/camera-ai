@@ -8,6 +8,7 @@ import httpx
 
 from .config import DATA, WA_URL
 from .db import TZ
+from .elder import terms
 from .routine import DAY_STARTS, FIRST_MARGIN as ROUTINE_MARGIN, Routine, clock_text
 
 log = logging.getLogger(__name__)
@@ -131,12 +132,13 @@ class Alerts:
         alert_id = f'summary-{local.date().isoformat()}'
         if self.exists(alert_id):
             return
+        e = terms(settings.elder_relation)
         stats = self.db.stats(now=now)
         today = stats['today']
         last = f'às {clock(stats["last_presence"])}' if stats['last_presence'] else 'sem registros'
         lines = [f'📋 Resumo de hoje ({local.strftime("%d/%m")})',
                  f'• Registros de presença: {today["total"]}',
-                 f'• Confirmados como seu pai: {today["father"]}',
+                 f'• Confirmados como {e["your_rel"]}: {today["father"]}',
                  f'• A identificar: {today["unknown"]}',
                  f'• Última presença: {last}',
                  f'• Tempo gravado: {elapsed(stats["recorded_seconds_today"])}']
@@ -184,15 +186,16 @@ class Alerts:
         image = bool(jpeg)
         if jpeg:
             (IMAGES / f'{alert_id}.jpg').write_bytes(jpeg)
+        e = terms(self.config.get().elder_relation)
         if kind == 'panic':
-            text = f'🚨 PEDIDO DE AJUDA: seu pai apertou o botão de ajuda no notebook da cozinha às {clock(since)}.'
+            text = f'🚨 PEDIDO DE AJUDA: {e["your_rel"]} apertou o botão de ajuda no notebook da cozinha às {clock(since)}.'
         else:
-            text = (f'📞 Seu pai está chamando {to_name} pelo notebook da cozinha ({clock(since)}).' if to_name
-                    else f'📞 Seu pai está chamando a família pelo notebook da cozinha ({clock(since)}).')
+            text = (f'📞 {e["Your_rel"]} está chamando {to_name} pelo notebook da cozinha ({clock(since)}).' if to_name
+                    else f'📞 {e["Your_rel"]} está chamando a família pelo notebook da cozinha ({clock(since)}).')
         if reminder:
             text = f'⏰ Ainda sem resposta há {elapsed(now - since)}. ' + text
         link = os.environ.get('PUBLIC_URL', '').rstrip('/')
-        text += ' Abra o painel e toque em Atender.' if kind == 'call' else ' Ligue para ele agora ou abra o painel e toque em Atender.'
+        text += ' Abra o painel e toque em Atender.' if kind == 'call' else f' Ligue para {e["he"]} agora ou abra o painel e toque em Atender.'
         if link:
             text += f'\n{link}'
         return self.raise_alert(alert_id, kind, text, now, image=image, skip=skip)
@@ -200,15 +203,17 @@ class Alerts:
     def call_to_person(self, call_id, since, phone, now=None):
         """The father asked for this person by name: they get their own WhatsApp message (no push; the family got the general alert)."""
         now = now or time.time()
+        e = terms(self.config.get().elder_relation)
         link = os.environ.get('PUBLIC_URL', '').rstrip('/')
-        text = f'📞 Seu pai está chamando você pelo notebook da cozinha ({clock(since)}). Ligue para ele agora.' + (f'\n{link}' if link else '')
+        text = f'📞 {e["Your_rel"]} está chamando você pelo notebook da cozinha ({clock(since)}). Ligue para {e["he"]} agora.' + (f'\n{link}' if link else '')
         return self.raise_alert(f'call-{call_id}-to', 'call', text, now, recipients=[phone], notify=False)
 
     def ring(self, call_id, kind, since, now, to_name=''):
         """A call nobody answered yet: nudge the phones again (push only; WhatsApp keeps its own, slower reminders)."""
         waited = elapsed(now - since)
-        text = (f'🚨 PEDIDO DE AJUDA sem resposta há {waited}. Ligue para ele agora ou toque em Atender.' if kind == 'panic'
-                else f'📞 Seu pai continua chamando {to_name} há {waited}. Toque em Atender.' if to_name else f'📞 Seu pai continua chamando há {waited}. Toque em Atender.')
+        e = terms(self.config.get().elder_relation)
+        text = (f'🚨 PEDIDO DE AJUDA sem resposta há {waited}. Ligue para {e["he"]} agora ou toque em Atender.' if kind == 'panic'
+                else f'📞 {e["Your_rel"]} continua chamando {to_name} há {waited}. Toque em Atender.' if to_name else f'📞 {e["Your_rel"]} continua chamando há {waited}. Toque em Atender.')
         self._ring({'id': f'{kind}-{call_id}', 'kind': kind, 'created': now, 'message': text, 'image': 0, 'ring': True})
 
     def ring_notice(self, call_id, kind, text, now=None):

@@ -31,7 +31,7 @@ WA_URL = f"http://127.0.0.1:{int(os.environ.get('WA_PORT', '3001'))}"
 class ImageRule(BaseModel):
     start: int = Field(ge=0, le=23)
     end: int = Field(ge=0, le=23)
-    profile: str = Field(pattern='^(keep|auto|balanced|low_light|motion|bright_day|close_faces|custom)$')
+    profile: str = Field(pattern='^(keep|auto|backlit|balanced|low_light|motion|bright_day|close_faces|custom)$')
 
 
 class CameraSettings(BaseModel):
@@ -131,7 +131,7 @@ class CameraSettings(BaseModel):
     @field_validator('image_ladder')
     @classmethod
     def ladder_valid(cls, ladder):
-        known = {'keep', 'auto', 'balanced', 'low_light', 'motion', 'bright_day', 'close_faces', 'custom'}
+        known = {'keep', 'auto', 'backlit', 'balanced', 'low_light', 'motion', 'bright_day', 'close_faces', 'custom'}
         if any(name not in known for name in ladder):
             raise ValueError('Perfil de imagem desconhecido na escada de luminosidade.')
         return ladder
@@ -179,13 +179,36 @@ CAMERA_FIELDS = set(CameraSettings.model_fields)
 
 class Settings(CameraSettings):
     schema_version: int = 2
-    camera_source: str = os.environ.get('CAMERA_SOURCE', 'rtsp://192.168.1.103:8554/cam')
+    camera_source: str = os.environ.get('CAMERA_SOURCE', 'rtsp://127.0.0.1:8554/cam')
     camera_name: str = Field(default='Cozinha', min_length=1, max_length=60)
     recipient: str = ''
     additional_recipients: list[str] = Field(default_factory=list, max_length=9)
     recipient_since: dict[str,float] = Field(default_factory=dict)
     whatsapp_enabled: bool = False
     father_only: bool = True
+    notebook_url: str = ''   # totem escolhido pela descoberta/pareamento (vazio: usa o endereço da câmera)
+    setup_done: bool = True   # falso só em instalação nova: mostra o assistente de primeira configuração
+    elder_relation: str = 'pai'   # como a casa chama quem é acompanhado (pai, mãe, avó...); define o gênero dos textos
+
+    @field_validator('notebook_url')
+    @classmethod
+    def notebook_url_valid(cls, value):
+        from .discovery import is_allowed_host
+        from urllib.parse import urlsplit
+        value = value.strip().rstrip('/')
+        if not value:
+            return ''
+        parts = urlsplit(value)
+        if parts.scheme not in ('http', 'https') or not parts.hostname:
+            raise ValueError('Endereço do totem inválido.')
+        return value
+
+    @field_validator('elder_relation')
+    @classmethod
+    def relation_valid(cls, value):
+        from .elder import normalize
+        return normalize(value)
+
     recognition_enabled: bool = True
     recognition_threshold: float = Field(default=0.85, ge=0.65, le=0.99)
     face_threshold: float = Field(default=0.50, ge=0.35, le=0.95)
@@ -347,6 +370,8 @@ class Config:
                 raw['fps'] = 30
             raw['fps'] = max(5, raw.get('fps', 30))
             raw['schema_version'] = 2
+        if not raw:
+            raw['setup_done'] = False   # instalação nova (sem settings.json): o painel oferece o assistente
         self.value = Settings(**raw)
 
     def get(self):

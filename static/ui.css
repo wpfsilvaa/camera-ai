@@ -459,3 +459,17 @@ body.readonly .profile-actions,body.readonly .label-actions,body.readonly .manua
   .history-row td:nth-child(4) small{display:inline;margin:0 0 0 6px}
   .history-row td.row-chevron{grid-column:2;grid-row:2/4;align-self:center;text-align:right;font-size:26px;color:var(--muted)}
 }
+
+/* Assistente de primeira configuração */
+.setup-banner{margin-bottom:18px;border-color:var(--accent-line);background:var(--accent-bg)}
+.setup-dialog{width:min(520px,calc(100vw - 32px))}
+.setup-step{display:flex;flex-direction:column;gap:12px;margin:8px 0 14px}
+.setup-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:8px}
+.setup-actions .hidden{display:none}
+
+/* Totens na rede */
+.totem-list{display:flex;flex-direction:column;gap:10px}
+.totem-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2)}
+.totem-row small{display:block;color:var(--muted)}
+.totem-pair{display:flex;gap:8px;align-items:center}.totem-pair input{width:110px;text-align:center;letter-spacing:.1em}
+@media(max-width:500px){.totem-row{flex-direction:column;align-items:stretch}}

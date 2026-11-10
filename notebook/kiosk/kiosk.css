@@ -238,3 +238,8 @@ body:has(#screen[data-mode=light]) .glow,body:has(#screen[data-mode=light]) .rai
 .watching{position:fixed;right:1.2vmin;bottom:1.2vmin;z-index:30;display:flex;align-items:center;gap:.6vmin;padding:.5vmin 1vmin;border-radius:2vmin;background:#0008;color:#fff;font-size:2vmin;line-height:1;opacity:.7;pointer-events:none}
 .watching svg{width:2.6vmin;height:2.6vmin}
 body[data-night="1"] .watching{opacity:.35}
+
+.pairing{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:var(--bg);text-align:center;padding:5vh 6vw}
+.pairing strong{font-size:clamp(28px,4vw,56px)}
+.pairing p{font-size:clamp(18px,2.2vw,30px);color:var(--muted);max-width:30em;margin:2vh auto}
+.pairing-code{font-size:clamp(64px,12vw,180px);font-weight:700;letter-spacing:.08em;font-variant-numeric:tabular-nums;color:var(--ink)}

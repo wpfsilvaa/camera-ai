@@ -17,6 +17,37 @@ def normalized(feature):
     return vector / length
 
 
+BLOWN_MEAN, BLOWN_CLIPPED = 190, .12     # Rosto claro demais: média alta ou muitos pixels estourados (≥ 250).
+DARK_MEAN, DARK_SHARE = 55, .35          # Rosto escuro demais.
+LOST_CLIPPED = .78                        # Estourado a ponto de não haver mais detalhe (medido: semelhança cai abaixo do limite): não compara.
+FIX_CLIPPED = .45                         # A correção só ajuda de verdade acima disso; abaixo, o rosto original compara melhor.
+TARGET_MEAN = 125
+
+
+def exposure_of(crop):
+    """('ok'|'blown'|'dark'|'lost', média, fração estourada) do recorte alinhado do rosto."""
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+    mean, clipped, dark = float(gray.mean()), float((gray >= 250).mean()), float((gray <= 15).mean())
+    if clipped >= LOST_CLIPPED:
+        return 'lost', mean, clipped
+    if clipped >= BLOWN_CLIPPED or mean >= BLOWN_MEAN:
+        return 'blown', mean, clipped
+    if mean <= DARK_MEAN or dark >= DARK_SHARE:
+        return 'dark', mean, clipped
+    return 'ok', mean, clipped
+
+
+def normalize_exposure(crop):
+    """Leva o rosto à exposição média (gama) e recupera contraste local (CLAHE) só no brilho; as cores não mudam."""
+    lab = cv2.cvtColor(crop, cv2.COLOR_BGR2LAB)
+    light = lab[:, :, 0]
+    mean = max(float(light.mean()), 1.0)
+    gamma = float(np.clip(np.log(TARGET_MEAN / 255) / np.log(min(mean, 254.0) / 255), .45, 2.2))
+    table = (255 * (np.arange(256) / 255.0) ** gamma).astype(np.uint8)
+    lab[:, :, 0] = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4)).apply(cv2.LUT(light, table))
+    return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
+
 class FaceEncoder:
     def __init__(self):
         for path in (FACE_DETECTOR, FACE_ENCODER):
@@ -50,6 +81,14 @@ class FaceEncoder:
                     diagnostic.update(reason='small_face')
                     continue
                 aligned = self.recognizer.alignCrop(image, face)
+                state, mean, clipped = exposure_of(aligned)
+                diagnostic.update(exposure=state, face_brightness=round(mean), face_clipped=round(clipped, 2))
+                if state == 'lost':
+                    diagnostic.update(reason='blown_face')
+                    continue
+                if state == 'dark' or (state == 'blown' and clipped >= FIX_CLIPPED):
+                    aligned = normalize_exposure(aligned)   # Escuro ou muito estourado: compara depois de corrigir a exposição.
+                    diagnostic.update(exposure_corrected=True)
                 quality = float(cv2.Laplacian(cv2.cvtColor(aligned,cv2.COLOR_BGR2GRAY),cv2.CV_64F).var())
                 diagnostic.update(sharpness=round(quality,1))
                 if quality < 35:

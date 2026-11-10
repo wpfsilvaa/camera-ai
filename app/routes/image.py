@@ -36,15 +36,15 @@ def build(config, cameras):
 
     def describe(camera_id):
         settings = call_service(config.for_camera, camera_id)
-        device = image_controls.device_of(settings.camera_source)
+        target = image_controls.target_for(settings)
         worker = cameras.get(camera_id)
-        return {'supported': bool(device) and image_controls.available(), 'profile': settings.image_profile, 'custom': settings.image_custom,
+        return {'supported': image_controls.supported(target), 'remote': isinstance(target, image_controls.Remote), 'profile': settings.image_profile, 'custom': settings.image_custom,
                 'presets': settings.image_presets, 'base': {key: image_controls.PROFILES[key]['controls'] for key in image_controls.EDITABLE if key != 'custom'},
                 'mode': settings.image_mode, 'schedule': [r.model_dump() for r in settings.image_schedule], 'ladder': settings.image_ladder,
-                'active': worker.image_active, 'luma': worker.image_luma and round(worker.image_luma),
+                'active': worker.image_active, 'luma': worker.image_luma and round(worker.image_luma), 'clipped': round(worker.image_clipped, 3) if worker.image_luma is not None else None,
                 'profiles': [{'id': key, **{k: v for k, v in value.items() if k != 'controls'}} for key, value in image_controls.PROFILES.items()],
                 'custom_keys': {key: image_controls.RANGES[key] for key in image_controls.CUSTOM_KEYS},
-                'current': image_controls.read(settings.camera_source) if device else None}
+                'current': image_controls.read(target) if target else None}
 
     @router.get('/api/camera/image')
     async def image_state(camera_id: str = 'main'):
@@ -54,9 +54,10 @@ def build(config, cameras):
     async def image_apply(body: ImageProfile, camera_id: str = 'main'):
         """Apply a profile right now; with save=true it is also kept and reapplied whenever the camera opens."""
         settings = call_service(config.for_camera, camera_id)
-        if not image_controls.device_of(settings.camera_source):
-            raise HTTPException(409, 'Os ajustes de imagem só funcionam com uma câmera USB deste computador.')
-        if not image_controls.available():
+        target = image_controls.target_for(settings)
+        if not target:
+            raise HTTPException(409, 'Os ajustes de imagem só funcionam com uma câmera USB deste computador ou com a câmera do totem (pareado em Configurações → Totem).')
+        if not isinstance(target, image_controls.Remote) and not image_controls.available():
             raise HTTPException(503, 'O programa v4l2-ctl não está instalado neste computador.')
         custom, presets = dict(body.custom), dict(settings.image_presets)
         if body.values is not None:
@@ -67,7 +68,7 @@ def build(config, cameras):
                 presets = {**{k: v for k, v in presets.items() if k != body.profile}, **({body.profile: tuned} if tuned else {})}
         controls = image_controls.controls_for(body.profile, custom, presets)
         worker = cameras.get(camera_id)
-        applied = await run_in_threadpool(image_controls.apply, settings.camera_source, controls)
+        applied = await run_in_threadpool(image_controls.apply, target, controls)
         if body.save:
             changes = {'image_profile': body.profile, 'image_custom': image_controls.clean(custom), 'image_presets': presets}
             if body.mode is not None:
@@ -119,22 +120,23 @@ def build(config, cameras):
         worker.focus_probe_until = time.time() + 4
         recent = [score for stamp, score in list(worker.focus_scores or []) if stamp >= time.time() - .8]
         run = runs.get(camera_id) or {}
-        return {'supported': bool(image_controls.device_of(settings.camera_source)) and image_controls.available(),
+        return {'supported': image_controls.supported(image_controls.target_for(settings)),
                 'score': round(sorted(recent)[len(recent) // 2]) if recent else None, 'region': worker.focus_region,
                 'calibrating': bool(run.get('running')), 'progress': [run.get('done', 0), run.get('total', 1)], 'result': run.get('result')}
 
     @router.post('/api/camera/focus/calibrate', status_code=202)
     def focus_calibrate(camera_id: str = 'main'):
         settings = call_service(config.for_camera, camera_id)
-        if not image_controls.device_of(settings.camera_source) or not image_controls.available():
-            raise HTTPException(409, 'A calibração de foco só funciona com uma câmera USB deste computador.')
+        target = image_controls.target_for(settings)
+        if not image_controls.supported(target):
+            raise HTTPException(409, 'A calibração de foco só funciona com uma câmera USB deste computador ou com a câmera do totem pareado.')
         worker = cameras.get(camera_id)
         if worker.snapshot()['state'] != 'online':
             raise HTTPException(409, 'Inicie a câmera antes de calibrar o foco.')
         if runs.get(camera_id, {}).get('running'):
             raise HTTPException(409, 'A calibração já está em andamento.')
         runs[camera_id] = {'running': True, 'done': 0, 'total': 1, 'result': None}
-        threading.Thread(target=sweep, args=(camera_id, settings.camera_source, worker), daemon=True, name='focus-sweep').start()
+        threading.Thread(target=sweep, args=(camera_id, target, worker), daemon=True, name='focus-sweep').start()
         return {'started': True}
 
     return router

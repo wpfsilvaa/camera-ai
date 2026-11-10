@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import logging
 import re
 import shutil
@@ -21,14 +22,14 @@ from .alerts import Alerts, in_quiet_hours
 from .auth import COOKIE, SAME_SITE, Auth
 from .backup import Backups
 from .cameras import CameraManager
-from . import detectors, resources
+from . import detectors, discovery, elder, resources
 from .sources import supports_light_video, usb_cameras
 from .config import CLIPS, DATA, ROOT, WA_URL, CameraSettings, ExtraCamera, Settings, config
 from .db import TZ, Database
 from .pacing import Greeter, first_name, kiosk_night, screen_power_saving, vigia_state
 from .jobs import Jobs
 from .learning import LearningSuggestions
-from .notebook import NotebookMonitor
+from .notebook import NotebookMonitor, TOKEN as NOTEBOOK_TOKEN_FILE, notebook_token
 from .avatars import MAX_BYTES as AVATAR_MAX, Avatars
 from .fatherlog import FatherLog
 from .journal import Journal
@@ -343,6 +344,12 @@ def save_settings(settings: Settings, camera_id: str = 'main'):
         with recognition.lock, db.connect() as connection:
             recognition.invalidate(connection)
     call_service(config.save_for_camera, settings, camera_id)
+    if old.elder_relation != settings.elder_relation:
+        # O perfil principal ainda com o nome de fábrica ("Meu pai") passa a usar a nova relação ("Minha mãe").
+        default_names = {elder.terms(r)['label'] for r in elder.RELATIONS}
+        row = db.rows("SELECT name FROM people WHERE id='father'")
+        if row and row[0]['name'] in default_names:
+            recognition.rename_person('father', elder.terms(settings.elder_relation)['label'])
     weather.poke()
     # Start fetching/converting the chosen detector now, even if the camera is stopped.
     detectors.prepare(settings.detector_model, settings.detector_engine, settings.fall_detection_enabled, settings.detection_size, retry=True)
@@ -559,6 +566,59 @@ def kiosk_test(body: KioskTest, request: Request):
     text = 'Esta é uma mensagem de teste.' if body.sound == 'message' else body.text.strip() or 'Este é um lembrete de teste.' if body.sound == 'nudge' else 'Bom dia! Hoje o dia vai ser nublado, com máxima de vinte e oito graus. Leve o guarda-chuva se for sair.' if body.sound == 'voice' else ''
     call_service(notebook.send_test, body.sound, body.volume, text, body.voice)
     return {'ok': True, 'from': first_name(user['name']) if user else ''}
+
+
+class TotemPair(BaseModel):
+    ip: str = Field(max_length=45)
+    code: str = Field(default='', max_length=12)
+
+
+def ensure_notebook_token():
+    token = notebook_token()
+    if len(token) < 32:
+        NOTEBOOK_TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+        token = discovery.new_token()
+        fd = os.open(NOTEBOOK_TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, 'w') as handle:
+            handle.write(token)
+    return token
+
+
+def use_totem(ip):
+    settings = config.get()
+    settings.notebook_url = f'http://{ip}:{discovery.PORT}'
+    call_service(config.save_for_camera, settings, 'main')
+
+
+@app.post('/api/notebook/discover')
+async def notebook_discover():
+    """Procura totens na rede local deste computador (varredura rápida da porta do totem)."""
+    totems = await run_in_threadpool(discovery.scan, notebook_token())
+    return {'totems': totems, 'current': config.get().notebook_url}
+
+
+@app.post('/api/notebook/pair')
+async def notebook_pair(body: TotemPair):
+    """Pareia com um totem novo: o código de 6 dígitos que aparece na tela dele autoriza a entrega do token."""
+    token = await run_in_threadpool(ensure_notebook_token)
+    try:
+        await run_in_threadpool(discovery.pair, body.ip, body.code, token)
+    except ValueError as error:
+        raise HTTPException(422, str(error))
+    use_totem(body.ip)
+    return {'ok': True, 'notebook_url': config.get().notebook_url}
+
+
+@app.post('/api/notebook/use')
+async def notebook_use(body: TotemPair):
+    """Passa a usar um totem que já foi pareado com este computador."""
+    if not discovery.is_allowed_host(body.ip):
+        raise HTTPException(422, 'Endereço inválido.')
+    found = await run_in_threadpool(discovery.probe, body.ip, notebook_token())
+    if not (found and found['mine']):
+        raise HTTPException(409, 'Este totem não está pareado com este computador.')
+    use_totem(body.ip)
+    return {'ok': True, 'notebook_url': config.get().notebook_url}
 
 
 @app.get('/api/weather/search')

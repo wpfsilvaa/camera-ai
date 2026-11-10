@@ -10,6 +10,8 @@ import hmac
 import json
 import os
 import re
+import secrets
+import shutil
 import socket
 import subprocess
 import sys
@@ -627,8 +629,119 @@ class Voice:
         return target.read_bytes()
 
 
+# Controles de imagem da webcam deste notebook (exposição, contraluz, foco...): o painel os envia por /camera/controls.
+# Cópia de app/image_controls.RANGES (o monitor não depende do resto do programa; um teste confere que não divergem).
+CAMERA_RANGES = {'brightness': (0, 255), 'contrast': (0, 255), 'saturation': (0, 255), 'sharpness': (0, 255), 'gain': (0, 255),
+                 'backlight_compensation': (0, 1), 'power_line_frequency': (0, 2), 'white_balance_automatic': (0, 1),
+                 'white_balance_temperature': (2000, 6500), 'auto_exposure': (0, 3), 'exposure_time_absolute': (3, 2047),
+                 'exposure_dynamic_framerate': (0, 1), 'focus_automatic_continuous': (0, 1), 'focus_absolute': (0, 250)}
+CAMERA_FIRST = ('auto_exposure', 'focus_automatic_continuous', 'white_balance_automatic', 'exposure_dynamic_framerate')
+
+
+def camera_device():
+    """Webcam do totem: MONITOR_CAMERA_DEVICE, senão a primeira em /dev/v4l/by-id, senão /dev/video0."""
+    chosen = os.environ.get('MONITOR_CAMERA_DEVICE')
+    if chosen:
+        return chosen
+    found = sorted(Path('/dev/v4l/by-id').glob('*video-index0')) if Path('/dev/v4l/by-id').is_dir() else []
+    if found:
+        return str(found[0])
+    return '/dev/video0' if Path('/dev/video0').exists() else ''
+
+
+def camera_commands(device, controls):
+    controls = dict(controls)
+    if controls.get('auto_exposure', 1) != 1:
+        controls.pop('exposure_time_absolute', None)   # A câmera recusa valor com o modo automático ligado.
+    if controls.get('focus_automatic_continuous', 0) == 1:
+        controls.pop('focus_absolute', None)
+    first = [f'{k}={controls[k]}' for k in CAMERA_FIRST if k in controls]
+    rest = [f'{k}={v}' for k, v in controls.items() if k not in CAMERA_FIRST]
+    return [['v4l2-ctl', '-d', device, f'--set-ctrl={",".join(group)}'] for group in (first, rest) if group]
+
+
+def camera_validate(controls):
+    """{nome: inteiro} só com controles conhecidos e dentro da faixa; ValueError caso contrário."""
+    if not isinstance(controls, dict) or not controls or len(controls) > 20:
+        raise ValueError('Controles inválidos.')
+    clean = {}
+    for name, value in controls.items():
+        if name not in CAMERA_RANGES or isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(f'Controle inválido: {str(name)[:30]}.')
+        low, high = CAMERA_RANGES[name]
+        if not low <= value <= high:
+            raise ValueError(f'Valor fora da faixa: {name}.')
+        clean[name] = value
+    return clean
+
+
+def camera_apply(controls):
+    device = camera_device()
+    if not device or not shutil.which('v4l2-ctl'):
+        raise RuntimeError('Webcam ou v4l2-ctl não encontrados neste notebook.')
+    done = 0
+    for command in camera_commands(device, controls):
+        result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+        if result.returncode:
+            raise RuntimeError((result.stderr or result.stdout).strip()[:200] or 'v4l2-ctl falhou.')
+        done += command[3].count(',') + 1
+    return done
+
+
+def camera_read():
+    device = camera_device()
+    if not device or not shutil.which('v4l2-ctl'):
+        return None
+    try:
+        out = subprocess.run(['v4l2-ctl', '-d', device, '--list-ctrls'], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    values = {}
+    for line in out.splitlines():
+        found = re.match(r'^\s*(\w+)\s+(?:0x[0-9a-f]+\s+)?\(\w+\)\s*:\s*(.*)$', line)
+        if found and found[1] in CAMERA_RANGES:
+            value = re.search(r'value=(-?\d+)', found[2])
+            if value:
+                values[found[1]] = int(value[1])
+    return values or None
+
+
+class Pairing:
+    """Totem novo (sem token): mostra um código de 6 dígitos na tela; quem digitar o código no painel pareia o computador.
+
+    O código só vale enquanto o totem não tem token, muda a cada 10 minutos e após 5 erros (então espera 30 s).
+    """
+    TTL, MAX_FAILS, LOCK = 600, 5, 30
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.code, self.born, self.fails, self.locked_until = '', 0.0, 0, 0.0
+
+    def current(self, now=None):
+        now = now or time.time()
+        with self.lock:
+            if not self.code or now - self.born > self.TTL:
+                self.code, self.born, self.fails = f'{secrets.randbelow(10**6):06d}', now, 0
+            return self.code
+
+    def check(self, sent, now=None):
+        now = now or time.time()
+        code = self.current(now)
+        with self.lock:
+            if now < self.locked_until:
+                return False
+            if hmac.compare_digest(str(sent).encode(), code.encode()):
+                self.code = ''
+                return True
+            self.fails += 1
+            if self.fails >= self.MAX_FAILS:
+                self.code, self.locked_until = '', now + self.LOCK
+            return False
+
+
 class Handler(BaseHTTPRequestHandler):
     token = ''
+    pairing = Pairing()
     desk = Desk()
     voice = Voice()
     dimmer = Dimmer(Backlight())
@@ -649,6 +762,8 @@ class Handler(BaseHTTPRequestHandler):
         return self.client_address[0] in ('127.0.0.1', '::1')
 
     def authorized(self):
+        if len(self.token) < 32:   # Sem pareamento nenhum pedido é autorizado.
+            return False
         sent = self.headers.get('Authorization', '').removeprefix('Bearer ')
         return hmac.compare_digest(sent.encode(), self.token.encode())
 
@@ -705,6 +820,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header('Cache-Control', 'max-age=86400')
             self.end_headers()
             return self.wfile.write(data)
+        if url.path == '/camera/controls' and self.authorized():
+            return self.reply(200, {'device': camera_device(), 'values': camera_read(), 'available': bool(camera_device() and shutil.which('v4l2-ctl'))})
+        if url.path == '/hello':   # Descoberta: o painel procura totens na rede. Sem dados sensíveis.
+            return self.reply(200, {'service': 'casa-presente-totem', 'name': socket.gethostname(), 'paired': len(self.token) >= 32, 'build': build()})
         if url.path == '/state':
             query = parse_qs(url.query)
             since = query.get('v', [''])[0]
@@ -714,7 +833,8 @@ class Handler(BaseHTTPRequestHandler):
             info = reading()
             return self.reply(200, {'call': self.desk.snapshot(), 'linked': self.desk.linked(), 'enabled': self.desk.enabled,
                                     'battery': info['battery'], 'plugged': info['plugged'], 'now': time.time(), **self.desk.display(),
-                                    'build': build(), 'v': self.desk.version})
+                                    'build': build(), 'v': self.desk.version,
+                                    **({'pairing': {'code': self.pairing.current()}} if len(self.token) < 32 and self.local() else {})})
         entry = self.kiosk_files.get(url.path)
         if entry and (KIOSK / entry[0]).is_file():
             return self.reply(200, body=(KIOSK / entry[0]).read_bytes(), kind=entry[1])
@@ -773,6 +893,21 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         url = urlsplit(self.path)
+        if url.path == '/pair':
+            if len(self.token) >= 32:
+                return self.reply(409, {'error': 'Este totem já está pareado.'})
+            spec = self.body()
+            token = str(spec.get('token', ''))
+            if len(token) < 32 or len(token) > 200 or not token.isprintable() or ' ' in token:
+                return self.reply(422, {'error': 'Token inválido.'})
+            if not self.pairing.check(spec.get('code', '')):
+                return self.reply(403, {'error': 'Código incorreto.'})
+            TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+            fd = os.open(TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, 'w') as handle:
+                handle.write(token)
+            Handler.token = token
+            return self.reply(200, {'ok': True})
         if url.path == '/test' and self.authorized():
             spec = self.body()
             if spec.get('sound') == 'screenoff':   # Hardware: turn the panel off for a few seconds, then back on.
@@ -787,6 +922,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, {'id': self.desk.queue_test(spec)})
             except ValueError as error:
                 return self.reply(422, {'error': str(error)})
+        if url.path == '/camera/controls' and self.authorized():
+            try:
+                return self.reply(200, {'applied': camera_apply(camera_validate(self.body().get('controls')))})
+            except ValueError as error:
+                return self.reply(422, {'error': str(error)})
+            except (RuntimeError, OSError, subprocess.SubprocessError) as error:
+                return self.reply(502, {'error': str(error)})
         if url.path in ('/call/answer', '/call/end') and self.authorized():
             try:
                 call = self.desk.answer(str(self.body().get('name', ''))) if url.path == '/call/answer' else self.desk.end()
@@ -830,7 +972,8 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     Handler.token = read(TOKEN_FILE) or ''
     if len(Handler.token) < 32:
-        sys.exit(f'Token ausente ou curto em {TOKEN_FILE}.')
+        Handler.token = ''
+        print(f'Totem sem token em {TOKEN_FILE}: aguardando pareamento. Código na tela: {Handler.pairing.current()}', flush=True)
     stop = threading.Event()
     threading.Thread(target=Handler.dimmer.run, args=(stop,), daemon=True).start()
     threading.Thread(target=Handler.screen.run, args=(stop,), daemon=True).start()

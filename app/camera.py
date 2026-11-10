@@ -33,6 +33,7 @@ log = logging.getLogger(__name__)
 # A loop pass above this is logged with its stages; so is waiting this long for a camera frame.
 STALL_SECONDS = .3
 STALL_WAIT_SECONDS = 1.0
+EXPOSURE_WARN=.12  # Fração de pixels estourados (≥ 250) que já conta como imagem estourada (janela, sol direto).
 AREA_GAP=10  # Seconds without anyone inside before the next entry counts as a new visit to that area.
 REMINDER_GAP=60  # Seconds between two reminders at least.
 FLOOR_COLOR=(90,160,60)  # BGR: the floor strips in front of a restricted area are green.
@@ -132,6 +133,11 @@ class CameraWorker:
     focus_region=''
     image_hold=0.0
     image_luma=None
+    image_remote_at=None
+    image_clipped=0.0
+    exposure_checked=None
+    exposure_blown_since=None
+    image_remote=False
     image_ladder=None
     open_visits=None      # Per worker once used: area index -> the visit being measured.
     on_visit_time=None    # Called with (visit id, seconds so far) while a visit to a restricted area lasts.
@@ -264,6 +270,28 @@ class CameraWorker:
             self.focus_scores.append((now,found[0]))
             self.focus_region=found[1]
 
+    def measure_exposure(self, frame, now):
+        """A cada poucos segundos: brilho médio e fração de pixels estourados (≥ 250), para qualquer câmera (alimenta o aviso de Saúde)."""
+        if self.exposure_checked is not None and now-self.exposure_checked<5:
+            return
+        self.exposure_checked=now
+        gray=cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
+        level=float(cv2.resize(gray,(32,18),interpolation=cv2.INTER_AREA).mean())
+        self.image_luma=level if self.image_luma is None else self.image_luma*.7+level*.3
+        self.image_clipped=float((cv2.resize(gray,(160,90),interpolation=cv2.INTER_AREA)>=250).mean())
+        if self.image_clipped>=EXPOSURE_WARN:
+            self.exposure_blown_since=self.exposure_blown_since or now
+        else:
+            self.exposure_blown_since=None
+        self.update(image_luma=round(self.image_luma),image_clipped=round(self.image_clipped,3),image_blown=bool(self.exposure_blown_since and now-self.exposure_blown_since>=120))
+
+    def image_target_checked(self, settings, now):
+        """Câmera no totem (RTSP): há alvo remoto? Reavalia a cada minuto (o resultado muda só ao parear)."""
+        if self.image_remote_at is None or now-self.image_remote_at>60:
+            self.image_remote_at=now
+            self.image_remote=isinstance(image_controls.target_for(settings),image_controls.Remote)
+        return self.image_remote
+
     def manage_image(self, frame, now, settings, source):
         """USB camera picture profile: apply the one the mode asks for (by the hour, or by the brightness); checked every few seconds."""
         if self.image_checked is not None and now-self.image_checked<5:
@@ -273,12 +301,13 @@ class CameraWorker:
         self.image_checked=now
         if settings.image_mode=='fixed' and self.image_active==settings.image_profile:
             return
-        level=float(cv2.resize(cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY),(32,18),interpolation=cv2.INTER_AREA).mean())
-        self.image_luma=level if self.image_luma is None else self.image_luma*.7+level*.3
+        if source is None:
+            return
+        level=self.image_luma if self.image_luma is not None else float(cv2.resize(cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY),(32,18),interpolation=cv2.INTER_AREA).mean())
         if self.image_ladder is None or self.image_ladder.profiles!=list(settings.image_ladder):
             self.image_ladder=image_auto.Ladder(settings.image_ladder,start=self.image_active)
         if settings.image_mode=='adaptive':
-            self.image_ladder.update(self.image_luma,now)
+            self.image_ladder.update(self.image_luma,now,self.image_clipped)
         profile=wanted_profile(settings,datetime.now(TZ).hour,self.image_ladder)
         if profile!=self.image_active:
             try:
@@ -287,7 +316,7 @@ class CameraWorker:
             except Exception:
                 log.exception('Falha ao aplicar o perfil de imagem da câmera')
             self.image_active=profile
-        self.update(image_active=self.image_active,image_luma=round(self.image_luma))
+        self.update(image_active=self.image_active)
 
     def check_street(self, boxes, ids, labels, frame, now, settings):
         """Street mode: tell the application whether someone nobody recognised is in view."""
@@ -610,8 +639,9 @@ class CameraWorker:
                     latest_time=now
                     if time.time()<self.focus_probe_until:
                         self.measure_focus(original,detected_boxes,time.time())
-                    if local and (current.image_mode!='fixed' or current.image_profile!='keep'):
-                        self.manage_image(original,now,current,source)
+                    self.measure_exposure(original,now)
+                    if (current.image_mode!='fixed' or current.image_profile!='keep') and (local or self.image_target_checked(current,now)):
+                        self.manage_image(original,now,current,image_controls.target_for(current) if not local else source)
                     annotated=annotate(original,boxes,ids,labels,lying) if analysis_active else original
                     if event_id is not None:
                         if current.restricted_enabled and not zone.active:

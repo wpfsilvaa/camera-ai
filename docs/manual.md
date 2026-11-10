@@ -31,7 +31,7 @@ Os modelos locais são usados diretamente; a aplicação não baixa pesos ao ini
 
 ## Configurar e usar
 
-1. Em **Configurações**, confira a câmera: `rtsp://192.168.1.103:8554/cam`. O computador precisa alcançar o notebook da cozinha pela rede local.
+1. Em **Configurações**, confira a câmera: `rtsp://IP-DO-NOTEBOOK:8554/cam`. O computador precisa alcançar o notebook da cozinha pela rede local.
 2. Clique em **Iniciar câmera** na visão geral. A transmissão MJPEG acompanha as detecções continuamente, com caixas e nomes. O painel mostra os quadros por segundo e o dispositivo de inferência.
 3. Em **Configurações → Alertas → WhatsApp**, clique em **Conectar WhatsApp**. No celular, abra **Dispositivos conectados → Conectar dispositivo** e escaneie o QR code do painel.
 4. Em **Configurações**, informe o número de destino com DDI e DDD, por exemplo `5511999999999`, e habilite **Enviar vídeos pelo WhatsApp**.
@@ -438,7 +438,7 @@ sudo loginctl enable-linger "$USER"
 systemctl --user daemon-reload && systemctl --user enable --now mediamtx
 ```
 
-Em `mediamtx.yml`, troque `192.168.1.1` pelo IP do computador do painel: só ele e o próprio notebook podem publicar no alto-falante. O MediaMTX roda como usuário (não root) para acessar o áudio da sessão.
+Em `mediamtx.yml` (gerado por `scripts/install-totem.sh --server-ip <IP do painel>`), confira que o IP do computador do painel está em `ips`: só ele e o próprio notebook podem publicar no alto-falante. O MediaMTX roda como usuário (não root) para acessar o áudio da sessão.
 
 ## App no celular e notificações
 
@@ -725,3 +725,11 @@ simulado; não enviam mensagens reais a familiares.
 ### Botão de chamar na tela do notebook
 
 O agente também serve a tela do quiosque em `http://127.0.0.1:8765/` (só para o próprio notebook): botão verde "Chamar a família" e, opcionalmente, o vermelho "Preciso de ajuda" (com confirmação). Ao apertar, o painel avisa por notificação (urgente) e WhatsApp e repete se ninguém atender. Quem toca em **Atender** no painel fala com ele e, se tiver câmera, o rosto aparece na tela (caminho `face` do MediaMTX). Ative em Configurações → Avisos → Notebook da câmera. Para abrir em tela cheia: `notebook/start-kiosk.sh` (por exemplo no `exec-once` do Hyprland); desative o desligamento de tela (hypridle/DPMS).
+
+
+## Imagem estourada (luz forte, janela atrás da pessoa)
+- **Perfil Contraluz** (Configurações → Câmera → Imagem): exposição automática com compensação de contraluz.
+- **Câmera no totem:** quando a webcam está no notebook da cozinha (pareado em Configurações → Totem), os ajustes de imagem, o modo por luminosidade e a calibração de foco passam a funcionar por ele. Antes só funcionavam com câmera USB do próprio computador.
+- **Modo por luminosidade:** além do brilho médio, mede a parte estourada da imagem; com 6% ou mais em branco, desce um passo em cerca de 20 s (antes, 90 s).
+- **Saúde:** se mais de 12% da imagem ficar branca por 2 minutos, aparece um aviso com o que fazer.
+- **Reconhecimento:** rostos muito estourados ou escuros têm a exposição corrigida antes da comparação; rostos sem nenhum detalhe (acima de 78% brancos) são descartados com o motivo "Rosto estourado de luz".

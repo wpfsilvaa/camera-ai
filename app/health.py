@@ -44,6 +44,10 @@ def cameras_items(snapshots, limits=()):
             else:
                 hint = 'O processador não está dando conta. Reduza a taxa de análise ou o tamanho da detecção.' if slow else ''
             out.append(item(f"camera-{camera['id']}", title, 'warn' if slow else 'ok', detail + (' · lenta' if slow else ''), hint))
+            if camera.get('image_blown'):
+                share = round((camera.get('image_clipped') or 0) * 100)
+                out.append(item(f"exposure-{camera['id']}", f"Imagem da câmera {camera['name']}", 'warn', f'Estourada: {share}% da imagem está branca (luz forte demais).',
+                                'Reconhecimentos podem falhar. Use o perfil Contraluz ou Dia claro em Configurações → Câmera, ou reduza a luz da janela atrás de quem passa.'))
         elif camera['state'] == 'connecting':
             out.append(item(f"camera-{camera['id']}", title, 'warn', 'Conectando…', 'Se demorar, confira o cabo, o endereço e a energia da câmera.'))
         else:

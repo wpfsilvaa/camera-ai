@@ -1,0 +1,30 @@
+Casa Presente — avisos de componentes de terceiros
+
+Este produto usa os componentes abaixo, cada um sob a sua própria licença. As licenças dos pacotes Python foram
+conferidas nos metadados dos pacotes instalados (requirements.txt); as dos demais itens vêm dos projetos de origem
+e devem ser reconferidas antes de cada versão vendida.
+
+Python (requirements.txt)
+  ultralytics 8.4.163 ........ AGPL-3.0   <-- ATENÇÃO: exige oferecer o código-fonte completo a quem receber o software
+                                           ou usá-lo por rede, OU uma licença comercial (Enterprise) da Ultralytics.
+                                           Vale também para os pesos YOLO baixados por scripts/download_models.py.
+  fastapi, onnxruntime, onnxslim, pydantic .... MIT
+  starlette, uvicorn, python-dotenv, httpx .... BSD-3-Clause
+  lap ......................... BSD-2-Clause
+  openvino, onnx, nncf, opencv-python ......... Apache-2.0
+  numpy ....................... BSD-3-Clause e outras permissivas
+  pywebpush ................... MPL-2.0 (código do arquivo modificado deve continuar sob MPL)
+
+Node.js (package.json)
+  @whiskeysockets/baileys 7.0.0-rc14 ... MIT, mas é cliente NÃO OFICIAL do WhatsApp (risco de banimento do número;
+                                         ver docs/licencas-e-venda.md). dotenv, pino, qrcode ... licenças permissivas.
+
+Modelos de reconhecimento (scripts/download_models.py)
+  YuNet e SFace (OpenCV Zoo) ... MIT / Apache-2.0 (reconferir no repositório de origem)
+  YOLO26 / ReID (Ultralytics) ... AGPL-3.0 ou licença Enterprise
+
+Ferramentas instaladas à parte
+  FFmpeg (com libx264) ... LGPL/GPL, conforme a compilação. Não é redistribuído por este projeto.
+  MediaMTX ............... MIT. Não é redistribuído por este projeto.
+  Open-Meteo ............. API gratuita só para uso NÃO comercial; use OPEN_METEO_API_KEY (plano comercial) em
+                           instalações vendidas.

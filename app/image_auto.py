@@ -10,6 +10,9 @@ LOW, HIGH = 70, 185        # Mean grey level band that counts as "right".
 CONFIRM_SECONDS = 90       # Out of the band for this long before a step.
 HOLD_SECONDS = 300         # After a step, no other step for this long (the picture needs to settle).
 DEFAULT_LADDER = ('bright_day', 'balanced', 'low_light')
+CLIP_LIMIT = .06            # Fração de pixels estourados (≥ 250) a partir da qual a imagem conta como "clara demais", mesmo com a média boa.
+CLIP_CONFIRM_SECONDS = 20   # Estouro de luz confirma mais rápido: o reconhecimento perde rostos enquanto dura.
+CLIP_HOLD_SECONDS = 60
 
 
 def scheduled_profile(rules, hour, fallback):
@@ -31,18 +34,24 @@ class Ladder:
     def profile(self):
         return self.profiles[self.index]
 
-    def update(self, level, now):
-        """Feed the measured brightness; returns the profile to use now (it only changes after CONFIRM_SECONDS out of the band)."""
+    def update(self, level, now, clipped=0.0):
+        """Feed the measured brightness (and the share of blown-out pixels); returns the profile to use now.
+
+        It only changes after CONFIRM_SECONDS out of the band; blown highlights (a window behind the person) count as
+        "too bright" even with a good mean, and are confirmed faster.
+        """
         if level is None:
             return self.profile
-        direction = 1 if level < LOW else -1 if level > HIGH else 0
+        blown = clipped >= CLIP_LIMIT
+        direction = 1 if level < LOW and not blown else -1 if (level > HIGH or blown) else 0
         if not direction:
             self.out_since = None
             return self.profile
         if self.out_since is None:
             self.out_since = now
-        settled = self.changed is None or now - self.changed >= HOLD_SECONDS
+        confirm, hold = (CLIP_CONFIRM_SECONDS, CLIP_HOLD_SECONDS) if blown else (CONFIRM_SECONDS, HOLD_SECONDS)
+        settled = self.changed is None or now - self.changed >= hold
         target = self.index + direction
-        if now - self.out_since >= CONFIRM_SECONDS and settled and 0 <= target < len(self.profiles):
+        if now - self.out_since >= confirm and settled and 0 <= target < len(self.profiles):
             self.index, self.changed, self.out_since = target, now, None
         return self.profile

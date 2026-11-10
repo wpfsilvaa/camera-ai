@@ -120,3 +120,43 @@ class FocusTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class RemoteTargetTests(unittest.TestCase):
+    def test_target_is_the_totem_when_it_serves_the_camera(self):
+        import os
+        from unittest import mock
+        from app import image_controls as ic
+        from app.config import Settings
+        settings = Settings(camera_source='rtsp://192.168.0.30:8554/cam')
+        with mock.patch('app.notebook.notebook_token', return_value='t' * 40), mock.patch.dict(os.environ, {'NOTEBOOK_URL': ''}):
+            target = ic.target_for(settings)
+        self.assertEqual(target, ic.Remote('http://192.168.0.30:8765', 't' * 40))
+        with mock.patch('app.notebook.notebook_token', return_value='t' * 40), mock.patch.dict(os.environ, {'NOTEBOOK_URL': ''}):
+            other = ic.target_for(Settings(camera_source='rtsp://192.168.0.30:8554/cam', notebook_url='http://192.168.0.99:8765'))
+        self.assertIsNone(other)   # Totem escolhido é outro computador: a câmera não está lá.
+        with mock.patch('app.notebook.notebook_token', return_value=''):
+            self.assertIsNone(ic.target_for(settings))   # Sem pareamento.
+
+    def test_monitor_ranges_match_the_panel(self):
+        import importlib.util
+        from pathlib import Path
+        from app import image_controls as ic
+        spec = importlib.util.spec_from_file_location('monitor_x', Path(__file__).resolve().parents[1] / 'notebook' / 'monitor.py')
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        self.assertEqual(mod.CAMERA_RANGES, ic.RANGES)
+        self.assertEqual(mod.CAMERA_FIRST, ic.FIRST)
+        sample = {'auto_exposure': 3, 'exposure_time_absolute': 100, 'focus_automatic_continuous': 0, 'focus_absolute': 30, 'gain': 10}
+        self.assertEqual(mod.camera_commands('/dev/x', sample), ic.commands('/dev/x', sample))
+
+    def test_monitor_rejects_unknown_or_out_of_range_controls(self):
+        import importlib.util
+        from pathlib import Path
+        spec = importlib.util.spec_from_file_location('monitor_y', Path(__file__).resolve().parents[1] / 'notebook' / 'monitor.py')
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        for bad in ({'rm': 1}, {'gain': 999}, {'gain': '5'}, {'gain': True}, {}, None, {'gain': 5, **{f'x{i}': 1 for i in range(25)}}):
+            with self.assertRaises(ValueError):
+                mod.camera_validate(bad)
+        self.assertEqual(mod.camera_validate({'gain': 5}), {'gain': 5})

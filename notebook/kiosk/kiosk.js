@@ -118,7 +118,14 @@
     $('nightlight-clock').textContent = $('clock').textContent;
   }
 
+  function renderPairing() {
+    const box = $('pairing'), code = last.pairing?.code;
+    box.classList.toggle('hidden', !code);
+    if (code) $('pairing-code').textContent = `${code.slice(0, 3)} ${code.slice(3)}`;
+    return Boolean(code);
+  }
   function render() {
+    if (renderPairing()) return;   // Totem novo: só o código de pareamento até o painel conectar.
     const {call, linked, enabled, battery, plugged} = last;
     $('battery').classList.toggle('hidden', battery == null);
     $('battery').innerHTML = battery == null ? '' : `<svg class="ic" aria-hidden="true"><use href="#ic-${plugged ? 'bolt' : 'battery'}"/></svg> ${Number(battery)}%`;

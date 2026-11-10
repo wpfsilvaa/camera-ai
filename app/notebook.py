@@ -14,6 +14,7 @@ import httpx
 
 from .alerts import clock, elapsed
 from .config import DATA, config as default_config
+from .elder import terms
 from .sources import local_device
 
 log = logging.getLogger(__name__)
@@ -34,9 +35,9 @@ RING_SECONDS = 20
 RING_LIMIT = {'call': 180, 'panic': 600}
 
 
-def notebook_url(camera_source):
-    """The notebook is the machine that serves the camera, unless NOTEBOOK_URL says otherwise."""
-    explicit = os.environ.get('NOTEBOOK_URL')
+def notebook_url(camera_source, chosen=''):
+    """O totem: NOTEBOOK_URL (ambiente) > o escolhido pela descoberta (configurações) > a máquina que serve a câmera."""
+    explicit = os.environ.get('NOTEBOOK_URL') or chosen
     if explicit:
         return explicit.rstrip('/')
     # A USB camera is plugged into this very computer.
@@ -77,7 +78,7 @@ class NotebookMonitor:
 
     def send_test(self, sound, volume, text='', voice=''):
         """Ask the kitchen screen to play one sound (or show a sample message) now."""
-        url, token = notebook_url(self.config.get().camera_source), self.token()
+        url, token = notebook_url(self.config.get().camera_source, self.config.get().notebook_url), self.token()
         if not (url and token):
             raise RuntimeError('A tela do notebook não está configurada.')
         try:
@@ -98,7 +99,7 @@ class NotebookMonitor:
             return
         reading, deliver = None, []
         token = self.token()
-        url = notebook_url(settings.camera_source)
+        url = notebook_url(settings.camera_source, settings.notebook_url)
         if url and token:
             try:
                 params = {'call': int(settings.notebook_call_enabled), 'panic': int(settings.notebook_call_enabled and settings.notebook_panic_enabled)}
@@ -246,7 +247,8 @@ class NotebookMonitor:
         if state is None:
             return
         if call.get('id') == state['id'] and call.get('state') == 'answered':
-            self.alerts.ring_notice(state['id'], state['kind'], f"✅ {call.get('answered_by') or 'Alguém'} atendeu a chamada do seu pai.", now)
+            e = terms(self.alerts.config.get().elder_relation)
+            self.alerts.ring_notice(state['id'], state['kind'], f"✅ {call.get('answered_by') or 'Alguém'} atendeu a chamada {e['of_the']} {e['your_rel']}.", now)
         elif call.get('id') == state['id'] and call.get('state') in ('ended', 'missed'):
             self.alerts.ring_notice(state['id'], state['kind'], 'A chamada do notebook da cozinha terminou.', now)
 
@@ -289,7 +291,7 @@ class NotebookMonitor:
 
     def command(self, path, payload=None):
         """Tell the notebook agent (answer or end the call); returns its call state."""
-        url, token = notebook_url(self.config.get().camera_source), self.token()
+        url, token = notebook_url(self.config.get().camera_source, self.config.get().notebook_url), self.token()
         if not (url and token):
             raise RuntimeError('O notebook não está configurado.')
         try:

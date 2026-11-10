@@ -4,6 +4,7 @@ Keys (VAPID) are created once and stay in data/. Each signed-in device subscribe
 browsers deliver through their push service (Google, Mozilla, Apple) with end-to-end
 encrypted payloads. A subscription the push service reports as gone is removed.
 """
+import os
 import base64
 import json
 import logging
@@ -20,7 +21,7 @@ log = logging.getLogger(__name__)
 
 KEYS = DATA / 'vapid.json'
 # Apple rejects VAPID contacts on made-up hosts such as @localhost (403 BadJwtToken).
-CONTACT = 'mailto:casa-presente@example.com'
+CONTACT = os.environ.get('PUSH_CONTACT', 'mailto:casa-presente@example.com')   # contato do responsável pela instalação (mailto: ou https:), enviado ao serviço de push
 TITLES = {'intruder': 'Alguém entrou em casa?', 'fall': 'Possível queda', 'routine': 'Fora da rotina', 'inactivity': 'Ninguém apareceu',
           'camera_offline': 'Câmera sem imagem', 'camera_online': 'Câmera voltou', 'summary': 'Resumo do dia',
           'backup': 'Backup falhou', 'test': 'Teste de notificação', 'presence': 'Presença detectada',
