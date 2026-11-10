@@ -4,6 +4,8 @@ watched person is inside one, and an optional alert is raised when such a visit 
 A person counts as inside when enough of their box covers the area, so an area drawn over the
 fridge (ideally with the floor right in front of it) catches someone standing at its door.
 """
+from . import zones as areas
+
 FATHER = 'father'  # Fixed id of the father's profile.
 OVERLAP = .3       # Share of the person's box inside the area.
 GRACE = 2.0        # Seconds a person may leave the area (box jitter) before the stay starts over.
@@ -14,11 +16,8 @@ HAND_MARGIN = .02  # Normalised slack around the area for a hand to count.
 
 
 def overlap(box, zone, width, height):
-    """Fraction of the box that lies inside the normalized zone."""
-    x1, y1, x2, y2 = box
-    zx1, zy1, zx2, zy2 = zone[0] * width, zone[1] * height, zone[2] * width, zone[3] * height
-    inside = max(0, min(x2, zx2) - max(x1, zx1)) * max(0, min(y2, zy2) - max(y1, zy1))
-    return inside / max(1, (x2 - x1) * (y2 - y1))
+    """Fraction of the box that lies inside the normalized zone (a rectangle or a polygon)."""
+    return areas.share_inside(zone, box, width, height)
 
 
 class RestrictedWatch:
@@ -43,13 +42,13 @@ class RestrictedWatch:
     def feet_on(box, floor, width, height):
         """True when the bottom-center of the person's box (the feet) is on one of the marked floor strips."""
         x, y = (box[0] + box[2]) / 2 / width, box[3] / height
-        return any(strip[0] <= x <= strip[2] and strip[1] <= y <= strip[3] for strip in floor)
+        return any(areas.contains(strip, x, y) for strip in floor)
 
     def hands_in(self, points, zone, width, height):
         """True when a wrist the pose model is sure about lies in the area."""
         for index in WRISTS:
             x, y, confidence = points[index]
-            if confidence >= HAND_CONFIDENCE and zone[0] - HAND_MARGIN <= x / width <= zone[2] + HAND_MARGIN and zone[1] - HAND_MARGIN <= y / height <= zone[3] + HAND_MARGIN:
+            if confidence >= HAND_CONFIDENCE and areas.near(zone, x / width, y / height, HAND_MARGIN):
                 return True
         return False
 

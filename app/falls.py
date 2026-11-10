@@ -6,6 +6,8 @@ horizontal when lying. When the keypoints are not reliable, a wide silhouette is
 """
 import math
 
+from . import zones as areas
+
 SHOULDERS, HIPS = (5, 6), (11, 12)
 MIN_KEYPOINT_CONFIDENCE = .4
 LYING_ANGLE = 60          # Degrees from vertical.
@@ -52,7 +54,7 @@ def body_point(box, keypoints):
 
 def in_zones(point, zones, width, height):
     x, y = point[0] / max(1, width), point[1] / max(1, height)
-    return any(z[0] <= x <= z[2] and z[1] <= y <= z[3] for z in zones)
+    return any(areas.contains(z, x, y) for z in zones)
 
 
 class FallDetector:

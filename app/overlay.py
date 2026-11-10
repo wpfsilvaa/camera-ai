@@ -6,6 +6,8 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+from . import zones as areas
+
 
 # Short moments lying (bending down, picking something up) stay unmarked.
 VISIBLE_LYING=5
@@ -87,14 +89,13 @@ def draw_skeleton(frame, people, scale=1.0):
 
 
 def draw_zones(frame, zones, color=(190,160,90)):
-    """Shade marked areas on the live preview: where lying down is expected, or restricted areas."""
+    """Shade marked areas (rectangles or polygons) on the live preview: where lying down is expected, or restricted areas."""
     if not zones:
         return frame
     output=frame.copy()
     height,width=output.shape[:2]
-    for x1,y1,x2,y2 in zones:
-        cv2.rectangle(output,(round(x1*width),round(y1*height)),(round(x2*width),round(y2*height)),color,-1)
+    shapes=[np.array([(round(x*width),round(y*height)) for x,y in areas.corners(zone)],np.int32) for zone in zones]
+    cv2.fillPoly(output,shapes,color)
     output=cv2.addWeighted(output,.25,frame,.75,0)
-    for x1,y1,x2,y2 in zones:
-        cv2.rectangle(output,(round(x1*width),round(y1*height)),(round(x2*width),round(y2*height)),color,2)
+    cv2.polylines(output,shapes,True,color,2)
     return output

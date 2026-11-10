@@ -116,9 +116,9 @@ class CameraSettings(BaseModel):
     @field_validator('fall_zones', 'restricted_zones', 'restricted_floor')
     @classmethod
     def zones_valid(cls, zones):
-        for zone in zones:
-            if len(zone) != 4 or not all(0 <= v <= 1 for v in zone) or zone[0] >= zone[2] or zone[1] >= zone[3]:
-                raise ValueError('Área marcada inválida.')
+        from . import zones as areas
+        if not all(areas.valid(zone) for zone in zones):
+            raise ValueError('Área marcada inválida.')
         return [[round(v, 4) for v in zone] for zone in zones]
 
     @field_validator('image_presets')
