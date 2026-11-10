@@ -365,3 +365,21 @@ details.advanced>.form-fields{padding-bottom:14px}
 
 /* A short panel next to a tall one keeps its own height instead of stretching into an empty card. */
 .settings-grid{align-items:start}
+
+/* Phones, Visão geral: what the family looks at first (is it fine? the camera, how the day went), then the numbers and history. */
+@media(max-width:500px){
+  #page-overview{display:flex;flex-direction:column}
+  #page-overview>.page-heading{order:0}
+  #page-overview>.attention,#page-overview>.health-chip{order:1}
+  #page-overview>.camera-grid{order:2}
+  #page-overview>.monitor-grid{order:3}
+  #page-overview>.father-today{order:4}
+  #page-overview>.stats-grid{order:5}
+  #page-overview>#video-details{order:6}
+  #page-overview>.bottom-grid{order:7}
+  #page-overview>.routine-panel{order:8}
+  #page-overview>.page-footer{order:9}
+  .monitor-grid{margin-bottom:22px}
+  .recent-empty{min-height:120px}
+  .chart{height:110px}
+}
