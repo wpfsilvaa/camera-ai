@@ -333,3 +333,19 @@ dialog .dialog-heading{position:sticky;top:0;z-index:5;background:var(--surface)
 .focus-bar i{display:block;height:100%;width:0;background:var(--green-ink,#3f9a62);transition:width .25s}
 .focus-numbers{display:flex;gap:10px;align-items:baseline;margin-top:4px}
 .focus-numbers strong{font-size:20px;font-variant-numeric:tabular-nums;min-width:44px}
+
+/* Phones, family first: the menu says what each icon is, the top bar keeps only what matters, and the first screen shows the camera sooner. */
+@media(max-width:500px){
+  .nav-link::after{content:attr(data-short);font-size:11px;font-weight:600;line-height:1.15;margin-top:3px;white-space:nowrap}
+  .nav-link>span:first-child{font-size:22px}
+  .nav-link,.sidebar .nav-link{padding:7px 1px 5px}
+  .topbar .breadcrumb,.topbar .slash,.topbar-right #today-date{display:none}
+  #page-name{font-size:14px;font-weight:650;color:var(--ink)}
+  .street-button span{display:inline}
+  .street-button{padding:7px 12px}
+  .page-heading .eyebrow,.page-heading p,#page-overview .footnote{display:none}
+  .page-heading{margin-bottom:16px}
+  .stat-card{padding:12px 14px}
+  .stat-value{font-size:26px;line-height:1.2;margin-top:4px}
+  .stat-top{min-height:0}
+}
