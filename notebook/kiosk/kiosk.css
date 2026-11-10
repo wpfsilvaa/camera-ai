@@ -38,14 +38,14 @@ button:disabled{opacity:.35;cursor:not-allowed}
 html[data-night="1"] #screen[data-vigia=resting],html[data-night="1"] #screen[data-vigia=scheduled]{--vstate:#8a2218}
 .vigia{display:inline-flex;align-items:center;gap:.4em;border:2px solid var(--vstate);color:var(--vstate);border-radius:999px;padding:.15em .7em;font-size:clamp(18px,2.4vw,30px);font-weight:700;white-space:nowrap}
 .vi{width:1.2em;height:1.2em;flex-shrink:0}
-#screen[data-vigia=resting] .vigia{animation:vpulse 3.2s ease-in-out infinite}
-#screen[data-vigia=analysing] .vigia{animation:vpulse 1s ease-in-out infinite}
+#screen[data-vigia=resting] .vigia{animation:vpulse 3.2s steps(8) infinite}
+#screen[data-vigia=analysing] .vigia{animation:vpulse 1s steps(5) infinite}
 @keyframes vpulse{0%,100%{opacity:1}50%{opacity:.45}}
 .glow{position:fixed;inset:0;pointer-events:none;box-shadow:inset 0 0 12vmin 1vmin var(--vstate);opacity:0}
 body:has(#screen[data-vigia=off]) .glow{opacity:.16}
 body:has(#screen[data-vigia=scheduled]) .glow{opacity:.08}
-body:has(#screen[data-vigia=resting]) .glow{animation:gpulse 4s ease-in-out infinite}
-body:has(#screen[data-vigia=analysing]) .glow{animation:gpulse 1.1s ease-in-out infinite}
+body:has(#screen[data-vigia=resting]) .glow{animation:gpulse 4s steps(12) infinite}
+body:has(#screen[data-vigia=analysing]) .glow{animation:gpulse 1.1s steps(6) infinite}
 @keyframes gpulse{0%,100%{opacity:.07}50%{opacity:.4}}
 .greeting{font-size:clamp(44px,8vw,120px);font-weight:700;color:var(--ink);animation:greet .8s ease-out}
 @keyframes greet{from{opacity:0;transform:translateY(3vh)}to{opacity:1;transform:none}}
@@ -100,9 +100,9 @@ body:has(#screen[data-mode=black]){background:#000}
   --fg-top:#fff;--sh-top:0 .15vmin 1.6vmin #000c;--fg-bot:#fff;--sh-bot:0 .15vmin 1.6vmin #000c;--scrim-top:#0008;--scrim-bot:#000a}
 .slide{position:absolute;inset:0;opacity:0;transition:opacity 1.6s ease}
 .slide.on{opacity:1}
-.slide .back{position:absolute;inset:-6%;background-size:cover;background-position:center;filter:blur(36px) brightness(.55)}
+.slide .back{position:absolute;inset:-6%;background-size:cover;background-position:center}
 .slide img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;transform:scale(1);transform-origin:var(--kb,50% 50%)}
-.slide.on img,.slide.leaving img{animation:kenburns 18s ease-out forwards}
+.slide.on img,.slide.leaving img{animation:kenburns 18s steps(180,end) forwards}
 @keyframes kenburns{to{transform:scale(1.07)}}
 .scrim{position:absolute;left:0;right:0;pointer-events:none;transition:background 1s}
 .scrim.top{top:0;height:34vh;background:linear-gradient(var(--scrim-top),transparent)}
@@ -120,10 +120,10 @@ body:has(#screen[data-mode=black]){background:#000}
 .frame-hint{margin:0;color:inherit;font-size:clamp(22px,3.2vw,48px);font-weight:500;text-shadow:inherit;transition:opacity .6s}
 .fr-credit{position:absolute;right:3vw;bottom:12vh;margin:0;font-size:clamp(12px,1.4vw,20px);color:var(--fg-bot);text-shadow:var(--sh-bot);opacity:0;transition:opacity .8s}
 .fr-credit.on{opacity:.85}
-.fr-progress{position:absolute;left:0;right:0;bottom:0;height:.5vh;background:#fff2}
-.fr-progress i{display:block;height:100%;width:0;background:#fffb}
+.fr-progress{display:none;position:absolute;left:0;right:0;bottom:0;height:.5vh;background:#fff2}
+.fr-progress i{display:block;height:100%;width:100%;background:#fffb;transform:scaleX(0);transform-origin:left center;will-change:transform}
 .fr-progress i.run{animation:progress var(--slide,15s) linear forwards}
-@keyframes progress{to{width:100%}}
+@keyframes progress{to{transform:scaleX(1)}}
 .frame-greet-box{position:absolute;top:37vh;left:4vw;right:4vw;display:flex;flex-direction:column;align-items:center;gap:2.5vh;text-align:center;pointer-events:none}
 .frame-greeting{margin:0;color:#fff;font-size:clamp(44px,8vw,120px);line-height:1.08;font-weight:700;text-shadow:0 .3vmin 2vmin #000;animation:greet .8s ease-out}
 .frame-greeting.birthday{color:var(--amber);font-size:clamp(38px,6.2vw,92px)}
@@ -243,3 +243,4 @@ body[data-night="1"] .watching{opacity:.35}
 .pairing strong{font-size:clamp(28px,4vw,56px)}
 .pairing p{font-size:clamp(18px,2.2vw,30px);color:var(--muted);max-width:30em;margin:2vh auto}
 .pairing-code{font-size:clamp(64px,12vw,180px);font-weight:700;letter-spacing:.08em;font-variant-numeric:tabular-nums;color:var(--ink)}
+html.progress-on .fr-progress{display:block}

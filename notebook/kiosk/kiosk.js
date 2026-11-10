@@ -126,6 +126,7 @@
   }
   function render() {
     if (renderPairing()) return;   // Totem novo: só o código de pareamento até o painel conectar.
+    document.documentElement.classList.toggle('progress-on', Boolean(cfg().progress));   // Barra de tempo da foto: opcional.
     const {call, linked, enabled, battery, plugged} = last;
     $('battery').classList.toggle('hidden', battery == null);
     $('battery').innerHTML = battery == null ? '' : `<svg class="ic" aria-hidden="true"><use href="#ic-${plugged ? 'bolt' : 'battery'}"/></svg> ${Number(battery)}%`;
@@ -484,6 +485,16 @@
   }
 
   let creditTimer = null;
+  // Fundo desfocado sem filtro de 36 px (caro para a GPU): uma versão minúscula da foto, escurecida, ampliada pelo navegador.
+  function softBackdrop(img, id) {
+    try {
+      const canvas = document.createElement('canvas'); canvas.width = 64; canvas.height = 36;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, 64, 36);
+      ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(0, 0, 64, 36);
+      return `url(${canvas.toDataURL('image/jpeg', .7)})`;
+    } catch { return `url(/photo/${id}.jpg)`; }
+  }
   function nextSlide() {
     const photos = last.photos || [], ids = photos.map(p => p.id);
     if (!ids.length) return;
@@ -491,7 +502,7 @@
     if (!order.length) order = [...ids].sort(() => Math.random() - 0.5);
     const id = order.shift(), who = (photos.find(p => p.id === id) || {}).a, incoming = active === 'a' ? 'b' : 'a', el = $('slide-' + incoming), outgoing = $('slide-' + active), img = el.querySelector('img');
     img.onload = () => {
-      el.querySelector('.back').style.backgroundImage = `url(/photo/${id}.jpg)`;
+      el.querySelector('.back').style.backgroundImage = softBackdrop(img, id);
       img.style.setProperty('--kb', `${30 + Math.random() * 40}% ${30 + Math.random() * 40}%`);
       el.classList.remove('leaving'); el.classList.add('on');
       outgoing.classList.remove('on'); outgoing.classList.add('leaving');

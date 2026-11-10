@@ -438,6 +438,9 @@ class MonitorDisplayTests(unittest.TestCase):
         self.assertEqual(monitor.parse_cfg(''), monitor.DEFAULT_CFG)
         cfg = monitor.parse_cfg('{"slide":9999,"awake":1,"sound":false,"vol":{"button":250,"call":-5,"help":"loud"},"calendar":false,"black":"yes","hints":["Oi","","x"]}')
         self.assertEqual((cfg['slide'], cfg['awake'], cfg['sound'], cfg['calendar'], cfg['black'], cfg['hints']), (120, 10, False, False, True, ['Oi', 'x']))
+        self.assertIs(monitor.DEFAULT_CFG['progress'], False)
+        self.assertIs(monitor.parse_cfg('{"progress":true}')['progress'], True)
+        self.assertIs(monitor.parse_cfg('{"progress":"sim"}')['progress'], False)   # Valor inválido: padrão.
         self.assertEqual(cfg['vol'], {'button': 100, 'call': 0, 'help': 100, 'message': 80})    # Clamped; bad values fall back to the default.
         self.assertEqual(monitor.parse_cfg('[1]'), monitor.DEFAULT_CFG)
 

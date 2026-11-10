@@ -277,6 +277,7 @@ class Settings(CameraSettings):
     kiosk_bright_night: int = Field(default=3, ge=1, le=100)
     kiosk_bright_wake: int = Field(default=40, ge=1, le=100)
     kiosk_bright_hold: int = Field(default=45, ge=10, le=600)
+    kiosk_frame_progress: bool = False                               # Barra que enche com o tempo da foto (custa ~4% de CPU no notebook).
     kiosk_frame_calendar: str = 'always'                             # On the photo frame: always visible, pulse (12 s a minute) or off.
     kiosk_birthdays_enabled: bool = True
     kiosk_voice: str = Field(default='faber', pattern='^(faber|cadu|jeff|edresson)$')   # Local voice (Piper) that reads messages aloud.
