@@ -5,4 +5,4 @@ for b in google-chrome-stable google-chrome chromium chromium-browser; do
 done
 [[ -n "${BROWSER:-}" ]] || { echo 'Instale o Google Chrome ou o Chromium.' >&2; exit 1; }
 exec "$BROWSER" --app=http://127.0.0.1:8765/ --start-fullscreen --user-data-dir="$HOME/.config/casa-kiosk" \
-  --no-first-run --disable-features=Translate --autoplay-policy=no-user-gesture-required
+  --ozone-platform-hint=auto --no-first-run --disable-features=Translate --autoplay-policy=no-user-gesture-required
