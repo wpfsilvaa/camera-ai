@@ -9,7 +9,7 @@ const identity = {father:['Meu pai','green'], unknown:['A identificar','amber'],
 const delivery = {partial:'Envio parcial',cancelled:'Destinatário removido',skipped:'Não enviar · registro antigo',pending:'Na fila', sending:'Enviando…', sent:'Enviado', retry:'Nova tentativa', failed:'Falha no envio', uncertain:'Conferir envio'};
 let settings, status, activePage = 'overview', historyFilter = 'all', offset = 0, total = 0;
 let recentEvents = [], historyEvents = [], selectedEvent, streamActive = false, toastTimer, polling = false;
-let profiles = [];
+let profiles = [], navIds = [];
 let selectedCamera = 'main', historyCamera = '', knownCameras = [];
 const cameraPath = path => `${path}${path.includes('?')?'&':'?'}camera_id=${encodeURIComponent(selectedCamera)}`;
 
@@ -253,6 +253,7 @@ function openEvent(event) {
   if (event.people?.length) $('#event-content .label-actions').innerHTML = personTracksHTML(event);
   else $('#event-content .label-actions').insertAdjacentHTML('beforeend','<p class="small muted">Este registro não tem imagens individuais para ensinar. Novos registros com a comparação ativa terão uma identificação por pessoa.</p>');
   if (!$('#event-dialog').open) $('#event-dialog').showModal();
+  window.updateEventNav?.();
 }
 document.addEventListener('keydown', event => {
   const row = event.key === 'Enter' && event.target.closest?.('tr[data-event]');
@@ -261,6 +262,7 @@ document.addEventListener('keydown', event => {
 document.addEventListener('click', event => {
   const eventButton = event.target.closest('[data-event]');
   if (eventButton) {
+    navIds = eventButton.closest('#history-table') ? historyEvents.map(e => e.id) : [];
     action(eventButton, async () => {openEvent(await api(`/api/events/${eventButton.dataset.event}`));});
   }
   const labelButton = event.target.closest('[data-label]');
