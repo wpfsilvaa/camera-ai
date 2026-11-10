@@ -47,6 +47,7 @@ class CameraSettings(BaseModel):
     detection_fps: int = Field(default=30, ge=1, le=30)
     # Analysis rate while nobody is around; goes back to detection_fps when someone appears.
     idle_detection_fps: int = Field(default=15, ge=1, le=30)
+    calm_detection_fps: int = Field(default=2, ge=0, le=15)   # Analyses per second while everyone in view stays still (0 = always the full rate).
     # Watch mode: within the hours below, and while nobody is around, the camera is read at a low frame
     # rate and only motion wakes the analysis. People are still confirmed by the detector before any notice.
     sentinel_enabled: bool = False

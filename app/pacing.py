@@ -6,6 +6,48 @@ ACTIVE_HOLD_SECONDS = 3.0
 TOUCH_SECONDS = 5.0
 
 
+# Everyone in view has to stay put this long before the analysis eases off (see Stillness).
+CALM_SECONDS = 4.0
+# How far (in body heights) a person's center may drift between two analyses and still count as staying put.
+CALM_MOVE = .08
+
+
+class Stillness:
+    """Tells when the people in view have stopped moving (sitting, standing at the sink), so the detector can run slower.
+
+    Any new face in the picture, anyone out of the tracker's reach, or a step of more than CALM_MOVE brings the full pace back at once.
+    """
+
+    def __init__(self, seconds=CALM_SECONDS, move=CALM_MOVE):
+        self.seconds, self.move = seconds, move
+        self.reset()
+
+    def reset(self):
+        self.centers = {}   # track id -> center at the last analysis
+        self.since = None
+        self.last = None    # When that analysis ran.
+
+    def calm(self, boxes, ids, now):
+        current, moving, before_time, self.last = {}, not len(boxes), self.last, now
+        for box, key in zip(boxes, ids):
+            if key is None:
+                moving = True
+                continue
+            x1, y1, x2, y2 = box
+            center = ((x1 + x2) / 2, (y1 + y2) / 2)
+            current[key] = center
+            before = self.centers.get(key)
+            if before is None or ((center[0] - before[0]) ** 2 + (center[1] - before[1]) ** 2) ** .5 > self.move * max(1.0, y2 - y1):
+                moving = True
+        self.centers = current
+        if moving:
+            self.since = None
+            return False
+        if self.since is None:
+            self.since = before_time if before_time is not None else now   # Still since the analysis before this one.
+        return now - self.since >= self.seconds
+
+
 class DetectionPacing:
     def __init__(self, hold=ACTIVE_HOLD_SECONDS):
         self.hold = hold
@@ -17,11 +59,13 @@ class DetectionPacing:
     def idle(self, now):
         return self.last_active is None or now - self.last_active >= self.hold
 
-    def fps(self, settings, active, now):
-        """Analysis rate: full while someone is around (or just left), idle rate otherwise."""
+    def fps(self, settings, active, now, calm=False):
+        """Analysis rate: full while someone is around (or just left), a gentler one while they all stay still, idle rate otherwise."""
         if active:
             self.last_active = now
         if self.last_active is not None and now - self.last_active < self.hold:
+            if calm and settings.calm_detection_fps:
+                return min(settings.calm_detection_fps, settings.detection_fps)
             return settings.detection_fps
         return min(settings.idle_detection_fps, settings.detection_fps)
 

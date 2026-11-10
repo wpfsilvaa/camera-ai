@@ -22,7 +22,7 @@ import numpy as np
 
 from .falls import FallDetector
 from .overlay import annotate, draw_skeleton, draw_zones
-from .pacing import DetectionPacing, MotionGate, TouchThrottle
+from .pacing import DetectionPacing, MotionGate, Stillness, TouchThrottle
 from .presence import Presence
 from .restricted import FATHER, PhotoSchedule, RestrictedWatch
 from .tracking import PersonTracker
@@ -403,6 +403,7 @@ class CameraWorker:
             last_recognition=0
             touch=TouchThrottle()
             pacing=DetectionPacing()
+            stillness=Stillness()
             gate=MotionGate()
             rates=deque(maxlen=90)
             try:
@@ -485,7 +486,7 @@ class CameraWorker:
                             release_model()
                         tracker=None
                         detected_boxes=[];detected_ids=[];last_inference_ms=None;detected_lying={}
-                        detections.clear();next_detection=0;gate.reset()
+                        detections.clear();next_detection=0;gate.reset();stillness.reset()
                         self.falls.reset()
                         zone=Presence(settings.min_presence_seconds,settings.absence_seconds)
                         self.restricted.reset()
@@ -572,7 +573,9 @@ class CameraWorker:
                         result=None
                         detected_boxes,detected_ids=boxes,ids
                         last_inference_ms=inference_ms
-                        next_detection=now+1/pacing.fps(current,count>0 or event_id is not None or manual_event is not None,now)-.003
+                        # Nobody moving, nobody lying, nobody at a restricted area: the analysis can take it easy until something changes.
+                        calm=stillness.calm(boxes,ids,now) and not detected_lying and not self.restricted.areas
+                        next_detection=now+1/pacing.fps(current,count>0 or event_id is not None or manual_event is not None,now,calm)-.003
                         detections.append(time.perf_counter())
                         if manual_event is None:
                             action=presence.update(now,count)

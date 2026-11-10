@@ -4,7 +4,49 @@ from pathlib import Path
 
 from app.config import CameraSettings
 from app.db import Database
-from app.pacing import DetectionPacing, TouchThrottle, analysis_wanted, preview_due
+from app.pacing import DetectionPacing, Stillness, TouchThrottle, analysis_wanted, preview_due
+
+
+class StillnessTests(unittest.TestCase):
+    def box(self, x, y=100):
+        return [x, y, x + 100, y + 300]
+
+    def test_calm_only_after_everyone_stays_put_for_a_while(self):
+        still = Stillness(seconds=4)
+        self.assertFalse(still.calm([], [], 0))                                    # Nobody in view.
+        self.assertFalse(still.calm([self.box(100)], [1], 1))                      # Just appeared.
+        self.assertFalse(still.calm([self.box(101)], [1], 3))                      # Still, but not for long enough.
+        self.assertTrue(still.calm([self.box(102)], [1], 5.5))
+        self.assertFalse(still.calm([self.box(180)], [1], 6))                      # A step of 78 px: the full pace is back at once.
+        self.assertFalse(still.calm([self.box(181)], [1], 6.5))                    # And the count starts over.
+
+    def test_a_new_person_an_untracked_box_or_a_mover_ends_the_calm(self):
+        still = Stillness(seconds=1)
+        still.calm([self.box(100)], [1], 0)
+        self.assertTrue(still.calm([self.box(100)], [1], 2))
+        self.assertFalse(still.calm([self.box(100), self.box(500)], [1, 2], 3))    # Someone new.
+        self.assertFalse(still.calm([self.box(100), self.box(500)], [1, None], 4)) # A box with no track.
+        self.assertFalse(still.calm([self.box(100), self.box(500)], [1, 2], 5))    # 2 reappears as a new track.
+        self.assertTrue(still.calm([self.box(100), self.box(500)], [1, 2], 6.5))
+
+    def test_reset_forgets_everything(self):
+        still = Stillness(seconds=1)
+        still.calm([self.box(100)], [1], 0)
+        still.reset()
+        self.assertFalse(still.calm([self.box(100)], [1], 5))
+
+
+class CalmPaceTests(unittest.TestCase):
+    def test_calm_lowers_the_rate_only_while_someone_is_around(self):
+        settings = CameraSettings(detection_fps=5, idle_detection_fps=2, calm_detection_fps=2)
+        pacing = DetectionPacing(hold=3)
+        self.assertEqual(pacing.fps(settings, True, 100), 5)
+        self.assertEqual(pacing.fps(settings, True, 101, calm=True), 2)
+        self.assertEqual(pacing.fps(settings, True, 102, calm=False), 5)          # Movement: back at once.
+        self.assertEqual(CameraSettings(detection_fps=5, calm_detection_fps=0).calm_detection_fps, 0)
+        off = CameraSettings(detection_fps=5, calm_detection_fps=0)
+        self.assertEqual(DetectionPacing().fps(off, True, 100, calm=True), 5)     # 0 switches the feature off.
+        self.assertEqual(DetectionPacing().fps(CameraSettings(detection_fps=1, calm_detection_fps=2), True, 100, calm=True), 1)   # Never above the normal rate.
 
 
 class DetectionPacingTests(unittest.TestCase):
