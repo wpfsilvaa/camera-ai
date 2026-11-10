@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import threading
 from bisect import bisect_right
 from contextlib import contextmanager
 from datetime import datetime, timedelta
@@ -13,6 +14,7 @@ TZ = ZoneInfo('America/Sao_Paulo')
 class Database:
     def __init__(self, path=DATA / 'history.sqlite3'):
         self.path = path
+        self.local = threading.local()   # One open connection per thread: opening one per query was a steady cost on the notebook.
         with self.connect() as db:
             db.executescript('''
                 PRAGMA journal_mode=WAL;
@@ -196,15 +198,22 @@ class Database:
 
     @contextmanager
     def connect(self):
-        db = sqlite3.connect(self.path, timeout=15)
-        db.row_factory = sqlite3.Row
-        db.execute('PRAGMA foreign_keys=ON')
-        db.execute('PRAGMA synchronous=NORMAL')  # safe with WAL; avoids an fsync per commit
+        db = getattr(self.local, 'db', None)
+        if db is None:
+            db = self.local.db = sqlite3.connect(self.path, timeout=15)
+            db.row_factory = sqlite3.Row
+            db.execute('PRAGMA foreign_keys=ON')
+            db.execute('PRAGMA synchronous=NORMAL')  # safe with WAL; avoids an fsync per commit
+        depth = getattr(self.local, 'depth', 0)
+        self.local.depth = depth + 1
         try:
-            with db:
-                yield db
+            if depth:
+                yield db   # Nested use in the same thread: the outer block owns the transaction.
+            else:
+                with db:
+                    yield db
         finally:
-            db.close()
+            self.local.depth = depth
 
     def execute(self, query, params=()):
         with self.connect() as db:
