@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#163d32">
+  <meta name="theme-color" content="#0c4a5c">
   <script src="/static/theme.js"></script>
   <script src="/static/icons.js"></script>
   <title>Casa Presente · Cuidado à distância</title>
@@ -20,19 +20,32 @@
   <aside class="sidebar">
     <a class="brand" href="#overview"><span class="brand-mark"><svg class="ic" aria-hidden="true"><use href="#ic-home"/></svg></span><span>casa<span class="brand-light">presente</span><small>CUIDADO À DISTÂNCIA</small></span></a>
     <div class="workspace"><span class="home-icon"><svg class="ic" aria-hidden="true"><use href="#ic-home"/></svg></span><div>Casa do meu pai<small>Seu espaço de acompanhamento</small></div></div>
-    <div class="nav-label">ACOMPANHAMENTO</div>
     <nav aria-label="Menu principal">
-      <a href="#overview" class="nav-link active" data-page="overview" data-short="Início"><span><svg class="ic" aria-hidden="true"><use href="#ic-grid"/></svg></span>Visão geral</a>
-      <a href="#history" class="nav-link" data-page="history" data-short="Histórico"><span><svg class="ic" aria-hidden="true"><use href="#ic-clock"/></svg></span>Histórico <span class="nav-count" id="nav-count">0</span></a>
-      <a href="#people" class="nav-link" data-page="people" data-short="Pessoas"><span><svg class="ic" aria-hidden="true"><use href="#ic-users"/></svg></span>Pessoas</a>
-      <a href="#messages" class="nav-link" data-page="messages" data-short="Recados"><span><svg class="ic" aria-hidden="true"><use href="#ic-mail"/></svg></span>Recados</a>
-      <a href="#health" class="nav-link" data-page="health" data-short="Saúde"><span><svg class="ic" aria-hidden="true"><use href="#ic-heart"/></svg></span>Saúde <span class="health-dot" id="health-dot" aria-hidden="true"></span></a>
-      <a href="#settings" class="nav-link admin-only" data-page="settings" data-short="Ajustes"><span><svg class="ic" aria-hidden="true"><use href="#ic-sliders"/></svg></span>Configurações</a>
-      <a href="#users" class="nav-link admin-only" data-page="users" data-short="Usuários"><span><svg class="ic" aria-hidden="true"><use href="#ic-user"/></svg></span>Usuários</a>
+      <div class="nav-group"><div class="nav-label">ACOMPANHAR</div>
+        <a href="#overview" class="nav-link active" data-page="overview" data-short="Início"><span><svg class="ic" aria-hidden="true"><use href="#ic-grid"/></svg></span>Visão geral</a>
+        <a href="#history" class="nav-link" data-page="history" data-short="Histórico"><span><svg class="ic" aria-hidden="true"><use href="#ic-clock"/></svg></span>Histórico <span class="nav-count" id="nav-count">0</span></a>
+        <a href="#messages" class="nav-link" data-page="messages" data-short="Recados"><span><svg class="ic" aria-hidden="true"><use href="#ic-mail"/></svg></span>Recados</a>
+      </div>
+      <div class="nav-group"><div class="nav-label">CUIDAR</div>
+        <a href="#people" class="nav-link more-item" data-page="people" data-short="Pessoas"><span><svg class="ic" aria-hidden="true"><use href="#ic-users"/></svg></span>Pessoas</a>
+        <a href="#health" class="nav-link" data-page="health" data-short="Saúde"><span><svg class="ic" aria-hidden="true"><use href="#ic-heart"/></svg></span>Saúde <span class="health-dot" id="health-dot" aria-hidden="true"></span></a>
+      </div>
+      <div class="nav-group admin-only"><div class="nav-label">ADMINISTRAR</div>
+        <a href="#settings" class="nav-link admin-only more-item" data-page="settings" data-short="Ajustes"><span><svg class="ic" aria-hidden="true"><use href="#ic-sliders"/></svg></span>Configurações</a>
+        <a href="#users" class="nav-link admin-only more-item" data-page="users" data-short="Usuários"><span><svg class="ic" aria-hidden="true"><use href="#ic-user"/></svg></span>Usuários</a>
+      </div>
+      <button type="button" class="nav-link nav-more" id="nav-more" aria-expanded="false" aria-controls="more-sheet" data-short="Mais"><span><svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/></svg></span></button>
     </nav>
     <div class="sidebar-note"><span class="leaf"><svg class="ic" aria-hidden="true"><use href="#ic-leaf"/></svg></span><strong>Mais perto, mesmo de longe.</strong><p>Um registro dos pequenos momentos da rotina.</p></div>
     <div class="local-badge"><span class="dot"></span> Vídeos guardados neste computador</div>
   </aside>
+
+  <div class="more-sheet hidden" id="more-sheet" role="dialog" aria-label="Mais opções">
+    <a href="#people" class="more-link" data-sheet="people"><svg class="ic" aria-hidden="true"><use href="#ic-users"/></svg>Pessoas</a>
+    <a href="#settings" class="more-link admin-only" data-sheet="settings"><svg class="ic" aria-hidden="true"><use href="#ic-sliders"/></svg>Configurações</a>
+    <a href="#users" class="more-link admin-only" data-sheet="users"><svg class="ic" aria-hidden="true"><use href="#ic-user"/></svg>Usuários</a>
+    <p class="more-note admin-only">Para ajustar tudo com calma, use o computador.</p>
+  </div>
 
   <main>
     <header class="topbar"><div><span class="breadcrumb">Minha casa</span><span class="slash">/</span><span id="page-name">Visão geral</span></div><div class="topbar-right"><span id="today-date"></span><button type="button" id="theme-toggle" class="icon-button theme-toggle" aria-label="Aparência: automática"><span aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-contrast"/></svg></span></button><button type="button" id="street-toggle" class="street-button" aria-pressed="false" title="Modo rua"><svg class="ic" aria-hidden="true"><use href="#ic-home"/></svg><span id="street-label">Modo rua</span></button><span class="avatar">CP</span><button type="button" id="account-button" class="account-button hidden" aria-haspopup="dialog"><span class="account-initial" id="account-initial"></span><span id="account-name"></span></button></div></header>

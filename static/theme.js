@@ -7,7 +7,7 @@
     const dark = mode === 'dark' || (mode === 'auto' && query && query.matches);
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     const bar = document.querySelector('meta[name=theme-color]');
-    if (bar) bar.content = dark ? '#0f1713' : '#163d32';
+    if (bar) bar.content = dark ? '#0d1519' : '#0c4a5c';
   }
   window.casaTheme = {
     modes: MODES,

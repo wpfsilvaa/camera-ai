@@ -238,6 +238,7 @@ O painel usa uma tela de login com usuário e senha, e cada pessoa tem sua próp
 
 - **Administrador** altera tudo: câmeras, WhatsApp, pessoas, registros e usuários.
 - **Família** vê o ao vivo, o histórico e os vídeos, sem alterar nada. Não vê o endereço da câmera, os números do WhatsApp nem o QR code de pareamento.
+- No celular, a barra de baixo mostra Início, Histórico, Recados e Saúde; o botão **Mais** abre Pessoas (e, para o administrador, Configurações e Usuários). No computador, o menu lateral é dividido em Acompanhar, Cuidar e Administrar.
 - Sem nenhum usuário, o painel fica aberto no próprio computador. Abra **Usuários** e crie o primeiro administrador; a partir daí o login é obrigatório.
 - Se o `.env` tiver `DASHBOARD_PASSWORD` (configuração antiga), a primeira execução cria o usuário `admin` com essa senha. Troque a senha em **Minha conta** (botão com seu nome, no topo) e remova a variável do `.env`.
 - Senhas usam scrypt; a sessão é um cookie `HttpOnly` e `SameSite=Strict`, válido por 12 horas ou 30 dias com “Manter conectado”. Cinco senhas erradas bloqueiam novas tentativas daquele endereço por 15 minutos.

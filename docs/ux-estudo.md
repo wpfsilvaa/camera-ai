@@ -8,13 +8,19 @@ Quem usa: familiares (muitas vezes pelo celular, com pressa e preocupação) e u
 |---|----------|--------|------------------|
 | 1 | Nenhum resumo de saúde: era preciso ler 4 cartões, a câmera e os alertas para saber se algo falhava | Problema passa despercebido | Faixa **"Tudo funcionando"** no topo da Visão geral; vira âmbar/vermelha e lista cada problema (câmera, notebook, WhatsApp, disco) |
 | 2 | Fontes de 8 a 10 px em legendas, selos e botões | Ilegível no celular | Escala mínima 11 px (legendas) e 12 px (texto pequeno); cinza de apoio com mais contraste |
-| 3 | Configurações: 9 painéis numerados em uma página longa | Rolagem enorme | 3 abas — **Câmera · Avisos · Sistema** (setas do teclado funcionam) |
+| 3 | Configurações: 9 painéis numerados em uma página longa | Rolagem enorme | 4 abas — **Câmera · Avisos · Totem · Sistema** (setas do teclado funcionam) |
 | 4 | Salvar só no fim da página, sem indicar mudança pendente | Perde alterações | Barra de salvar fixa com "● Alterações ainda não salvas" |
 | 5 | Menu no topo do celular | Longe do polegar | Barra de navegação **inferior** no celular, respeitando a área segura do iPhone |
 | 6 | Alvos de toque pequenos (29–34 px) | Erros de toque | Em telas de toque: 44 px mínimo e interruptores maiores |
 | 7 | Só tema claro | Cansa à noite | **Aparência automática / clara / escura** (botão no topo; lembra a escolha; sem "piscar") |
 | 8 | Troca de página seca | Sensação de travado | Transição de 0,2 s (desligada com "reduzir movimento") |
 | 9 | Família não podia escolher os avisos do próprio aparelho (403) | Opção inútil | Liberado para contas de família |
+
+## Paleta e menus (nov/2026)
+- **Paleta azul-petróleo** com contraste verificado (texto de apoio ≥ 5:1, foco e bordas de campos ≥ 3:1). Cores de estado (`--ok`, `--warn`, `--bad`, `--off`) e da câmera (`--cam-*`) são variáveis; os pontos de saúde também mudam de forma (círculo, quadrado, losango, anel).
+- **Computador:** menu em grupos — *Acompanhar* (Visão geral, Histórico, Recados), *Cuidar* (Pessoas, Saúde), *Administrar* (Configurações, Usuários; só administrador).
+- **Celular:** barra inferior com Início, Histórico, Recados, Saúde e **Mais** (Pessoas; para o administrador também Configurações e Usuários).
+- Teste: `tests/menu-ui-smoke.mjs` (menu por papel e aparelho, tema claro e escuro).
 
 ## Dark mode
 As cores fixas do CSS viraram variáveis (`--surface`, `--muted`, `--green-ink` …) em `static/style.css`; o tema escuro redefine só as variáveis. Telas novas devem usar as variáveis.

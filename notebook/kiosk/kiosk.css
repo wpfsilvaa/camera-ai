@@ -1,6 +1,6 @@
-:root{--bg:#0f1713;--ink:#f1f6f2;--muted:#a9bbb0;--green:#2f8f66;--red:#d6453a;--grey:#33433b;--amber:#d9a13a;--vstate:transparent}
+:root{--bg:#0d1519;--ink:#f0f6f8;--muted:#a9bfc7;--green:#0f6b82;--red:#d6453a;--grey:#2b3b44;--amber:#e6b45e;--vstate:transparent}
 /* Night: dark red tones only, so the screen does not ruin night vision. */
-html[data-night="1"]{--bg:#080202;--ink:#c8493c;--muted:#7a2a22;--green:#5e1710;--red:#7d1a12;--grey:#240b08;--amber:#c2410c}
+html[data-night="1"]{--bg:#080202;--ink:#c8493c;--muted:#b8443a;--green:#5e1710;--red:#7d1a12;--grey:#240b08;--amber:#c2410c}
 html[data-night="1"] .big{color:#f0948a}
 html[data-night="1"] .face-box video{filter:sepia(1) saturate(4) hue-rotate(-35deg) brightness(.55)}
 *{box-sizing:border-box}

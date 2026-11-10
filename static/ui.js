@@ -86,4 +86,25 @@
   };
   $('#settings-form').addEventListener('input', () => mark(true));
   window.settingsSaved = () => mark(false);
+
+  // Celular: botão "Mais" abre a folha com Pessoas / Configurações / Usuários ---
+  const more = $('#nav-more'), sheet = $('#more-sheet');
+  if (more && sheet) {
+    const close = () => { sheet.classList.add('hidden'); more.setAttribute('aria-expanded', 'false'); };
+    const sync = () => more.classList.toggle('active', !!sheet.querySelector('.more-link.active'));
+    const mark = () => {
+      const page = (location.hash.slice(1) || 'overview');
+      sheet.querySelectorAll('.more-link').forEach(a => a.classList.toggle('active', a.dataset.sheet === page));
+      sync();
+    };
+    more.addEventListener('click', () => {
+      const open = sheet.classList.toggle('hidden') === false;
+      more.setAttribute('aria-expanded', String(open));
+    });
+    sheet.addEventListener('click', event => { if (event.target.closest('a')) close(); });
+    document.addEventListener('click', event => { if (!event.target.closest('#more-sheet, #nav-more')) close(); });
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') close(); });
+    window.addEventListener('hashchange', mark);
+    mark();
+  }
 })();
