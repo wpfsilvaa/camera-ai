@@ -15,7 +15,11 @@ try {
   browser=await chromium.launch({executablePath:process.env.CHROME_PATH || '/opt/google/chrome/chrome',headless:true,args:['--no-sandbox']});
   const page=await browser.newPage({viewport:{width:1360,height:1000}}),errors=[];
   page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
+  // Camera actions live in the menu of the camera picker (Visão geral): open it, then choose.
+  const openMenu=async()=>{if(await page.locator('#camera-menu').isHidden())await page.locator('#camera-picker').click();};
+  const pick=async id=>{await openMenu();await page.locator(`#camera-cards [data-camera="${id}"]`).click();};
   await page.goto(base);await page.waitForFunction(()=>document.querySelector('#live-image').naturalWidth===640);
+  await openMenu();
   await page.locator('#add-camera').click();
   await page.locator('#camera-form [name=camera_name]').fill('Sala');
   await page.locator('#camera-form [name=camera_source]').fill(path.join(data,'second.avi'));
@@ -26,8 +30,9 @@ try {
   await page.locator('#settings-form [name=device]').selectOption('cpu');
   await page.locator('#settings-form [name=detection_fps]').fill('5');
   await page.locator('#save-settings').click();
-  await page.locator('#pause-all-analysis').click();
   await page.locator('a[data-page=overview]').click();
+  await openMenu();
+  await page.locator('#pause-all-analysis').click();
   await page.locator('#toggle-monitor').click();
   await page.waitForFunction(()=>document.querySelector('#live-image').naturalWidth===800);
   assert.equal((await api('/api/cameras')).cameras.filter(c=>c.state==='online').length,2);
@@ -39,7 +44,7 @@ try {
   await mkdir('test-results',{recursive:true});await page.screenshot({path:'test-results/multicamera-desktop.png',fullPage:true});
   await page.locator('#toggle-recording').click();
   await page.waitForFunction(()=>document.querySelector('#toggle-recording').textContent==='Parar gravação manual');
-  await page.locator('#camera-select').selectOption('main');
+  await pick('main');
   await page.waitForFunction(()=>document.querySelector('#live-image').naturalWidth===640);
   await page.locator('#toggle-recording').click();
   await page.waitForFunction(()=>document.querySelector('#toggle-recording').textContent==='Parar gravação manual');
@@ -47,8 +52,9 @@ try {
   await page.locator('#toggle-recording').click();
   await page.waitForFunction(()=>document.querySelector('#toggle-recording').textContent==='Gravar manualmente');
   assert.equal((await api('/api/status?camera_id='+second)).camera.manual_recording,true);
-  await page.locator('#camera-select').selectOption(second);
+  await pick(second);
   await page.waitForFunction(()=>document.querySelector('#camera-title').textContent==='Sala');
+  await openMenu();
   await page.locator('#remove-camera').click();
   await page.waitForFunction(()=>document.querySelector('#camera-select').value==='main');
   await page.waitForFunction(()=>document.querySelector('#live-image').naturalWidth===640);

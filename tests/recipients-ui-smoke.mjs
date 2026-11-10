@@ -18,6 +18,7 @@ try {
  const page=await browser.newPage({viewport:{width:1360,height:1000}}),errors=[];
  page.on('pageerror',e=>errors.push(e.message));page.on('dialog',dialog=>dialog.accept());
  await page.goto(base+'/#settings');
+ await page.locator('.settings-tab[data-group="alerts"]').click();   // Recipients are in the Avisos tab.
  const family=page.locator('[name=additional_recipients]');
  await family.waitFor();
  assert.equal(await family.inputValue(),'5511888888888');

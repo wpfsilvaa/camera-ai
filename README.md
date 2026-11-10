@@ -114,7 +114,11 @@ núcleo. Detalhes e dimensionamento em [docs/cpu-capacity.md](docs/cpu-capacity.
 ```bash
 PYTHONPATH=. .venv/bin/python -m unittest discover -s tests -p "test_*.py"   # ~220 testes, sem WhatsApp real
 npm test                                                                     # gateway do WhatsApp
+npm run test:ui                                                              # interface no navegador (Playwright), com dados temporários
 ```
+
+Os testes `gateway-smoke`, `live-smoke` e `live-video-ui-smoke` não entram em `test:ui`: eles usam serviços de verdade
+(gateway do WhatsApp, o app em `:8000`, o MediaMTX da cozinha) e só servem para conferir uma instalação em funcionamento.
 
 Para explorar a interface (ou refazer as capturas) sem dados reais:
 

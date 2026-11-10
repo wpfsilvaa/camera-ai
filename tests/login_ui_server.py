@@ -43,5 +43,7 @@ def face_track(vector, quality, suggested=None):
 track, sample = face_track((1, 0, 0), 100)
 main.recognition.confirm(track, 'father', sample)
 face_track((.9, .1, .42), 200, 'father')
+# This one is sure enough (0.90) to be approved by itself; the test wants it waiting for a person.
+main.config.save(main.config.get().model_copy(update={'learning_auto_approve': False}))
 main.learning.scan()
 uvicorn.run(main.app, host='127.0.0.1', port=int(sys.argv[1]), log_level='error')

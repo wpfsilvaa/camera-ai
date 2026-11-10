@@ -42,7 +42,9 @@ try {
   await page.locator('.user-row',{hasText:'Ana (irmã)'}).waitFor();
   if (shots) await page.screenshot({path:`${shots}/users.png`,fullPage:true});
   // Alerts: settings are saved, the test button explains a missing number and the overview lists alerts.
+  const tab=name=>page.locator(`.settings-tab[data-group="${name}"]`).click();   // Settings are split in tabs: open the one that holds the field.
   await page.goto(base+'/#settings');
+  await tab('alerts');
   await page.check('[name=alerts_enabled]');
   await page.fill('[name=inactivity_hours]','3');
   await page.selectOption('[name=daily_summary_hour]','20');
@@ -53,6 +55,7 @@ try {
   await page.click('#test-alert');
   await page.locator('#toast',{hasText:'Cadastre ao menos um número'}).waitFor();
   // Fall zones: draw one over the (stopped) camera area and save it.
+  await tab('camera');
   await page.check('[name=fall_detection_enabled]');
   await page.locator('#zone-canvas').scrollIntoViewIfNeeded();
   const zone=await page.locator('#zone-canvas').boundingBox();
@@ -86,18 +89,21 @@ try {
   assert.ok(Math.abs(restricted.restricted_zones[0][0]-.6)<.02 && Math.abs(restricted.restricted_zones[0][3]-.8)<.02, JSON.stringify(restricted.restricted_zones));
   if (shots) await fridgeEditor.locator('..').screenshot({path:`${shots}/restricted-mode.png`});
   if (shots) await page.locator('#page-settings .settings-panel').last().screenshot({path:`${shots}/alerts-settings.png`});
+  await tab('alerts');
   await page.fill('[name=recipient]','5511999999999'); await page.click('#save-settings');
   await page.locator('#toast',{hasText:'Configurações salvas'}).waitFor();
   await page.click('#test-alert');
-  await page.goto(base+'/#overview');
+  await page.goto(base+'/#health');   // Recent alerts live in the Saúde page.
   await page.locator('.alert-row',{hasText:'Teste de alerta'}).waitFor();
+  if (shots) await page.locator('.alerts-panel').screenshot({path:`${shots}/alerts-overview.png`});
+  await page.goto(base+'/#overview');
   await page.locator('#routine-text',{hasText:'Costuma aparecer por volta das 07:'}).waitFor();
   assert.ok(await page.locator('#routine-chart .routine-bar').count()>=4);
   if (shots) await page.locator('.routine-panel').screenshot({path:`${shots}/routine.png`});
-  if (shots) await page.locator('.alerts-panel').screenshot({path:`${shots}/alerts-overview.png`});
   // Backup: an existing folder, saved, then "back up now".
   await mkdir(path.join(data,'copias'));
   await page.goto(base+'/#settings');
+  await tab('system');
   await page.fill('[name=backup_dir]',path.join(data,'copias'));
   await page.click('#save-settings');
   await page.locator('#toast',{hasText:'Configurações salvas'}).waitFor();

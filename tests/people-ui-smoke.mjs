@@ -64,11 +64,9 @@ try {
   assert.equal(invalid.status,422);
   await page.locator('a[data-page="history"]').click();
   await page.locator('#history-table [data-event="1"]').click();
-  await page.locator('[data-track-person="1"]').selectOption('father');
-  await page.locator('[data-confirm-track="1"]').click();
+  await page.locator('[data-confirm-track="1"][data-person="father"]').click();   // The person is chosen by tapping the name.
   await page.waitForFunction(()=>document.querySelector('[data-track="1"] .pill')?.textContent==='Meu pai');
-  await page.locator('[data-track-person="2"]').selectOption(maria);
-  await page.locator('[data-confirm-track="2"]').click();
+  await page.locator(`[data-confirm-track="2"][data-person="${maria}"]`).click();
   await page.waitForFunction(()=>document.querySelector('[data-track="2"] .pill')?.textContent==='Maria');
   const record=await (await fetch(base+'/api/events/1')).json();
   assert.equal(record.people.length,2);

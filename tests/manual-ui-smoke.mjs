@@ -22,6 +22,7 @@ try {
   await page.waitForFunction(()=>document.querySelector('#live-image').naturalWidth===1280);
   assert.equal(await page.locator('#toggle-analysis').textContent(),'Retomar análise');
   await page.locator('a[data-page="settings"]').click();
+  await page.locator('.settings-tab[data-group="system"]').click();   // Recognition thresholds are in the Sistema tab.
   await page.locator('input[name="body_threshold"]').fill('0.75');
   await page.locator('#save-settings').click();
   await page.waitForFunction(async()=> (await fetch('/api/settings').then(r=>r.json())).body_threshold===.75);

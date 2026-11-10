@@ -5,9 +5,12 @@
   "type": "module",
   "scripts": {
     "start": "node whatsapp/server.mjs",
-    "test": "node --test whatsapp/*.test.mjs"
+    "test": "node --test whatsapp/*.test.mjs",
+    "test:ui": "node tests/login-ui-smoke.mjs && node tests/people-ui-smoke.mjs && node tests/multicamera-ui-smoke.mjs && node tests/recipients-ui-smoke.mjs && node tests/manual-ui-smoke.mjs"
   },
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",
     "dotenv": "^16.6.1",
