@@ -383,3 +383,6 @@ details.advanced>.form-fields{padding-bottom:14px}
   .recent-empty{min-height:120px}
   .chart{height:110px}
 }
+
+.zone-tools select{width:auto;min-height:0;padding:6px 10px;font-size:12px}
+.zone-tools [data-undo]:disabled{opacity:.4;cursor:default;text-decoration:none}

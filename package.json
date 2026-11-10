@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node whatsapp/server.mjs",
     "test": "node --test whatsapp/*.test.mjs",
-    "test:ui": "node tests/login-ui-smoke.mjs && node tests/people-ui-smoke.mjs && node tests/multicamera-ui-smoke.mjs && node tests/recipients-ui-smoke.mjs && node tests/manual-ui-smoke.mjs"
+    "test:ui": "node tests/login-ui-smoke.mjs && node tests/people-ui-smoke.mjs && node tests/multicamera-ui-smoke.mjs && node tests/recipients-ui-smoke.mjs && node tests/manual-ui-smoke.mjs && node tests/zones-ui-smoke.mjs"
   },
   "engines": {
     "node": ">=22"

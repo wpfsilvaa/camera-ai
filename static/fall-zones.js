@@ -13,6 +13,20 @@
   const toZone = p => (isRect(p) ? [p[0][0], p[0][1], p[2][0], p[2][1]] : p.flat()).map(round4);
   const area = p => Math.abs(p.reduce((sum, [ax, ay], i) => sum + ax * p[(i + 1) % p.length][1] - p[(i + 1) % p.length][0] * ay, 0)) / 2;
   const inside = (p, x, y) => p.reduce((hit, [ax, ay], i) => { const [bx, by] = p[(i + 1) % p.length]; return (ay > y) !== (by > y) && x < (bx - ax) * (y - ay) / (by - ay) + ax ? !hit : hit; }, false);
+  // A polygon whose edges cross (a bow tie) cannot be what was meant: `uncross` puts the corners in order around the middle.
+  const turn = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  function crossing(p) {
+    for (let i = 0; i < p.length; i++) for (let j = i + 2; j < p.length; j++) {
+      if (i === 0 && j === p.length - 1) continue;
+      const [a, b, c, d] = [p[i], p[(i + 1) % p.length], p[j], p[(j + 1) % p.length]];
+      if (turn(a, b, c) * turn(a, b, d) < 0 && turn(c, d, a) * turn(c, d, b) < 0) return true;
+    }
+    return false;
+  }
+  function uncross(p) {
+    const cx = p.reduce((sum, q) => sum + q[0], 0) / p.length, cy = p.reduce((sum, q) => sum + q[1], 0) / p.length;
+    return [...p].sort((a, b) => Math.atan2(a[1] - cy, a[0] - cx) - Math.atan2(b[1] - cy, b[0] - cx));
+  }
   // Distance (in pixels) from a point to a segment, and which point of it is closest (0..1).
   function segment([ax, ay], [bx, by], [x, y]) {
     const dx = bx - ax, dy = by - ay, length = dx * dx + dy * dy, t = length ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / length)) : 0;
@@ -24,20 +38,41 @@
     const stage = root.querySelector('.zone-stage'), image = root.querySelector('img'), canvas = root.querySelector('canvas'), context = canvas.getContext('2d');
     const empty = root.querySelector('.zone-stage p'), count = root.querySelector('.zone-actions span');
     // Unsaved areas live here: the 3 s status poll replaces `settings` and would drop them.
-    let drawn = [], names = [], tool = 'rect', selected = -1, gesture = null, building = [], hover = null;
+    let drawn = [], names = [], tool = 'rect', selected = -1, gesture = null, building = [], hover = null, history = [], lastNudge = 0;
     const namesKey = root.dataset.names, namesBox = root.querySelector('.zone-names');
     const zones = () => drawn;
     let shownNames = '';
     const changed = () => root.dispatchEvent(new Event('input', {bubbles: true}));   // Marks the settings as not saved yet.
+    // Undo: a snapshot of the areas before each change.
+    const remember = () => { history.push(JSON.stringify({drawn, names})); if (history.length > 50) history.shift(); };
+    function undo() {
+      const before = history.pop();
+      if (!before) return;
+      ({drawn, names} = JSON.parse(before)); selected = -1; building = []; gesture = null; shownNames = ''; changed(); draw();
+    }
+    // The cameras to copy from change while the page is open (one is added, one renamed): follow them.
+    let shownCopy = '';
+    function syncCopy() {
+      const others = (typeof knownCameras !== 'undefined' ? knownCameras : []).filter(camera => camera.id !== selectedCamera);
+      const signature = others.map(camera => `${camera.id}|${camera.name}`).join(',');
+      if (signature === shownCopy) return;
+      shownCopy = signature;
+      copyBox.classList.toggle('hidden', !others.length);
+      copyBox.innerHTML = `<option value="">Copiar de outra câmera…</option>${others.map(camera => `<option value="${escapeHTML(camera.id)}">${escapeHTML(camera.name)}</option>`).join('')}`;
+    }
+    setInterval(syncCopy, 2000);
+    const notice = message => (typeof toast === 'function' ? toast(message) : null);
 
     // Toolbar: how a new area is drawn, and moving everything at once when the camera was bumped.
     const toolbar = document.createElement('div');
     toolbar.className = 'zone-tools';
     toolbar.innerHTML = '<div class="filter-group"><button type="button" class="filter active" data-tool="rect">Retângulo</button><button type="button" class="filter" data-tool="poly">Pontos</button>'
       + '<button type="button" class="filter" data-tool="all" title="Arraste em qualquer lugar da imagem para deslocar todas as áreas, ou use as setas do teclado">Mover todas</button></div>'
+      + '<button type="button" class="text-button" data-undo disabled title="Desfazer a última alteração (Ctrl+Z)">Desfazer</button>'
+      + '<select class="zone-copy hidden" data-copy aria-label="Copiar as áreas de outra câmera"></select>'
       + '<span class="muted small" data-tip></span>';
     stage.before(toolbar);
-    const tip = toolbar.querySelector('[data-tip]');
+    const tip = toolbar.querySelector('[data-tip]'), undoButton = toolbar.querySelector('[data-undo]'), copyBox = toolbar.querySelector('[data-copy]');
     const tips = {rect: 'Arraste sobre a imagem para desenhar. Clique numa área para movê-la; arraste um canto para deformar.',
       poly: 'Clique nos cantos da área, na ordem. Feche clicando no primeiro ponto, com duplo clique ou em “Concluir”.',
       all: 'Arraste na imagem para deslocar todas as áreas de uma vez (a câmera mexeu). As setas do teclado ajustam.'};
@@ -46,7 +81,26 @@
       toolbar.querySelectorAll('[data-tool]').forEach(button => button.classList.toggle('active', button.dataset.tool === tool));
       tip.textContent = tips[tool]; draw();
     }
-    toolbar.addEventListener('click', event => { const button = event.target.closest('[data-tool]'); if (button) setTool(button.dataset.tool); });
+    toolbar.addEventListener('click', event => {
+      if (event.target.closest('[data-undo]')) { undo(); return; }
+      const button = event.target.closest('[data-tool]');
+      if (button) setTool(button.dataset.tool);
+    });
+    // Copy the areas of another camera (a camera that was moved, or two views of the same kitchen): added to the ones here.
+    copyBox.addEventListener('change', async () => {
+      const id = copyBox.value;
+      copyBox.value = '';
+      if (!id) return;
+      try {
+        const other = await api(`/api/settings?camera_id=${encodeURIComponent(id)}`), found = (other[key] || []).map(toPoints), otherNames = other[namesKey] || [];
+        const room = MAX_ZONES - drawn.length;
+        if (!found.length) { notice('Essa câmera não tem áreas marcadas.'); return; }
+        remember();
+        found.slice(0, room).forEach((points, i) => { drawn.push(points); names.push(otherNames[i] || ''); });
+        selected = drawn.length - 1; shownNames = ''; changed(); draw();
+        if (found.length > room) notice(`Só couberam ${room} área(s): o limite é ${MAX_ZONES}.`);
+      } catch { notice('Não consegui ler as áreas dessa câmera.'); }
+    });
     // One name field per marked area (restricted areas only), so reports can say "geladeira" and "armário".
     function renderNames() {
       if (!namesBox) return;
@@ -63,6 +117,7 @@
     });
     function removeZone(index) {
       if (index < 0 || index >= drawn.length) return;
+      remember();
       drawn.splice(index, 1); names.splice(index, 1); selected = -1; shownNames = ''; changed(); draw();
     }
 
@@ -104,6 +159,7 @@
       const parts = [zones().length ? `${zones().length} área(s) marcada(s)` : 'Nenhuma área marcada'];
       if (building.length) parts.push(building.length >= 3 ? `${building.length} pontos · “Concluir” fecha a área` : `${building.length} ponto(s)`);
       count.textContent = parts.join(' · ');
+      undoButton.disabled = !history.length;
       finish.classList.toggle('hidden', building.length < 3);
     }
     const finish = document.createElement('button');
@@ -140,7 +196,12 @@
       for (const i of indexes) drawn[i] = drawn[i].map(([x, y]) => [x + dx, y + dy]);
     }
     function addZone(points) {
-      if (zones().length >= MAX_ZONES || area(points) < MIN_AREA) return false;
+      if (zones().length >= MAX_ZONES) return false;
+      if (crossing(points)) points = uncross(points);   // A bow tie has almost no area until its corners are in order.
+      else if (area(points) < MIN_AREA) return false;
+      if (area(points) < MIN_AREA) return false;
+      if (points !== arguments[0]) notice('Pontos reordenados para a área não se cruzar.');
+      remember();
       drawn.push(points.map(([x, y]) => [round4(x), round4(y)])); names.length = drawn.length - 1; names.push('');
       selected = drawn.length - 1; shownNames = ''; changed(); return true;
     }
@@ -160,7 +221,7 @@
         if (building.length < MAX_POINTS) building.push(p);
         draw(); return;
       }
-      if (hit?.corner !== undefined) { selected = hit.index; gesture = {kind: 'corner', index: hit.index, corner: hit.corner}; canvas.setPointerCapture(event.pointerId); draw(); return; }
+      if (hit?.corner !== undefined) { selected = hit.index; remember(); gesture = {kind: 'corner', index: hit.index, corner: hit.corner, moved: false}; canvas.setPointerCapture(event.pointerId); draw(); return; }
       if (hit?.body || hit?.edge !== undefined) { selected = hit.index; gesture = {kind: 'move', last: p, moved: false}; canvas.setPointerCapture(event.pointerId); draw(); return; }
       selected = -1;
       if (tool === 'poly') { building = [p]; draw(); return; }
@@ -176,8 +237,8 @@
         return;
       }
       if (gesture.kind === 'rect') gesture.now = p;
-      else if (gesture.kind === 'corner') drawn[gesture.index][gesture.corner] = p;
-      else { shift(gesture.kind === 'all' ? [...drawn.keys()] : [selected], p[0] - gesture.last[0], p[1] - gesture.last[1]); gesture.last = p; gesture.moved = true; }
+      else if (gesture.kind === 'corner') { drawn[gesture.index][gesture.corner] = p; gesture.moved = true; }
+      else { if (!gesture.moved) remember(); shift(gesture.kind === 'all' ? [...drawn.keys()] : [selected], p[0] - gesture.last[0], p[1] - gesture.last[1]); gesture.last = p; gesture.moved = true; }
       draw();
     });
     canvas.addEventListener('pointerup', () => {
@@ -186,7 +247,9 @@
       if (done.kind === 'rect') {
         const [[ax, ay], [bx, by]] = [done.start, done.now];
         if (Math.abs(bx - ax) > .02 && Math.abs(by - ay) > .02) addZone([[Math.min(ax, bx), Math.min(ay, by)], [Math.max(ax, bx), Math.min(ay, by)], [Math.max(ax, bx), Math.max(ay, by)], [Math.min(ax, bx), Math.max(ay, by)]]);
-      } else if (done.kind === 'corner' || done.moved) changed();
+      } else if (done.kind === 'corner' && !done.moved) history.pop();   // Only a click on a corner: nothing to undo.
+      else if (done.kind === 'corner' && crossing(drawn[done.index])) { undo(); notice('Esse canto faria a área se cruzar: voltei ao anterior.'); return; }
+      else if (done.kind === 'corner' || done.moved) changed();
       draw();
     });
     canvas.addEventListener('pointerleave', () => { hover = null; if (building.length) draw(); });
@@ -195,22 +258,26 @@
       const hit = pick(point(event));
       if (!hit) return;
       const points = drawn[hit.index];
+      remember();
       if (hit.corner !== undefined && points.length > 3) points.splice(hit.corner, 1);
       else if (hit.edge !== undefined && points.length < MAX_POINTS) points.splice(hit.edge + 1, 0, point(event));
-      else return;
+      else { history.pop(); return; }
       changed(); draw();
     });
     canvas.tabIndex = 0;
     canvas.addEventListener('keydown', event => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); undo(); return; }
       if (event.key === 'Escape' && building.length) { building = []; draw(); return; }
       if (event.key === 'Enter' && building.length >= 3) { closePolygon(); return; }
       if ((event.key === 'Delete' || event.key === 'Backspace') && selected >= 0) { event.preventDefault(); removeZone(selected); return; }
       const step = event.shiftKey ? .02 : .004, move = {ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step]}[event.key];
       if (!move || !drawn.length) return;
       event.preventDefault();
+      if (Date.now() - lastNudge > 800) remember();   // A run of key presses is one change.
+      lastNudge = Date.now();
       shift(selected >= 0 && tool !== 'all' ? [selected] : [...drawn.keys()], ...move); changed(); draw();
     });
-    root.querySelector('[data-zone-clear]').addEventListener('click', () => { drawn = []; names = []; building = []; selected = -1; shownNames = ''; changed(); draw(); });
+    root.querySelector('[data-zone-clear]').addEventListener('click', () => { if (drawn.length) remember(); drawn = []; names = []; building = []; selected = -1; shownNames = ''; changed(); draw(); });
     root.querySelector('[data-zone-refresh]').addEventListener('click', () => loadImage());
     image.addEventListener('load', () => {
       // Zones are fractions of the image: the stage must keep the camera's proportions.
@@ -230,7 +297,11 @@
     return {
       key, namesKey, value: () => drawn.map(toZone), nameValues: () => drawn.map((_, i) => (names[i] || '').trim()),
       // Start over from the saved areas (page opened, settings saved, camera switched).
-      reset() { drawn = (settings[key] || []).map(toPoints); names = drawn.map((_, i) => (settings[namesKey] || [])[i] || ''); selected = -1; building = []; shownNames = ''; loadImage(); },
+      reset() {
+        drawn = (settings[key] || []).map(toPoints); names = drawn.map((_, i) => (settings[namesKey] || [])[i] || ''); selected = -1; building = []; shownNames = ''; history = [];
+        shownCopy = ''; syncCopy();
+        loadImage();
+      },
     };
   }
 
