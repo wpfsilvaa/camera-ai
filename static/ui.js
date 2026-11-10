@@ -33,7 +33,9 @@
 
   // Settings groups ---------------------------------------------------------
   const tabs = [...document.querySelectorAll('.settings-tab')];
+  let activeGroup = 'camera';
   function showGroup(group) {
+    activeGroup = group;
     for (const tab of tabs) {
       const on = tab.dataset.group === group;
       tab.setAttribute('aria-selected', on);
@@ -52,6 +54,25 @@
       next.focus(); showGroup(next.dataset.group);
     });
   });
+  // Search: shows every panel (of any tab) that mentions the words, and opens the fine-tuning blocks that do.
+  const search = $('#settings-search'), searchNote = $('#settings-search-note');
+  const plain = text => text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  function applySearch() {
+    const query = plain(search.value.trim());
+    document.querySelector('.settings-tabs').classList.toggle('searching', Boolean(query));
+    if (!query) { searchNote.textContent = ''; showGroup(activeGroup); return; }
+    let found = 0;
+    document.querySelectorAll('#settings-form .settings-panel').forEach(panel => {
+      const hit = plain(panel.textContent).includes(query);
+      panel.classList.toggle('hidden', !hit);
+      if (hit) { found++; panel.querySelectorAll('details.advanced').forEach(box => { box.open = plain(box.textContent).includes(query); }); }
+    });
+    searchNote.textContent = found ? `${found} painel(is) com “${search.value.trim()}”` : 'Nada encontrado.';
+    window.dispatchEvent(new Event('resize'));
+  }
+  search.addEventListener('input', applySearch);
+  search.addEventListener('keydown', event => { if (event.key === 'Escape') { search.value = ''; applySearch(); } });
+  tabs.forEach(tab => tab.addEventListener('click', () => { if (search.value) { search.value = ''; searchNote.textContent = ''; document.querySelector('.settings-tabs').classList.remove('searching'); } }));
   let saved = 'camera';
   try { saved = sessionStorage.getItem('casa-settings-group') || saved; } catch {}
   showGroup(tabs.some(tab => tab.dataset.group === saved) ? saved : 'camera');

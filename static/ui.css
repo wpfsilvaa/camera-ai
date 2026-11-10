@@ -349,3 +349,19 @@ dialog .dialog-heading{position:sticky;top:0;z-index:5;background:var(--surface)
   .stat-value{font-size:26px;line-height:1.2;margin-top:4px}
   .stat-top{min-height:0}
 }
+
+/* Fine-tuning kept out of the way until asked for. */
+details.advanced{border:1px solid var(--border);border-radius:10px;padding:0 14px}
+details.advanced>summary{cursor:pointer;padding:12px 0;font-size:12px;font-weight:600;color:var(--green-ink);list-style:none}
+details.advanced>summary::-webkit-details-marker{display:none}
+details.advanced>summary::before{content:'▸';display:inline-block;margin-right:8px;transition:transform .15s}
+details.advanced[open]>summary::before{transform:rotate(90deg)}
+details.advanced[open]>summary{border-bottom:1px solid var(--border);margin-bottom:14px}
+details.advanced>.form-fields{padding-bottom:14px}
+
+.settings-search{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.settings-search input{max-width:380px}
+.settings-tabs.searching .settings-tab[aria-selected=true]{background:none;box-shadow:none;color:var(--muted)}
+
+/* A short panel next to a tall one keeps its own height instead of stretching into an empty card. */
+.settings-grid{align-items:start}
