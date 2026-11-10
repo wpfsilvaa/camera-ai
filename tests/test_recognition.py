@@ -473,6 +473,25 @@ class RecognitionTests(unittest.TestCase):
         self.assertEqual(self.db.rows('SELECT identity FROM events')[0]['identity'],'unknown')
         self.assertIsNone(self.db.rows('SELECT person_id FROM person_samples')[0]['person_id'])
 
+    def test_recognition_eases_off_only_when_everyone_is_named_by_face(self):
+        track,sample=self.sample(self.event())
+        self.recognition.confirm(track,'father',sample)
+        self.recognition.encoder=type('Encoder',(),{'version':'sface-test'})()
+        boxes=[[10,10,90,160],[200,10,280,160]]
+        settings=Settings()
+        self.assertEqual(self.recognition.interval([],200),.30)   # Nobody in view.
+        for now in (200,200.4,200.8):
+            self.recognition.observe_faces(None,boxes[:1],[1],{'1':self.face()},now,settings)
+        self.assertEqual(self.recognition.interval([1],200.9),1.0)
+        self.recognition.labels([1],boxes[:1],201.5,3)
+        self.assertFalse(self.recognition.labels([1],boxes[:1],201.5,3)['1']['held'])   # The slower pace is not drawn as "tracking".
+        self.assertEqual(self.recognition.interval([1,2],200.9),.30)      # Someone new arrived.
+        self.assertEqual(self.recognition.interval([1,None],200.9),.30)   # A box without a track.
+        self.assertEqual(self.recognition.interval([1],204),.30)          # The name is stale.
+        self.recognition.live['1']['source']='body'
+        self.assertEqual(self.recognition.interval([1],200.9),.30)        # Named by clothes only.
+        self.assertTrue(self.recognition.labels([1],boxes[:1],202,3)['1']['held'])   # Back to the normal threshold.
+
 
 if __name__ == '__main__':
     unittest.main()

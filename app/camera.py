@@ -587,7 +587,7 @@ class CameraWorker:
                                         log.exception('Falha ao avisar sobre a presença')
                             if event_id is not None and count and touch.due(now,count):
                                 self.db.touch_event(event_id,now,count)
-                        if current.recognition_enabled and now-last_recognition>=.30:
+                        if current.recognition_enabled and now-last_recognition>=self.recognition.interval(ids,now):
                             last_recognition=now
                             self.recognition.submit(event_id,original,boxes,ids,now,current)
                         labels=self.recognition.labels(ids,boxes,now,current.face_hold_seconds) if current.recognition_enabled else {}

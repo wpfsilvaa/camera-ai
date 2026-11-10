@@ -18,6 +18,10 @@ from .faces import FaceEncoder, normalized
 MERGE_FACE = .65        # Two unconfirmed tracks of one record whose faces are at least this alike (and never on screen together) are the same person.
 HANDOFF_SECONDS = 6      # A new track that appears this soon where a recognised one vanished inherits its identity (until its own face says otherwise).
 BODY_HOLD = 10          # Seconds an identity from the body/clothes survives a failed comparison.
+SETTLED_INTERVAL = 1.0   # Seconds between recognitions while everyone in view already carries a face identity (a new or unknown person brings back the fast pace).
+SETTLED_AGE = 2.5        # ... and that identity was confirmed this recently.
+FAST_INTERVAL = .30
+HELD_AFTER = .8          # A name older than this is drawn as "tracking" (the face was not seen on the latest pass).
 EXAMPLE_LIMIT = 100   # Taught faces kept per person.
 MERGE_GAP = 10   # Seconds between two tracker numbers of one person for them to count as the same person.
 
@@ -92,6 +96,7 @@ class Recognition:
         self.names = {}
         self.revision = -1
         self.last_sample = {}
+        self.held_after = HELD_AFTER
         self.votes = {}
         self.live = {}
         self.visible = set()
@@ -134,6 +139,20 @@ class Recognition:
             self.body_anchors.clear()
         with self.condition:
             self.pending = None
+
+    def interval(self, ids, now):
+        """Seconds to wait before the next recognition pass: slow when every tracked person was just recognised by the face.
+
+        Face recognition is the costliest part of a busy scene; once each person has a name there is little new to learn, so it
+        eases off. Anyone unnamed, named only by clothes, untracked or just arrived keeps the fast pace.
+        """
+        with self.lock:
+            keys = [None if key is None else str(key) for key in ids]
+            settled = bool(keys) and all(
+                key is not None and self.live.get(key, {}).get('source') == 'face' and 0 <= now - self.live[key]['seen'] <= SETTLED_AGE
+                for key in keys)
+        self.held_after = SETTLED_INTERVAL + .5 if settled else HELD_AFTER   # Keep the "tracking" mark for a missed pass, not for the slower pace.
+        return SETTLED_INTERVAL if settled else FAST_INTERVAL
 
     def submit(self, event_id, frame, boxes, ids, now, settings):
         # One pending frame maximum: slow face inference never queues old video.
@@ -775,7 +794,7 @@ class Recognition:
                 age=now-item['seen']
                 limit=min(hold_seconds,BODY_HOLD) if item.get('source')=='body' else min(hold_seconds,8) if item.get('source')=='continuity' else hold_seconds
                 if key in visible and 0<=age<=limit:
-                    output[key]={**item,'held':age>.8,'monitored':item['person_id'] in self.monitored}
+                    output[key]={**item,'held':age>self.held_after,'monitored':item['person_id'] in self.monitored}
             # FaceEncoder checks unique face ownership. Body rectangles can overlap
             # substantially even when both faces are clearly separated.
             return output
