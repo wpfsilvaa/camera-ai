@@ -171,6 +171,7 @@ class CameraWorker:
         self.photos=PhotoSchedule()
         self.last_stall_log=0
         self.jpeg=None
+        self.zones_until=0  # Botão do totem: até este instante, desenha as áreas restritas no quadro mesmo com o modo desligado.
         self.sequence=0
         self.status={'state':'paused','people':0,'last_frame':None,'event_id':None,'error':None,
                      'inference_ms':None,'detection_fps':0,'fps':0,'frame_age_ms':None,'sentinel':False,'detector':None,'device':None,'gpu':None,'half':False,
@@ -697,14 +698,14 @@ class CameraWorker:
                         if touch.due(now,count):
                             self.db.touch_event(manual_event,now,count)
                     lap.append(time.perf_counter())
-                    if preview_due(self.watchers()>0,last_preview,now):
+                    if preview_due(self.watchers()>0 or time.time()<self.zones_until,last_preview,now):
                         last_preview=now
                         preview=resize_width(annotated,current.preview_width)
                         if analysis_active and current.show_skeleton and self.pose_points:
                             preview=draw_skeleton(preview,self.pose_points,preview.shape[1]/max(1,original.shape[1]))
                         if analysis_active and current.fall_detection_enabled:
                             preview=draw_zones(preview,current.fall_zones)
-                        if analysis_active and (current.restricted_enabled or current.restricted_alert_always):
+                        if (analysis_active and (current.restricted_enabled or current.restricted_alert_always)) or time.time()<self.zones_until:
                             preview=draw_zones(draw_zones(preview,current.restricted_floor,FLOOR_COLOR),current.restricted_zones,RESTRICTED_COLOR)
                         encoded,jpeg=cv2.imencode('.jpg',preview,[cv2.IMWRITE_JPEG_QUALITY,78])
                         if encoded:

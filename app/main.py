@@ -94,6 +94,16 @@ push.frame = latest_frame
 notebook.frame = lambda: latest_frame('main')
 
 
+def zones_picture():
+    """Câmera principal com as áreas restritas desenhadas (botão do totem); pede ao worker que as desenhe mesmo com o modo desligado."""
+    worker = cameras.get('main')
+    worker.zones_until = time.time() + 5
+    return latest_frame('main'), len(config.get().restricted_zones)
+
+
+notebook.zones = zones_picture
+
+
 log = logging.getLogger(__name__)
 greeter = Greeter()
 reminders = Reminders(db)

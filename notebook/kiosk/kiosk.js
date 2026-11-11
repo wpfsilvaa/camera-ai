@@ -124,6 +124,23 @@
     if (code) $('pairing-code').textContent = `${code.slice(0, 3)} ${code.slice(3)}`;
     return Boolean(code);
   }
+  // Botão da câmera: mostra o quadro ao vivo com as áreas restritas (o painel envia os quadros enquanto a tela estiver aberta).
+  let zonesSeq = -1;
+  function renderZones(view) {
+    const zones = last.zones || {};
+    $('zones-open').classList.toggle('hidden', view !== 'idle' || Boolean(zones.on));
+    $('zones').classList.toggle('hidden', !zones.on);
+    if (!zones.on) { zonesSeq = -1; $('zones-img').removeAttribute('src'); return; }
+    $('zones-note').textContent = zones.seq && !zones.count ? 'Nenhuma área restrita marcada no painel.' : 'Ajuste as áreas no painel e veja o resultado aqui.';
+    if (zones.seq && zones.seq !== zonesSeq) {
+      zonesSeq = zones.seq;
+      $('zones-img').src = `/zones/frame.jpg?n=${zones.seq}`;
+      $('zones-wait').classList.add('hidden');
+    }
+  }
+  $('zones-open').addEventListener('click', () => { $('zones-wait').classList.remove('hidden'); post('/zones/show').then(() => poll(true)); });
+  $('zones-close').addEventListener('click', () => post('/zones/hide').then(() => poll(true)));
+
   function render() {
     if (renderPairing()) return;   // Totem novo: só o código de pareamento até o painel conectar.
     document.documentElement.classList.toggle('progress-on', Boolean(cfg().progress));   // Barra de tempo da foto: opcional.
@@ -145,6 +162,7 @@
     document.querySelector('.vi-shield').classList.toggle('hidden', state === 'analysing');
     document.querySelector('.vi-eye').classList.toggle('hidden', state !== 'analysing');
     applyMode(view);
+    renderZones(view);
     runTests();
     renderWeather();
     updateRain();

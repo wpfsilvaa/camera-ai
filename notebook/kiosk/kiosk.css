@@ -244,3 +244,16 @@ body[data-night="1"] .watching{opacity:.35}
 .pairing p{font-size:clamp(18px,2.2vw,30px);color:var(--muted);max-width:30em;margin:2vh auto}
 .pairing-code{font-size:clamp(64px,12vw,180px);font-weight:700;letter-spacing:.08em;font-variant-numeric:tabular-nums;color:var(--ink)}
 html.progress-on .fr-progress{display:block}
+
+/* Botão pequeno que abre a câmera com as áreas restritas em vermelho (para ajustá-las no painel olhando o totem). */
+.zones-open{position:fixed;left:1.2vmin;bottom:1.2vmin;z-index:30;width:5vmin;height:5vmin;min-width:36px;min-height:36px;border:0;border-radius:50%;background:#0008;color:#fff;font-size:2.6vmin;display:flex;align-items:center;justify-content:center;opacity:.35;cursor:pointer}
+.zones-open:hover,.zones-open:focus-visible{opacity:.9}
+.zones{position:fixed;inset:0;z-index:60;background:#000;display:flex;flex-direction:column;color:#fff}
+.zones.hidden{display:none}
+.zones-bar{display:flex;align-items:center;gap:2vmin;padding:1.4vmin 2vmin;background:#111;font-size:2.6vmin}
+.zones-bar span{flex:1;opacity:.75;font-size:2.2vmin}
+.zones-bar button{font:inherit;padding:.8vmin 2.4vmin;border:0;border-radius:1.2vmin;background:#fff;color:#000;cursor:pointer}
+.zones-stage{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+.zones-stage img{max-width:100%;max-height:100%;object-fit:contain}
+.zones-stage img:not([src]){display:none}
+.zones-stage p{position:absolute;margin:0;font-size:3vmin;opacity:.8}

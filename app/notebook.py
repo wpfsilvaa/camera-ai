@@ -59,6 +59,8 @@ class NotebookMonitor:
         self.ring_state = None  # The call currently being re-announced: {'id', 'kind', 'since', 'last'}.
         self.read = None  # Called with message ids the person confirmed on the screen.
         self.confirmed = []  # Acks already stored: tell the screen it can forget them.
+        self.zones = None  # Callable: (JPEG da câmera com as áreas restritas desenhadas e o número de áreas) para o botão do totem.
+        self.zones_seen = 0  # Última vez que o totem pediu para ver as áreas.
         self.busy = None  # Callable: True while the screen needs quick updates.
         self.last_photo_sync = 0
         self.delivered = None  # Called with message ids once the screen accepted them.
@@ -116,6 +118,9 @@ class NotebookMonitor:
                 if response.status_code == 200:
                     reading = response.json()
                     self.confirmed = []
+                    if reading.get('zones') and self.zones:
+                        self.zones_seen = now
+                        self.send_zones(client, url, {'Authorization': f'Bearer {token}'})
                     acks = [a for a in reading.get('acks', []) if isinstance(a, str)]
                     if acks and self.read:
                         self.read(acks)
@@ -129,6 +134,15 @@ class NotebookMonitor:
             except (httpx.HTTPError, ValueError):
                 pass
         self.check(settings, reading, now)
+
+    def send_zones(self, client, url, headers):
+        """O totem pediu para ver as áreas restritas: envia o quadro atual da câmera com elas desenhadas."""
+        try:
+            jpeg, count = self.zones()
+            if jpeg:
+                client.put(f'{url}/zones/frame', content=jpeg, headers={**headers, 'Content-Type': 'image/jpeg', 'X-Zones': str(count)}, timeout=5)
+        except Exception:
+            log.exception('Falha ao enviar a câmera com as áreas para o totem')
 
     def sync_photos(self, client, url, headers, settings):
         """Make the screen's folder of photos match the family album (a couple of uploads per poll)."""
@@ -173,7 +187,7 @@ class NotebookMonitor:
 
     def interval(self):
         try:
-            return FAST_INTERVAL if self.busy and self.busy() else SLOW_INTERVAL
+            return FAST_INTERVAL if time.time() - self.zones_seen < 3 or (self.busy and self.busy()) else SLOW_INTERVAL
         except Exception:
             return SLOW_INTERVAL
 

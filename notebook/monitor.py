@@ -71,6 +71,8 @@ VIGIA_STATES = ('off', 'resting', 'analysing', 'scheduled')
 GREET_SECONDS = 10
 BIRTHDAY_SECONDS = 25
 DAILY_SECONDS = 25
+ZONES_SECONDS = 120  # A tela com as áreas restritas fecha sozinha depois deste tempo.
+MAX_ZONES_FRAME = 3_000_000
 LINK_SECONDS = 30  # The panel polls every few seconds; silence longer than this means calls would go nowhere.
 KINDS = ('call', 'panic')
 BACKLIGHT = Path(os.environ.get('MONITOR_BACKLIGHT_DIR', '/sys/class/backlight'))
@@ -465,6 +467,8 @@ class Desk:
         self.reminders = []  # [{'i', 'a', 't', 'e'}]: notes cycled on the screen until their expiry.
         self.callto = []     # [{'i', 'n'}]: people with their own call button.
         self.watching = 0    # People looking at the live camera in the dashboard right now.
+        self.zones_until = 0   # Enquanto o relógio não passa disto, a tela mostra a câmera com as áreas restritas (botão do totem).
+        self.zones_seq, self.zones_count = 0, 0   # Número do último quadro recebido do painel e quantas áreas ele marcou.
 
     def configure(self, call, panic, vigia=None, night=False, greet='', greet_id='', kind='', age='', bdays='', reminders='', frame=False, cfg='', msgs='', quiet=False, acked='', red=False, weather='', callto=''):
         with self.lock:
@@ -508,6 +512,16 @@ class Desk:
                 if message_id not in self.acks:
                     self.acks = (self.acks + [message_id])[-50:]
 
+    def zones_on(self):
+        return self.clock() < self.zones_until
+
+    def show_zones(self, on):
+        with self.lock:
+            self.zones_until = self.clock() + ZONES_SECONDS if on else 0
+            self.zones_seq = 0
+        Handler.zones_frame = None
+        self.bump()
+
     def display(self):
         """Watch-mode state, night tone and greeting for the kitchen screen; stale data is dropped."""
         with self.lock:
@@ -521,6 +535,7 @@ class Desk:
                     'callto': [{**p, 'p': avatars.get(p['i'])} for p in self.callto] if fresh else [],
                     'reminders': [r for r in self.reminders if r['e'] > now] if fresh else [],
                     'tests': [{k: t[k] for k in ('id', 'sound', 'volume', 'text', 'voice')} for t in self.tests if now - t['at'] < 15],
+                    'zones': {'on': now < self.zones_until, 'seq': self.zones_seq, 'count': self.zones_count},
                     'cfg': self.cfg if fresh else dict(DEFAULT_CFG), 'frame': self.frame if fresh else False, 'photos': photo_list() if fresh and self.frame else []}
 
     def bump(self):
@@ -743,6 +758,7 @@ class Handler(BaseHTTPRequestHandler):
     token = ''
     pairing = Pairing()
     desk = Desk()
+    zones_frame = None   # Último JPEG da câmera com as áreas restritas, enviado pelo painel.
     voice = Voice()
     dimmer = Dimmer(Backlight())
     screen = ScreenSchedule(DisplayPower())
@@ -792,7 +808,7 @@ class Handler(BaseHTTPRequestHandler):
             self.desk.watching = int(query['watch'][0]) if (query.get('watch') or [''])[0].isdigit() else 0
             self.dim_from(query)
             self.desk.touch()   # Anything new for the screen goes out immediately to the waiting /state request.
-            return self.reply(200, {**reading(), 'call': self.desk.snapshot(), 'acks': list(self.desk.acks)})
+            return self.reply(200, {**reading(), 'call': self.desk.snapshot(), 'acks': list(self.desk.acks), 'zones': self.desk.zones_on()})
         if url.path == '/avatars' and self.authorized():
             return self.reply(200, {'revs': avatar_revs()})
         if url.path == '/photos' and self.authorized():
@@ -820,6 +836,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header('Cache-Control', 'max-age=86400')
             self.end_headers()
             return self.wfile.write(data)
+        if url.path == '/zones/frame.jpg':
+            if not self.zones_frame:
+                return self.send_error(404)
+            return self.reply(200, body=self.zones_frame, kind='image/jpeg')
         if url.path == '/camera/controls' and self.authorized():
             return self.reply(200, {'device': camera_device(), 'values': camera_read(), 'available': bool(camera_device() and shutil.which('v4l2-ctl'))})
         if url.path == '/hello':   # Descoberta: o painel procura totens na rede. Sem dados sensíveis.
@@ -841,6 +861,21 @@ class Handler(BaseHTTPRequestHandler):
         self.send_error(404)
 
     def do_PUT(self):
+        if urlsplit(self.path).path == '/zones/frame' and self.authorized():
+            size = int(self.headers.get('Content-Length') or 0)
+            if not 0 < size <= MAX_ZONES_FRAME:
+                return self.send_error(413)
+            data = self.rfile.read(size)
+            if not data.startswith(b'\xff\xd8'):
+                return self.send_error(415)
+            if self.desk.zones_on():
+                Handler.zones_frame = data
+                count = self.headers.get('X-Zones', '')
+                with self.desk.lock:
+                    self.desk.zones_seq += 1
+                    self.desk.zones_count = int(count) if count.isdigit() else 0
+                self.desk.bump()
+            return self.reply(200, {'ok': True})
         renamed = re.fullmatch(r'/photos/([a-f0-9]{32})/author', urlsplit(self.path).path)
         if renamed and self.authorized():
             size = min(int(self.headers.get('Content-Length') or 0), 200)
@@ -949,6 +984,9 @@ class Handler(BaseHTTPRequestHandler):
                 call = self.desk.end()
                 self.desk.bump()
                 return self.reply(200, call)
+            if url.path in ('/zones/show', '/zones/hide'):
+                self.desk.show_zones(url.path.endswith('show'))
+                return self.reply(200, {'ok': True})
             if url.path == '/wake':
                 self.dimmer.wake()
                 self.screen.wake()

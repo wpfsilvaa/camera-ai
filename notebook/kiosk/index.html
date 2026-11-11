@@ -34,6 +34,8 @@
     <div class="fr-progress"><i id="frame-progress"></i></div>
   </div>
   <canvas id="rain" class="rain hidden" aria-hidden="true"></canvas>
+  <button id="zones-open" class="zones-open hidden" type="button" aria-label="Ver áreas restritas na câmera" title="Ver áreas restritas na câmera"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></button>
+  <div id="zones" class="zones hidden" role="dialog" aria-label="Áreas restritas na câmera"><div class="zones-bar"><b>Áreas restritas (em vermelho)</b><span id="zones-note"></span><button id="zones-close" type="button">Fechar</button></div><div class="zones-stage"><img id="zones-img" alt="Câmera com as áreas restritas"><p id="zones-wait">Abrindo a câmera…</p></div></div>
   <div id="quote" class="quote hidden" aria-live="polite"><div id="quote-head" class="quote-head hidden"></div><figure><blockquote id="quote-text"></blockquote><figcaption id="quote-by"></figcaption></figure><button id="quote-ok" type="button" class="quote-ok hidden">Li ✓</button><div id="quote-timer" class="quote-timer hidden"><span>Visualização única · some em 30 segundos</span><b><i></i></b></div></div>
   <div id="nightlight" class="nightlight hidden" aria-hidden="true"><time id="nightlight-clock">--:--</time></div>
   <div class="glow" aria-hidden="true"></div>
