@@ -12,6 +12,7 @@ SHOULDERS, HIPS = (5, 6), (11, 12)
 MIN_KEYPOINT_CONFIDENCE = .4
 LYING_ANGLE = 60          # Degrees from vertical.
 WIDE_SILHOUETTE = 1.4     # Box width / height without usable keypoints.
+EDGE_MARGIN = 4           # Pixels from the frame edge that still count as touching it.
 GAP_SECONDS = 3           # Brief detection gaps or twitches do not restart the count.
 
 
@@ -35,11 +36,13 @@ def torso_angle(keypoints):
     return math.degrees(math.atan2(abs(dx), abs(dy)))
 
 
-def is_lying(box, keypoints):
+def is_lying(box, keypoints, frame_size=None):
     angle = torso_angle(keypoints)
     if angle is not None:
         return angle >= LYING_ANGLE
     x1, y1, x2, y2 = box
+    if frame_size and y2 >= frame_size[1] - EDGE_MARGIN:
+        return False  # Cut off by the bottom edge (someone standing close to the camera): the box says nothing about posture.
     return (x2 - x1) >= WIDE_SILHOUETTE * max(1, y2 - y1)
 
 
@@ -78,7 +81,7 @@ class FallDetector:
         width, height = frame_size
         lying, falls = {}, []
         for box, key, points in zip(boxes, ids, keypoints):
-            if not is_lying(box, points) or in_zones(body_point(box, points), zones, width, height):
+            if not is_lying(box, points, frame_size) or in_zones(body_point(box, points), zones, width, height):
                 continue
             state = self.tracks.get(key)
             if state is None or now - state['last'] > GAP_SECONDS:

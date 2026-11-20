@@ -45,18 +45,18 @@ class VerifierTests(unittest.TestCase):
         for directory in ('', '/nao/existe'):
             verifier = FallVerifier(directory)
             self.assertFalse(verifier.available())
-            self.assertIsNone(verifier.has_person(b'jpeg'))
+            self.assertIsNone(verifier.is_lying(b'jpeg'))
 
     def test_runs_the_cli_and_reads_the_answer(self):
-        self.assertIs(FallVerifier(str(fake_install('Não'))).has_person(b'jpeg'), False)
-        self.assertIs(FallVerifier(str(fake_install('Sim'))).has_person(b'jpeg'), True)
-        self.assertIsNone(FallVerifier(str(fake_install('Talvez'))).has_person(b'jpeg'))
+        self.assertIs(FallVerifier(str(fake_install('Não'))).is_lying(b'jpeg'), False)
+        self.assertIs(FallVerifier(str(fake_install('Sim'))).is_lying(b'jpeg'), True)
+        self.assertIsNone(FallVerifier(str(fake_install('Talvez'))).is_lying(b'jpeg'))
 
 
 class WorkerTests(unittest.TestCase):
     def worker(self, answers):
         sent = []
-        verifier = SimpleNamespace(has_person=lambda crop: next(answers))
+        verifier = SimpleNamespace(is_lying=lambda crop: next(answers))
         return SimpleNamespace(fall_verifier=verifier, fall_rearm=[], camera_id='sala',
                                report_fall=lambda *args: sent.append(args)), sent
 

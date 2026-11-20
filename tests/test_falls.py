@@ -70,3 +70,12 @@ class FallTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class CloseToCameraTests(unittest.TestCase):
+    def test_wide_box_cut_by_the_bottom_edge_is_not_lying(self):
+        from app.falls import is_lying
+        box = (140, 35, 1217, 718)  # Person close to the camera, torso only: wide box, no hips.
+        self.assertTrue(is_lying(box, None))
+        self.assertFalse(is_lying(box, None, (1280, 720)))
+        self.assertTrue(is_lying((100, 300, 700, 500), None, (1280, 720)))

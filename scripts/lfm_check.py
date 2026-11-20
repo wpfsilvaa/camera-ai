@@ -23,7 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-PROMPT = 'Há uma pessoa nesta imagem? Responda apenas sim ou não.'
+PROMPT = 'Esta imagem mostra uma pessoa deitada no chão? Responda apenas sim ou não.'
 MAX_SIDE = 512
 MIN_SIDE = 64
 

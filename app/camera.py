@@ -251,10 +251,10 @@ class CameraWorker:
             log.exception('Falha ao registrar possível queda')
 
     def verify_fall(self, keys, crops, camera_name, jpeg, seconds):
-        """Drop the alert only when every flagged box was clearly judged "no person"; otherwise send it as usual."""
-        answers=[self.fall_verifier.has_person(crop) if crop else None for crop in crops]
+        """Drop the alert only when every flagged box was clearly judged "not lying down"; otherwise send it as usual."""
+        answers=[self.fall_verifier.is_lying(crop) if crop else None for crop in crops]
         if answers and all(answer is False for answer in answers):
-            log.warning('Câmera %s: possível queda descartada, o modelo não viu pessoa no recorte (caixas %s). Nova checagem após o tempo configurado.',
+            log.warning('Câmera %s: possível queda descartada, o modelo viu que não há pessoa deitada no recorte (caixas %s). Nova checagem após o tempo configurado.',
                         self.camera_id,keys)
             self.fall_rearm.append(keys)
             return

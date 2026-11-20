@@ -1,9 +1,10 @@
 """Optional second opinion on a suspected fall: a small local vision model looks at the person's crop.
 
-The detector can mistake an object (a bin bag, a pile of clothes) for a lying person. Before the alert goes out, the
-crop of each flagged box is shown to LFM2.5-VL-450M (llama.cpp, CPU) with a closed question. The alert is dropped only
-when the model clearly answers "no person"; any doubt, error or timeout lets the alert through exactly as it would
-without this check. Everything stays on this computer.
+The detector can mistake an object (a bin bag) or a standing person with bad keypoints for a lying person. Before the
+alert goes out, the crop of each flagged box is shown to LFM2.5-VL-450M (llama.cpp, CPU) with a closed question about
+posture. The alert is dropped only when the model clearly answers that nobody is lying down (standing, sitting or no
+person); any doubt, lying, error or timeout lets the alert through exactly as it would without this check.
+Asking only "is there a person?" is useless: a standing person is still a person. Everything stays on this computer.
 """
 import logging
 import subprocess
@@ -15,7 +16,7 @@ import cv2
 
 log = logging.getLogger('camera-ai.fall-verify')
 
-PROMPT = 'Há uma pessoa nesta imagem? Responda apenas sim ou não.'
+PROMPT = 'Esta imagem mostra uma pessoa deitada no chão? Responda apenas sim ou não.'
 PADDING = .08
 MIN_SIDE = 64
 MAX_SIDE = 512
@@ -40,7 +41,7 @@ def crop_person(frame, box):
 
 
 def parse_answer(text):
-    """True for "sim", False for "não", None for anything else (never guess)."""
+    """True for "sim" (lying), False for "não" (not lying), None for anything else (never guess)."""
     words = (text or '').strip().lower().replace('ã', 'a').split()
     word = words[0].strip('.,!?;:') if words else ''
     return {'sim': True, 'nao': False}.get(word)
@@ -73,7 +74,7 @@ class FallVerifier:
             log.warning('Confirmação de queda por IA ligada, mas LFM_DIR não tem o llama-mtmd-cli e os arquivos do modelo; avisos seguem sem filtro.')
         return False
 
-    def has_person(self, jpeg):
+    def is_lying(self, jpeg):
         """True / False when the model answered clearly; None when it could not or did not."""
         files = self.find_files()
         if not files:

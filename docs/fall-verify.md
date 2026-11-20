@@ -2,10 +2,11 @@
 
 Desligado por padrão. Quando o detector marca uma possível queda, um modelo de visão pequeno
 (**LFM2.5-VL-450M**, via llama.cpp, só CPU) olha o recorte da pessoa marcada e responde "sim" ou "não" para
-"há uma pessoa nesta imagem?". Tudo roda neste computador; nada vai para a nuvem.
+"esta imagem mostra uma pessoa deitada no chão?". (A pergunta antiga, "há uma pessoa?", deixou passar um falso
+positivo real: uma pessoa em pé é uma pessoa, então o modelo concordava com o detector.) Tudo roda neste computador; nada vai para a nuvem.
 
 **Regra de segurança:** o aviso só é cancelado quando o modelo responde **"não" com clareza** para todas as caixas
-marcadas (por exemplo, um saco de lixo azul que o detector achou que estava deitado). Resposta "sim", dúvida, erro,
+marcadas (uma pessoa em pé, ou um saco de lixo azul que o detector achou que estava deitado). Resposta "sim", dúvida, erro,
 tempo esgotado ou modelo ausente: o aviso sai exatamente como sem o filtro. Um aviso cancelado conta mais um período
 de "alertar após ficar deitado" antes de poder disparar de novo para a mesma pessoa marcada.
 
