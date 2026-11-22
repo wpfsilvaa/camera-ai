@@ -479,3 +479,5 @@ body.readonly .profile-actions,body.readonly .label-actions,body.readonly .manua
 .source-kind-line{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 #settings-form[data-source="rtsp"] .usb-only,#settings-form[data-source="file"] .usb-only{display:none}
 details.advanced>.detection-advanced{padding:0 0 16px}
+.text-preview{color:var(--green-ink);font-style:italic}
+#kiosk-texts-panel code{background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:11px}

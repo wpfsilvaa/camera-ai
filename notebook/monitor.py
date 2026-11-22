@@ -166,6 +166,11 @@ def parse_cfg(text):
     for key in ('calendar', 'progress', 'black', 'sound', 'rain', 'light', 'speak'):
         if isinstance(data.get(key), bool):
             cfg[key] = data[key]
+    if isinstance(data.get('texts'), dict):   # Editable greetings/briefing: short printable strings under known-looking names.
+        cfg['texts'] = {k: ''.join(ch for ch in v if ch.isprintable())[:240].strip() for k, v in list(data['texts'].items())[:24]
+                        if isinstance(k, str) and re.fullmatch(r'[a-z_]{1,24}', k) and isinstance(v, str) and v.strip()}
+    if isinstance(data.get('tips'), bool):
+        cfg['tips'] = data['tips']
     if isinstance(data.get('hints'), list):
         cfg['hints'] = [''.join(ch for ch in str(h) if ch.isprintable())[:120].strip() for h in data['hints'][:10] if str(h).strip()]
     if data.get('voice') in Voice.MODELS:

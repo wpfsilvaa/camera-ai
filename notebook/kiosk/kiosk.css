@@ -49,9 +49,15 @@ body:has(#screen[data-vigia=scheduled]) .glow{opacity:.08}
 body:has(#screen[data-vigia=resting]) .glow{animation:gpulse 4s steps(12) infinite}
 body:has(#screen[data-vigia=analysing]) .glow{animation:gpulse 1.1s steps(6) infinite}
 @keyframes gpulse{0%,100%{opacity:.07}50%{opacity:.4}}
+.greet-layer{position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3vh;padding:8vh 8vw;text-align:center;background:rgba(5,12,14,.62);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);pointer-events:none;animation:greetlayer .5s ease-out}
+html[data-night="1"] .greet-layer{background:rgba(8,2,2,.74)}
+.greet-layer:not(:has(> :not(.hidden))){display:none}
+.greet-layer .greeting,.greet-layer .greeting-sub{margin:0;max-width:90vw;text-shadow:0 .3vmin 2vmin #000}
+.greet-layer .greeting-sub{line-height:1.3;font-size:clamp(24px,3.4vw,50px);max-width:84vw}
+@keyframes greetlayer{from{opacity:0}to{opacity:1}}
 .greeting{font-size:clamp(44px,8vw,120px);font-weight:700;color:var(--ink);animation:greet .8s ease-out}
 @keyframes greet{from{opacity:0;transform:translateY(3vh)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){.vigia,.glow,.greeting{animation:none!important}}
+@media (prefers-reduced-motion:reduce){.vigia,.glow,.greeting,.greet-layer{animation:none!important}}
 
 /* Idle layout: buttons on the left, calendar on the right when the screen is wide enough */
 .idle-row{display:flex;flex-direction:column;align-items:center;gap:3vh;width:100%}

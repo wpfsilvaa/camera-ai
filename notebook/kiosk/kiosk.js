@@ -4,7 +4,7 @@
   const screen = $('screen');
   let last = {call: {state: 'idle'}}, confirming = false, face = null, faceTimer = null;
   let build = null, greetedId = null, greetTimer = null;
-  const DEFAULT_CFG = {slide: 15, awake: 30, sound: true, vol: {button: 70, call: 70, help: 100, message: 80}, calendar: true, framecal: 'always', rain: true, speak: true, voice: 'faber', hints: [], black: true};
+  const DEFAULT_CFG = {slide: 15, awake: 30, sound: true, vol: {button: 70, call: 70, help: 100, message: 80}, calendar: true, framecal: 'always', rain: true, speak: true, voice: 'faber', hints: [], black: true, tips: true, texts: {}};
   const cfg = () => ({...DEFAULT_CFG, ...(last.cfg || {}), vol: {...DEFAULT_CFG.vol, ...((last.cfg || {}).vol || {})}});
 
   // Sounds generated here (no files). Each kind has its own volume (0-100, set for day and night in the dashboard);
@@ -284,24 +284,33 @@
   };
   const syncSpeaking = () => $('frame').classList.toggle('speaking', !$('quote').classList.contains('hidden') || !$('frame-greeting').classList.contains('hidden'));
 
-  // First greeting of the day: the date, the weather and a couple of suggestions that follow from it.
-  function briefing() {
-    const now = new Date(), w = last.weather, fresh = w && Date.now() / 1000 - w.at < 3 * 3600;
-    const day = now.toLocaleDateString('pt-BR', {weekday: 'long', day: 'numeric', month: 'long'});
-    const parts = [`Hoje é ${day}.`];
-    const tips = [];
-    if (fresh) {
-      const today = w.days[0] || {};
-      parts.push(`Agora faz ${w.t}° e o tempo está ${w.text.toLowerCase()}. Máxima de ${today.hi}° e mínima de ${today.lo}°.`);
-      const wet = (today.rain || 0) >= 50 || ['rain', 'storm'].includes(w.icon);
-      if (wet) parts.push(`Há ${today.rain || 0}% de chance de chuva.`);
-      if (wet) tips.push('leve o guarda-chuva se for sair');
-      if (today.hi >= 30) tips.push('beba bastante água e evite o sol do meio-dia');
-      else if (today.lo <= 15 || w.t <= 15) tips.push('vista um agasalho');
-      else if (!wet) tips.push('bom dia para uma caminhada leve');
-    } else tips.push('lembre-se de beber água ao longo do dia');
-    if (tips.length) parts.push(`Sugestão: ${tips.slice(0, 2).join(' e ')}.`);
-    return parts.join(' ');
+  // Greetings, the day's briefing and the suggestions come from texts written in the dashboard ({placeholders}, and [pieces] that vanish when something inside is empty).
+  const STANDARD = {greet_morning: 'Bom dia, {nome}', greet_afternoon: 'Boa tarde, {nome}', greet_night: 'Boa noite, {nome}', greet_birthday: '🎂 Feliz aniversário, {nome}!',
+    tip_rain: 'leve o guarda-chuva se for sair', tip_hot: 'beba bastante água e evite o sol do meio-dia', tip_cold: 'vista um agasalho', tip_mild: 'bom dia para uma caminhada leve', tip_none: 'lembre-se de beber água ao longo do dia',
+    daily_day: 'Hoje é {data}. [Agora faz {temperatura} e o tempo está {tempo}. Máxima de {max} e mínima de {min}.] [Sugestão: {sugestoes}.]'};
+  const tpl = key => (cfg().texts && cfg().texts[key]) || STANDARD[key] || '';
+  function fill(template, vars) {
+    return template.replace(/\[([^\[\]]*)\]/g, (_, piece) => [...piece.matchAll(/\{(\w+)\}/g)].some(m => !vars[m[1]]) ? '' : piece)
+      .replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? '').replace(/\s+([.,;:!?])/g, '$1').replace(/\s+/g, ' ').trim();
+  }
+  const periodOf = hour => hour >= 5 && hour < 12 ? 'morning' : hour >= 12 && hour < 18 ? 'afternoon' : 'night';
+  const SALUTATION = {morning: 'Bom dia', afternoon: 'Boa tarde', night: 'Boa noite'};
+  function textVars(name) {
+    const now = new Date(), w = last.weather, fresh = w && Date.now() / 1000 - w.at < 3 * 3600, today = (fresh && w.days[0]) || {};
+    const wet = fresh && ((today.rain || 0) >= 50 || ['rain', 'storm'].includes(w.icon));
+    let tip = '';
+    if (fresh) tip = wet ? 'tip_rain' : today.hi >= 30 ? 'tip_hot' : (today.lo <= 15 || w.t <= 15) ? 'tip_cold' : 'tip_mild'; else tip = 'tip_none';
+    const tips = cfg().tips === false ? [] : [tpl(tip), ...(wet && today.hi >= 30 ? [tpl('tip_hot')] : wet && (today.lo <= 15 || w.t <= 15) ? [tpl('tip_cold')] : [])].filter(Boolean);
+    return {vars: {nome: name || '', saudacao: SALUTATION[periodOf(now.getHours())], data: now.toLocaleDateString('pt-BR', {weekday: 'long', day: 'numeric', month: 'long'}),
+      dia: now.toLocaleDateString('pt-BR', {weekday: 'long'}), hora: now.toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'}),
+      temperatura: fresh ? `${w.t}°` : '', tempo: fresh ? w.text.toLowerCase() : '', max: fresh ? `${today.hi}°` : '', min: fresh ? `${today.lo}°` : '',
+      chuva: fresh && wet ? `${today.rain || 0}%` : '', sugestao: tips[0] || '', sugestoes: tips.slice(0, 2).join(' e ')},
+      storm: fresh && w.icon === 'storm', wet, night: periodOf(now.getHours()) === 'night'};
+  }
+  function briefing(name) {
+    const {vars, storm, wet, night} = textVars(name);
+    const key = storm ? 'daily_storm' : wet ? 'daily_rain' : night ? 'daily_night' : 'daily_day';
+    return fill(tpl(key) || STANDARD.daily_day, vars);
   }
 
   function greet(view) {
@@ -312,23 +321,22 @@
       greetedId = last.greet.id;
       const msgs = last.greet.msgs || [], birthday = !!last.greet.birthday, daily = !!last.greet.daily && !birthday, shownFor = birthday || daily ? 25000 : 10000;
       if (!last.greet.quiet) {
-        const hour = new Date().getHours(), period = hour >= 5 && hour < 12 ? 'Bom dia' : hour >= 12 && hour < 18 ? 'Boa tarde' : 'Boa noite';
-        const text = birthday ? `🎂 Feliz aniversário, ${last.greet.name}!` : `${period}, ${last.greet.name}`;
-        const extra = birthday ? `${last.greet.age ? `Hoje você completa ${last.greet.age} anos. ` : ''}${BIRTHDAY_LINES[last.greet.id % BIRTHDAY_LINES.length]}` : daily ? briefing() : '';
+        const headline = fill(tpl(birthday ? 'greet_birthday' : `greet_${periodOf(new Date().getHours())}`), textVars(last.greet.name).vars);
+        const extra = birthday ? `${last.greet.age ? `Hoje você completa ${last.greet.age} anos. ` : ''}${BIRTHDAY_LINES[last.greet.id % BIRTHDAY_LINES.length]}` : daily ? briefing(last.greet.name) : '';
         if (msgs.length) {
           // A message is waiting: no big greeting first, the greeting sits on top of the message card straight away.
           pairs.flat().forEach(id => $(id).classList.add('hidden'));
           if (birthday) party(); else $('confetti').classList.add('hidden');
           clearTimeout(greetTimer);
           if (birthday) greetTimer = setTimeout(() => { $('confetti').classList.add('hidden'); $('confetti').innerHTML = ''; }, shownFor);
-          showQuotes(msgs, 0, text, birthday);
+          showQuotes(msgs, 0, headline, birthday);
         } else {
-          for (const [headline, sub] of pairs) {
-            $(headline).textContent = text; $(headline).classList.toggle('birthday', birthday); $(headline).classList.remove('hidden');
+          for (const [head, sub] of pairs) {
+            $(head).textContent = headline; $(head).classList.toggle('birthday', birthday); $(head).classList.remove('hidden');
             $(sub).textContent = extra; $(sub).classList.toggle('hidden', !birthday && !daily);
           }
           if (birthday) party(); else $('confetti').classList.add('hidden');
-          if (daily) speak(`${text}. ${extra}`);
+          if (daily) speak(`${headline}. ${extra}`);
           clearTimeout(greetTimer);
           greetTimer = setTimeout(hide, shownFor);
           syncSpeaking();

@@ -288,6 +288,20 @@ class Settings(CameraSettings):
     kiosk_voice: str = Field(default='faber', pattern='^(faber|cadu|jeff|edresson)$')   # Local voice (Piper) that reads messages aloud.
     kiosk_read_messages: bool = True   # The kitchen screen reads a message aloud when the person it is for is recognised (and the daily briefing).
     kiosk_daily_briefing: bool = True   # First greeting of the day also gives the date, the weather and a few suggestions.
+    kiosk_tips_enabled: bool = True   # Suggestions (umbrella, water, coat…) in the daily briefing; off keeps it short.
+    kiosk_text_greet_morning: str = Field(default='', max_length=240)   # Empty: the standard wording (app/kiosk_texts.py).
+    kiosk_text_greet_afternoon: str = Field(default='', max_length=240)   # Empty: the standard wording (app/kiosk_texts.py).
+    kiosk_text_greet_night: str = Field(default='', max_length=240)   # Empty: the standard wording (app/kiosk_texts.py).
+    kiosk_text_greet_birthday: str = Field(default='', max_length=240)   # Empty: the standard wording (app/kiosk_texts.py).
+    kiosk_text_daily_day: str = Field(default='', max_length=240)   # Empty: the standard wording (app/kiosk_texts.py).
+    kiosk_text_daily_night: str = Field(default='', max_length=240)   # Empty: the standard wording (app/kiosk_texts.py).
+    kiosk_text_daily_rain: str = Field(default='', max_length=240)   # Empty: the standard wording (app/kiosk_texts.py).
+    kiosk_text_daily_storm: str = Field(default='', max_length=240)   # Empty: the standard wording (app/kiosk_texts.py).
+    kiosk_text_tip_rain: str = Field(default='', max_length=240)   # Empty: the standard wording (app/kiosk_texts.py).
+    kiosk_text_tip_hot: str = Field(default='', max_length=240)   # Empty: the standard wording (app/kiosk_texts.py).
+    kiosk_text_tip_cold: str = Field(default='', max_length=240)   # Empty: the standard wording (app/kiosk_texts.py).
+    kiosk_text_tip_mild: str = Field(default='', max_length=240)   # Empty: the standard wording (app/kiosk_texts.py).
+    kiosk_text_tip_none: str = Field(default='', max_length=240)   # Empty: the standard wording (app/kiosk_texts.py).
     kiosk_nightlight_enabled: bool = False                            # Night: a soft light on the screen while someone walks by.
     kiosk_nightlight_bright: int = Field(default=60, ge=5, le=100)
     kiosk_hints: list[str] = Field(default_factory=list, max_length=10)   # Extra messages cycled on the photo frame.

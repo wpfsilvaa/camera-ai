@@ -26,6 +26,7 @@ from . import detectors, discovery, elder, resources
 from .sources import supports_light_video, usb_cameras
 from .config import CLIPS, DATA, ROOT, WA_URL, CameraSettings, ExtraCamera, Settings, config
 from .db import TZ, Database
+from . import kiosk_texts
 from .pacing import Greeter, first_name, kiosk_night, screen_power_saving, vigia_state
 from .jobs import Jobs
 from .learning import LearningSuggestions
@@ -145,7 +146,7 @@ def vigia_for_kitchen():
             'red': int(kiosk_night(settings, hour) and settings.kiosk_night_mode == 'red'),
             'cfg': json.dumps({'slide': settings.kiosk_slide_seconds, 'awake': settings.kiosk_awake_seconds, 'sound': settings.kiosk_sound_on,
                                'vol': {name: getattr(settings, f'kiosk_vol_{name}_{"night" if info_night else "day"}') for name in ('button', 'call', 'help', 'message')},
-                               'calendar': settings.kiosk_calendar_enabled, 'progress': settings.kiosk_frame_progress, 'framecal': settings.kiosk_frame_calendar, 'rain': settings.kiosk_weather_rain, 'speak': settings.kiosk_read_messages, 'voice': settings.kiosk_voice, 'hints': settings.kiosk_hints, 'black': settings.kiosk_night_mode == 'black', 'light': bool(night_light)}, ensure_ascii=False)}
+                               'calendar': settings.kiosk_calendar_enabled, 'progress': settings.kiosk_frame_progress, 'framecal': settings.kiosk_frame_calendar, 'rain': settings.kiosk_weather_rain, 'speak': settings.kiosk_read_messages, 'voice': settings.kiosk_voice, 'hints': settings.kiosk_hints, 'texts': kiosk_texts.effective(settings), 'tips': settings.kiosk_tips_enabled, 'black': settings.kiosk_night_mode == 'black', 'light': bool(night_light)}, ensure_ascii=False)}
     if settings.kiosk_dim_enabled:
         # Day: the day level. Night: very dim, but brighter while someone is in view (kept for a while after they leave).
         if camera.get('people') or notebook.call.get('state') in ('ringing', 'answered'):
