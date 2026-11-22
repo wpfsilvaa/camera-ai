@@ -73,6 +73,18 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(len(self.db.history()['events']), 1)
         self.assertFalse(list(self.directory.glob('*.mp4')))
 
+    def test_preroll_frames_open_the_clip_before_the_start_time(self):
+        event = self.db.start_event(100, 1)
+        recorder = Recorder(self.db, self.directory)
+        frame = np.full((120,160,3), 90, dtype=np.uint8)
+        buffered = tuple((cv2.imencode('.jpg', frame)[1].tobytes(), 100 + i * .25) for i in range(8))   # two seconds before.
+        recorder.start(event, frame, 102, 8, buffered)
+        recorder.write(frame, 103)
+        recorder.finish(103)
+        clip = self.db.rows('SELECT * FROM clips')[0]
+        self.assertEqual(clip['started'], 100)
+        self.assertAlmostEqual(clip['duration'], 3.125, places=2)   # 3 s of video plus one frame.
+
     def test_variable_camera_fps_preserves_recorded_duration(self):
         event=self.db.start_event(100,1)
         recorder=Recorder(self.db,self.directory)

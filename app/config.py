@@ -94,6 +94,8 @@ class CameraSettings(BaseModel):
     # Street mode: this camera watches the house; an unknown person on it raises the intruder alert while the mode is on.
     street_guard: bool = False
     restricted_pause_with_family: bool = True   # No alert or reminder while a registered person who is not monitored is in view (they are looking after the father).
+    restricted_preroll_seconds: int = Field(default=10, ge=0, le=30)   # Seconds recorded before the person reaches the area (restricted mode).
+    restricted_until_exit: bool = True   # After the area was entered, keep recording until the person leaves the camera.
     restricted_reminder: bool = False
     restricted_reminder_text: str = Field(default='Atenção com a glicose. Pense antes de pegar algo na geladeira.', max_length=160)
 

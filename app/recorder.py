@@ -9,6 +9,7 @@ import time
 import uuid
 
 import cv2
+import numpy as np
 
 from .config import CLIPS
 
@@ -82,12 +83,13 @@ class Recorder:
         self.audio_url = None   # Set by the camera loop when sound should be recorded with the clips.
         self.audio = None
 
-    def start(self, event_id, frame, timestamp, fps):
+    def start(self, event_id, frame, timestamp, fps, preroll=()):
+        """Open a clip. `preroll` is a list of (JPEG bytes, time) from just before: they open the video, so it starts earlier than `timestamp`."""
         if shutil.disk_usage(self.directory).free < 512 * 1024 * 1024:
             raise RuntimeError('Menos de 512 MB livres. Libere espaço para gravar.')
         self.clip_id = uuid.uuid4().hex
         self.fps = fps
-        self.start_time = timestamp
+        self.start_time = preroll[0][1] if preroll else timestamp
         self.frames = 0
         height, width = frame.shape[:2]
         self.size = (width - width % 2, height - height % 2)
@@ -96,12 +98,14 @@ class Recorder:
         if not self.writer.isOpened():
             self.writer = None
             raise RuntimeError('Não foi possível abrir o arquivo de gravação.')
-        self.db.execute('INSERT INTO clips(id,event_id,started) VALUES(?,?,?)', (self.clip_id, event_id, timestamp))
+        self.db.execute('INSERT INTO clips(id,event_id,started) VALUES(?,?,?)', (self.clip_id, event_id, self.start_time))
         cv2.imwrite(str(self.directory / f'{self.clip_id}.jpg'), frame)
         if self.audio_url:
             self.audio = AudioTap(self.audio_url, self.directory / f'{self.clip_id}.mka')
             self.audio.start()
-        self.queue = queue.Queue(self.QUEUE)
+        self.queue = queue.Queue(self.QUEUE + len(preroll))
+        for item in preroll:
+            self.queue.put_nowait(item)   # Decoded by the recorder thread, so the camera loop does not wait.
         self.thread = threading.Thread(target=self.run, args=(self.writer, self.queue), daemon=True, name='recorder')
         self.thread.start()
         self.write(frame, timestamp)
@@ -126,6 +130,10 @@ class Recorder:
                 continue  # Keep draining so finish() never waits on a full queue.
             try:
                 frame, timestamp = item
+                if isinstance(frame, bytes):
+                    frame = cv2.imdecode(np.frombuffer(frame, dtype=np.uint8), cv2.IMREAD_COLOR)
+                    if frame is None:
+                        continue
                 if (frame.shape[1], frame.shape[0]) != self.size:
                     frame = cv2.resize(frame, self.size)
                 target = max(1, round((timestamp - self.start_time) * self.fps) + 1)

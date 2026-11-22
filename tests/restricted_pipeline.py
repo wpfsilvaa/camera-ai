@@ -40,11 +40,15 @@ from app.db import Database
 from app.recognition import Recognition
 
 device = os.environ.get('DEVICE', 'cpu')
+# PREROLL=0 UNTIL_EXIT=0 é o comportamento antigo (só enquanto está na área); o padrão grava antes e até a pessoa sair.
+PREROLL = int(os.environ.get('PREROLL', 10))
+UNTIL_EXIT = os.environ.get('UNTIL_EXIT', '1') == '1'
 db = Database(Path(TEMP.name) / 'history.sqlite3')
 config = Config(Path(TEMP.name) / 'settings.json')
 config.save(Settings(camera_source=str(video), enabled=True, recognition_enabled=False, detection_fps=5, fps=10,
                      device=device if device == 'cpu' else 'auto', restricted_enabled=True,
-                     restricted_zones=[[.55, 0, 1, 1]], restricted_who='anyone', restricted_alert=True))
+                     restricted_zones=[[.55, 0, 1, 1]], restricted_who='anyone', restricted_alert=True,
+                     restricted_preroll_seconds=PREROLL, restricted_until_exit=UNTIL_EXIT))
 manager = CameraManager(db, config, Recognition(db))
 reported = []
 manager.restricted_handler = lambda *args: reported.append(args)
@@ -60,13 +64,17 @@ events = db.rows('SELECT * FROM events')
 clips = db.rows('SELECT * FROM clips ORDER BY started')
 assert len(events) == 1, events  # Presence goes on for the whole video.
 assert len(reported) == 1, [r[:2] for r in reported]
-camera_id, name, jpeg, person = reported[0]
+camera_id, name, jpeg, person, *_ = reported[0]
 assert camera_id == 'main' and jpeg[:2] == b'\xff\xd8', reported[0][:2]
 start = events[0]['started']
 recorded = sum(c['duration'] for c in clips)
 first = clips[0]['started'] - start
 # At the fridge from 5 s to 11 s, plus 8 s absence: about 13 s of video out of 23 s.
-assert clips and 3 <= first <= 7 and 9 <= recorded <= 16, (first, recorded, clips)
+if PREROLL == 0 and not UNTIL_EXIT:
+    assert clips and 3 <= first <= 10 and 9 <= recorded <= 16, (first, recorded, clips)
+else:
+    # Pré-gravação: o vídeo abre por volta de quando a pessoa apareceu e segue até o fim da presença (cerca de 23 s).
+    assert clips and first <= 2 and recorded >= 18, (first, recorded, clips)
 # Before the fridge, outside the area: a photo records who was in the kitchen.
 photos = db.rows('SELECT * FROM event_photos')
 assert len(photos) == 1 and photos[0]['created'] - start < 3, photos

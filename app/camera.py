@@ -455,6 +455,8 @@ class CameraWorker:
             presence=Presence(settings.min_presence_seconds,settings.absence_seconds)
             # A restricted area visit, timed like presence; in restricted mode it gates recording.
             zone=Presence(settings.min_presence_seconds,settings.absence_seconds)
+            preroll=deque()   # (JPEG, time) of the last seconds while someone is in view but nothing is being recorded (restricted mode).
+            visit_hold=False  # The area was entered during this presence: keep recording until the person is gone.
             self.restricted.reset()
             self.recognition.reset_tracks()
             last_recognition=0
@@ -672,12 +674,22 @@ class CameraWorker:
                         self.manage_image(original,now,current,image_controls.target_for(current) if not local else source)
                     annotated=annotate(original,boxes,ids,labels,lying) if analysis_active else original
                     if event_id is not None:
-                        if current.restricted_enabled and not zone.active:
+                        if current.restricted_enabled and zone.active:
+                            visit_hold=current.restricted_until_exit
+                        if current.restricted_enabled and not zone.active and not visit_hold:
                             recorder.finish(now)  # Restricted mode: the record goes on, without video.
                             self.keep_photo(event_id,annotated,now,ids,labels)
+                            if current.restricted_preroll_seconds>0:
+                                # A short rolling buffer, so the video of a visit also shows the way to the area.
+                                encoded,jpeg=cv2.imencode('.jpg',resize_width(annotated,settings.recording_width),[cv2.IMWRITE_JPEG_QUALITY,75])
+                                if encoded:
+                                    preroll.append((jpeg.tobytes(),now))
+                                while preroll and now-preroll[0][1]>current.restricted_preroll_seconds:
+                                    preroll.popleft()
                         elif recorder.writer is None:
                             recorder.audio_url=audio_url(settings.camera_source) if current.record_audio else None
-                            recorder.start(event_id,resize_width(annotated,settings.recording_width),now,settings.fps)
+                            recorder.start(event_id,resize_width(annotated,settings.recording_width),now,settings.fps,tuple(preroll))
+                            preroll.clear()
                         else:
                             recorder.write(resize_width(annotated,settings.recording_width),now)
                         if action=='end':
@@ -686,6 +698,8 @@ class CameraWorker:
                             event_id=None
                         elif now-recorder.start_time>=settings.segment_seconds:
                             recorder.finish(now)
+                    if event_id is None:
+                        preroll.clear();visit_hold=False
                     if manual_event is not None:
                         recorded=resize_width(original,settings.recording_width)
                         if manual_recorder.writer is None:
@@ -723,7 +737,7 @@ class CameraWorker:
                         input_fps=round(live.measured_fps(),1) if live else source_fps,
                         manual_event_id=manual_event,manual_recording=manual_event is not None,
                         inference_ms=inference_ms,detection_fps=round((len(detections)-1)/(detections[-1]-detections[0]),1) if len(detections)>1 else 0,fps=round(fps,1),frame_age_ms=round((time.time()-now)*1000,1),tracks=tracks,
-                        restricted_recording=bool(current.restricted_enabled and zone.active and event_id is not None))
+                        restricted_recording=bool(current.restricted_enabled and (zone.active or visit_hold) and event_id is not None))
             except Exception as exc:
                 reason='camera_error'
                 message=str(exc) if isinstance(exc,RuntimeError) else f'Falha na captura/detecção ({type(exc).__name__}). Confira os requisitos e a câmera.'
