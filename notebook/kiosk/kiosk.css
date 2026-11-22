@@ -36,6 +36,8 @@ button:disabled{opacity:.35;cursor:not-allowed}
 #screen[data-vigia=resting],#screen[data-vigia=scheduled]{--vstate:var(--green)}
 #screen[data-vigia=analysing]{--vstate:var(--amber)}
 html[data-night="1"] #screen[data-vigia=resting],html[data-night="1"] #screen[data-vigia=scheduled]{--vstate:#8a2218}
+.present-chip{display:inline-flex;align-items:center;gap:.4em;border:2px solid var(--green);color:var(--green);border-radius:999px;padding:.15em .7em;font-size:clamp(18px,2.4vw,30px);font-weight:700;white-space:nowrap}
+html[data-night="1"] .present-chip{border-color:#8a2218;color:#8a2218}
 .vigia{display:inline-flex;align-items:center;gap:.4em;border:2px solid var(--vstate);color:var(--vstate);border-radius:999px;padding:.15em .7em;font-size:clamp(18px,2.4vw,30px);font-weight:700;white-space:nowrap}
 .vi{width:1.2em;height:1.2em;flex-shrink:0}
 #screen[data-vigia=resting] .vigia{animation:vpulse 3.2s steps(8) infinite}

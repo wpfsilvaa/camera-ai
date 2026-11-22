@@ -173,6 +173,16 @@ def parse_cfg(text):
     return cfg
 
 
+def parse_present(text):
+    """['Flavio', 'Lorena'] from 'Flavio;Lorena': at most 4 printable names of at most 30 characters."""
+    names = []
+    for part in str(text or '').split(';'):
+        name = ''.join(ch for ch in part if ch.isprintable())[:30].strip()
+        if name and name not in names:
+            names.append(name)
+    return names[:4]
+
+
 def parse_callto(text):
     """[{'i', 'n'}] people the screen can call by name: user id (32 hex) and first name."""
     try:
@@ -467,6 +477,7 @@ class Desk:
         self.reminders = []  # [{'i', 'a', 't', 'e'}]: notes cycled on the screen until their expiry.
         self.callto = []     # [{'i', 'n'}]: people with their own call button.
         self.watching = 0    # People looking at the live camera in the dashboard right now.
+        self.present = []    # First names of who the camera recognises right now (the screen shows them next to the watch badge).
         self.zones_until = 0   # Enquanto o relógio não passa disto, a tela mostra a câmera com as áreas restritas (botão do totem).
         self.zones_seq, self.zones_count = 0, 0   # Número do último quadro recebido do painel e quantas áreas ele marcou.
 
@@ -529,7 +540,7 @@ class Desk:
             avatars = avatar_revs()
             fresh = vigia is not None and now - vigia[2] < LINK_SECONDS
             greet = self.greet if self.greet and now < self.greet['until'] else None
-            return {'vigia': vigia[0] if fresh else None, 'night': bool(vigia[1]) if fresh else False, 'red': self.red if fresh else False, 'weather': self.weather if fresh else None, 'watching': self.watching if fresh else 0,
+            return {'vigia': vigia[0] if fresh else None, 'night': bool(vigia[1]) if fresh else False, 'red': self.red if fresh else False, 'weather': self.weather if fresh else None, 'watching': self.watching if fresh else 0, 'present': self.present if fresh else [],
                     'greet': {k: greet[k] for k in ('name', 'id', 'birthday', 'daily', 'age', 'msgs', 'quiet')} if greet else None,
                     'bdays': self.bdays if fresh else [],
                     'callto': [{**p, 'p': avatars.get(p['i'])} for p in self.callto] if fresh else [],
@@ -806,6 +817,7 @@ class Handler(BaseHTTPRequestHandler):
                                 query.get('night') == ['1'], (query.get('greet') or [''])[0], (query.get('greet_id') or [''])[0],
                                 (query.get('greet_kind') or [''])[0], (query.get('age') or [''])[0], (query.get('bdays') or [''])[0], (query.get('reminders') or [''])[0], query.get('frame') == ['1'], (query.get('cfg') or [''])[0], (query.get('greet_msgs') or [''])[0], query.get('greet_quiet') == ['1'], (query.get('acked') or [''])[0], query.get('red') == ['1'], (query.get('weather') or [''])[0], (query.get('callto') or [''])[0])
             self.desk.watching = int(query['watch'][0]) if (query.get('watch') or [''])[0].isdigit() else 0
+            self.desk.present = parse_present((query.get('present') or [''])[0])
             self.dim_from(query)
             self.desk.touch()   # Anything new for the screen goes out immediately to the waiting /state request.
             return self.reply(200, {**reading(), 'call': self.desk.snapshot(), 'acks': list(self.desk.acks), 'zones': self.desk.zones_on()})

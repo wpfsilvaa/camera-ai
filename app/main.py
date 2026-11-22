@@ -173,6 +173,13 @@ def vigia_for_kitchen():
     notes = reminders.active(now)
     if notes:
         info['reminders'] = json.dumps([{'i': n['id'][:8], 'a': first_name(n['author']), 't': n['text'], 'e': round(n['expires'])} for n in notes[:10]], ensure_ascii=False)
+    here = []   # First names of who the camera recognises right now: the screen shows them next to the watch-mode badge.
+    for track in camera.get('tracks') or []:
+        name = first_name(track.get('name') or '')
+        if name and name not in here:
+            here.append(name)
+    if here:
+        info['present'] = ';'.join(here[:4])
     people = {r['id']: r for r in db.rows("SELECT id,name,birthday FROM people WHERE birthday IS NOT NULL")}
     if people:   # Names and month-day only: the screen marks them on its calendar.
         info['bdays'] = json.dumps([{'n': first_name(p['name']), 'd': p['birthday'][5:]} for p in people.values()][:20], ensure_ascii=False)
