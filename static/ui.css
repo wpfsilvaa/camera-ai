@@ -540,3 +540,9 @@ input[type=color]{padding:3px;height:42px;cursor:pointer;width:100%}
 .tp-tile small{opacity:.7;font-size:.7em;display:block}.tp-tile b{display:block;font-size:1.2em}.tp-tile span{color:var(--accent)}.tp-tile i{font-style:italic}
 .tp-clock2 svg{width:min(70%,3.6em);height:auto;color:var(--ink)}
 .tp-photo{background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 55%,var(--bg)),color-mix(in srgb,var(--call) 60%,var(--bg)))}.tp-photo span{color:#fff}
+
+/* Rastreamento e nomes: resumo das perdas. */
+.losses{border:1px solid var(--border);border-radius:10px;padding:14px 16px;background:var(--surface-2)}
+.losses-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.loss-list{margin:6px 0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:12px}
+.losses p{margin:4px 0}

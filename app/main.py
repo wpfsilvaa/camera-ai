@@ -488,6 +488,12 @@ def father_visit_verdict(visit_id: int, body: VisitVerdict):
     return {'ok': True, 'taught': taught}
 
 
+@app.get('/api/recognition/losses')
+def recognition_losses(days: int = Query(3, ge=1, le=14)):
+    """Each time a named person turned "unknown" on the camera in the last days, grouped by why, and how often the name came back."""
+    return recognition.identity_log.summary(days)
+
+
 @app.get('/api/father/calibration')
 def father_calibration():
     return father_log.calibration(config.get().restricted_min_seconds)

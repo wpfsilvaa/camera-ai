@@ -180,14 +180,38 @@ class RecognitionTests(unittest.TestCase):
             self.assertTrue(label['held'])
         self.assertEqual(self.recognition.labels([1],boxes,216,settings.face_hold_seconds),{})
 
-    def test_conflicting_face_clears_previous_identity(self):
+    def father_named(self, boxes=None):
         track,sample=self.sample(self.event())
         self.recognition.confirm(track,'father',sample)
         self.recognition.encoder=type('Encoder',(),{'version':'sface-test'})()
-        boxes=[[10,10,90,160]]
+        boxes=boxes or [[10,10,90,160]]
         for now in (200,200.4,200.8):
             self.recognition.observe_faces(None,boxes,[1],{'1':self.face()},now,Settings())
-        self.recognition.observe_faces(None,boxes,[1],{'1':self.face((0,1,0))},201.2,Settings())
+        return boxes
+
+    def test_conflicting_faces_clear_the_identity_only_after_several_in_a_row(self):
+        boxes=self.father_named()
+        for now in (201.2,201.6):
+            self.recognition.observe_faces(None,boxes,[1],{'1':self.face((0,1,0))},now,Settings())
+            self.assertIn('1',self.recognition.labels([1],boxes,now,3),'um ou dois rostos diferentes não apagam o nome')
+        self.recognition.observe_faces(None,boxes,[1],{'1':self.face((0,1,0))},202.0,Settings())
+        self.assertEqual(self.recognition.labels([1],boxes,202.0,3),{})
+        self.assertEqual(self.db.rows('SELECT reason FROM identity_log')[0]['reason'],'contradicted')
+
+    def test_a_weak_face_that_still_looks_like_the_person_keeps_and_refreshes_the_name(self):
+        boxes=self.father_named()
+        similar=normalized((1,.9,0))   # About .74 alike: below the threshold? no, above; use a clearly weaker one below.
+        weaker=normalized((1,1.9,0))   # About .46 alike: unconfirmed, but within the keep margin of a .50 threshold.
+        self.assertLess(float(weaker@normalized((1,0,0))),.5)
+        for now in (201.2,201.6,202.0,202.4,202.8):
+            self.recognition.observe_faces(None,boxes,[1],{'1':self.face(tuple(weaker))},now,Settings(face_threshold=.5))
+        labels=self.recognition.labels([1],boxes,203,3)
+        self.assertIn('1',labels,'um rosto fraco, mas parecido, não pode apagar o nome')
+        self.assertAlmostEqual(self.recognition.live['1']['seen'],202.8)
+
+    def test_with_sticky_off_a_single_conflicting_face_still_clears_it(self):
+        boxes=self.father_named()
+        self.recognition.observe_faces(None,boxes,[1],{'1':self.face((0,1,0))},201.2,Settings(identity_sticky_enabled=False))
         self.assertEqual(self.recognition.labels([1],boxes,201.2,3),{})
 
     def test_widely_spaced_matches_do_not_accumulate_votes(self):

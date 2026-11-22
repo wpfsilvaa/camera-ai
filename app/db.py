@@ -113,6 +113,12 @@ class Database:
                     id INTEGER PRIMARY KEY, camera_id TEXT NOT NULL, started REAL NOT NULL, person TEXT, area TEXT NOT NULL DEFAULT ''
                 );
                 CREATE INDEX IF NOT EXISTS idx_restricted_visits_started ON restricted_visits(started);
+                -- Each time a person who was named on the camera turns "unknown" while still around, and whether the name came back.
+                CREATE TABLE IF NOT EXISTS identity_log (
+                    id INTEGER PRIMARY KEY, at REAL NOT NULL, camera_id TEXT NOT NULL DEFAULT '', person_id TEXT NOT NULL, track_key TEXT NOT NULL DEFAULT '',
+                    reason TEXT NOT NULL, source TEXT NOT NULL DEFAULT '', age REAL, detail TEXT NOT NULL DEFAULT '', recovered_after REAL
+                );
+                CREATE INDEX IF NOT EXISTS idx_identity_log_at ON identity_log(at);
                 -- Family logbook: dated notes written in the dashboard.
                 CREATE TABLE IF NOT EXISTS journal (
                     id TEXT PRIMARY KEY, author TEXT NOT NULL, user_id TEXT, text TEXT NOT NULL, tag TEXT NOT NULL DEFAULT 'geral', created REAL NOT NULL

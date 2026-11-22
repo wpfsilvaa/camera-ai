@@ -8,6 +8,18 @@ from .config import BODY_ENCODER
 from .faces import normalized
 
 
+_shared = {'encoder': None}
+_shared_lock = __import__('threading').Lock()
+
+
+def shared_encoder():
+    """One ONNX session for the whole program (recognition and the tracker): onnxruntime runs are thread safe, and a second copy costs memory."""
+    with _shared_lock:
+        if _shared['encoder'] is None:
+            _shared['encoder'] = BodyEncoder()
+        return _shared['encoder']
+
+
 class BodyEncoder:
     def __init__(self):
         import onnxruntime as ort
@@ -18,6 +30,18 @@ class BodyEncoder:
         options.inter_op_num_threads = 1
         self.session = ort.InferenceSession(BODY_ENCODER, options, providers=['CPUExecutionProvider'])
         self.input = self.session.get_inputs()[0].name
+
+    def embed(self, frame, box):
+        """The clothes/body vector of one person box (x1,y1,x2,y2), or None when the crop is too small to say anything."""
+        height, width = frame.shape[:2]
+        left, top, right, bottom = max(0, int(box[0])), max(0, int(box[1])), min(width, int(box[2])), min(height, int(box[3]))
+        if right - left < 40 or bottom - top < 80:
+            return None
+        crop = frame[top:bottom, left:right].copy()
+        crop[:round(crop.shape[0] * .22)] = 114   # The head is ignored, as everywhere else.
+        rgb = cv2.cvtColor(cv2.resize(crop, (448, 448), interpolation=cv2.INTER_LINEAR), cv2.COLOR_BGR2RGB)
+        tensor = np.ascontiguousarray(rgb.transpose(2, 0, 1)[None], dtype=np.float32) / 255.
+        return normalized(self.session.run(None, {self.input: tensor})[0][0])
 
     def for_people(self, frame, boxes, ids, diagnostics=None):
         result = {}

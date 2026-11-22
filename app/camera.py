@@ -620,8 +620,11 @@ class CameraWorker:
                         if settings.recognition_enabled:
                             self.recognition.start()
                         begin=time.perf_counter()
+                        if tracker is not None and tracker.requested!=settings.tracker_appearance_enabled:
+                            tracker=None
+                            self.recognition.reset_tracks()   # New numbers: the old ones must not carry names over to strangers.
                         if tracker is None:
-                            tracker=PersonTracker(settings.confidence,settings.track_hold_seconds)
+                            tracker=PersonTracker(settings.confidence,settings.track_hold_seconds,appearance=settings.tracker_appearance_enabled)
                         result=model.predict(original,classes=[0],conf=tracker.low_confidence,imgsz=settings.detection_size,
                             device=device,quantize=16 if half else 32,max_det=20,verbose=False)[0]
                         boxes,ids=tracker.update(result.boxes,original,now)
@@ -652,7 +655,7 @@ class CameraWorker:
                         if current.recognition_enabled and now-last_recognition>=self.recognition.interval(ids,now):
                             last_recognition=now
                             self.recognition.submit(event_id,original,boxes,ids,now,current)
-                        labels=self.recognition.labels(ids,boxes,now,current.face_hold_seconds) if current.recognition_enabled else {}
+                        labels=self.recognition.labels(ids,boxes,now,current.face_hold_seconds,sticky_seconds=current.identity_sticky_seconds if current.identity_sticky_enabled else 0,reattach_seconds=current.identity_reattach_seconds,body_threshold=current.body_threshold,camera_id=self.camera_id) if current.recognition_enabled else {}
                         if current.street_guard and self.on_street:
                             self.check_street(boxes,ids,labels,original,now,current)
                         if current.restricted_enabled or current.restricted_alert_always:
@@ -665,7 +668,7 @@ class CameraWorker:
                         boxes,ids=detected_boxes,detected_ids
                         count=len(boxes)
                         inference_ms=last_inference_ms
-                        labels=self.recognition.labels(ids,boxes,now,current.face_hold_seconds) if current.recognition_enabled else {}
+                        labels=self.recognition.labels(ids,boxes,now,current.face_hold_seconds,sticky_seconds=current.identity_sticky_seconds if current.identity_sticky_enabled else 0,reattach_seconds=current.identity_reattach_seconds,body_threshold=current.body_threshold,camera_id=self.camera_id) if current.recognition_enabled else {}
                     latest_time=now
                     if time.time()<self.focus_probe_until:
                         self.measure_focus(original,detected_boxes,time.time())
@@ -736,7 +739,7 @@ class CameraWorker:
                     self.update(state='online',error=None,people=count,last_frame=now,event_id=event_id,
                         input_fps=round(live.measured_fps(),1) if live else source_fps,
                         manual_event_id=manual_event,manual_recording=manual_event is not None,
-                        inference_ms=inference_ms,detection_fps=round((len(detections)-1)/(detections[-1]-detections[0]),1) if len(detections)>1 else 0,fps=round(fps,1),frame_age_ms=round((time.time()-now)*1000,1),tracks=tracks,
+                        inference_ms=inference_ms,tracker=tracker.cost() if tracker is not None else None,detection_fps=round((len(detections)-1)/(detections[-1]-detections[0]),1) if len(detections)>1 else 0,fps=round(fps,1),frame_age_ms=round((time.time()-now)*1000,1),tracks=tracks,
                         restricted_recording=bool(current.restricted_enabled and (zone.active or visit_hold) and event_id is not None))
             except Exception as exc:
                 reason='camera_error'

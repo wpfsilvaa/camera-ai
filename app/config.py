@@ -63,6 +63,7 @@ class CameraSettings(BaseModel):
     recording_width: int = Field(default=1920, ge=640, le=1920)
     confidence: float = Field(default=0.5, ge=0.2, le=0.95)
     absence_seconds: float = Field(default=8, ge=2, le=120)
+    tracker_appearance_enabled: bool = False   # BoT-SORT with clothes: keeps numbers apart when people cross; uses more CPU (app/tracking.py). Off by default.
     min_presence_seconds: float = Field(default=1, ge=0.25, le=10)
     # Record the camera computer's microphone (MediaMTX "mic" path) with each clip.
     record_audio: bool = True
@@ -223,6 +224,9 @@ class Settings(CameraSettings):
     body_margin: float = Field(default=.08, ge=.02, le=.30)
     track_hold_seconds: float = Field(default=4, ge=1, le=15)   # A person the detector misses for less than this keeps the same track number (and name).
     face_hold_seconds: float = Field(default=15, ge=0, le=60)
+    identity_sticky_enabled: bool = True     # Keep the name while the same track goes on, and let a weak face not erase it (see app/recognition.py).
+    identity_sticky_seconds: int = Field(default=180, ge=15, le=900)   # Longest a face-confirmed name is kept without new proof.
+    identity_reattach_seconds: int = Field(default=20, ge=3, le=60)    # How long a vanished name can be given back to a new track.
     send_probable_father: bool = False
     # Propose sharp, confidently recognized faces as new examples; a person approves each one.
     street_delay_seconds: int = Field(default=45, ge=0, le=300)   # A stranger must stay in view this long before the intruder alert.
