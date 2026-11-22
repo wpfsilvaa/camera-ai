@@ -169,6 +169,15 @@ def parse_cfg(text):
     if isinstance(data.get('texts'), dict):   # Editable greetings/briefing: short printable strings under known-looking names.
         cfg['texts'] = {k: ''.join(ch for ch in v if ch.isprintable())[:240].strip() for k, v in list(data['texts'].items())[:24]
                         if isinstance(k, str) and re.fullmatch(r'[a-z_]{1,24}', k) and isinstance(v, str) and v.strip()}
+    widgets = data.get('widgets')
+    if isinstance(widgets, dict):   # Board tiles: names from a short list, short printable texts.
+        board = {}
+        if isinstance(widgets.get('order'), list):
+            board['order'] = [n for n in dict.fromkeys(widgets['order']) if n in ('calendar', 'clock', 'quote', 'photo', 'medication')]
+        for key, limit, length in (('quotes', 40, 160), ('meds', 20, 80)):
+            if isinstance(widgets.get(key), list):
+                board[key] = [''.join(ch for ch in item if ch.isprintable())[:length].strip() for item in widgets[key][:limit] if isinstance(item, str) and item.strip()]
+        cfg['widgets'] = board
     theme = data.get('theme')
     if isinstance(theme, dict):   # Colours must be #rrggbb (they go into a style sheet), everything else is a choice from a short list.
         clean = {}

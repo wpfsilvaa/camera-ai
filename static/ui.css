@@ -519,8 +519,24 @@ input[type=color]{padding:3px;height:42px;cursor:pointer;width:100%}
 .tp-actions{flex:1.25;display:flex;flex-direction:column;gap:6%;justify-content:center}
 .tp-btn{border-radius:.9em;padding:.9em .6em;text-align:center;font-weight:700;font-size:1.25em;color:#fff}
 .tp-call{background:var(--call)}.tp-panic{background:var(--panic)}
-.tp-cal{flex:1;background:color-mix(in srgb,var(--ink) 13%,var(--bg));border-radius:.8em;padding:.7em;display:flex;flex-direction:column;gap:.4em}
+.tp-cal{background:color-mix(in srgb,var(--ink) 13%,var(--bg));border-radius:.8em;padding:.7em;display:flex;flex-direction:column;gap:.4em}
 .tp-cal-title{font-weight:700}.tp-cal-title small{opacity:.6;font-weight:500}
 .tp-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:.1em;text-align:center;font-style:normal}.tp-cal-grid i{font-style:normal;font-size:.8em}
 .tp-today{background:var(--ink);color:var(--bg);border-radius:.4em}
 .tp-cal ul{margin:0;padding:0;list-style:none;font-size:.8em}.tp-cal li span{color:var(--accent);margin-right:.5em}
+
+/* Quadrinhos: lista para arrastar e prévia do quadro. */
+.settings-grid>#kiosk-widgets-panel{column-span:all}
+.wg-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.wg-row{display:flex;align-items:center;gap:12px;border:1px solid var(--border-strong);border-radius:10px;padding:8px 12px;background:var(--surface);cursor:grab}
+.wg-row.off{opacity:.6}.wg-row.dragging{opacity:.4}
+.wg-handle{color:var(--muted);letter-spacing:-2px;font-size:16px;user-select:none}
+.wg-name{flex:1;font-weight:600;font-size:13px}
+.wg-move{display:flex;gap:6px}.wg-move .icon-button{width:30px;height:30px;font-size:15px}.wg-move .icon-button:disabled{opacity:.35;cursor:default}
+.tp-board{flex:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:minmax(0,1fr);gap:.5em;min-width:0}
+.tp-board[data-count="1"]{grid-template-columns:minmax(0,1fr)}
+.tp-board [hidden]{display:none!important}
+.tp-tile{background:color-mix(in srgb,var(--ink) 13%,var(--bg));border-radius:.8em;display:grid;place-items:center;text-align:center;padding:.5em;overflow:hidden;font-size:.85em;min-height:0}
+.tp-tile small{opacity:.7;font-size:.7em;display:block}.tp-tile b{display:block;font-size:1.2em}.tp-tile span{color:var(--accent)}.tp-tile i{font-style:italic}
+.tp-clock2 svg{width:min(70%,3.6em);height:auto;color:var(--ink)}
+.tp-photo{background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 55%,var(--bg)),color-mix(in srgb,var(--call) 60%,var(--bg)))}.tp-photo span{color:#fff}

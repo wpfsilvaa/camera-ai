@@ -70,9 +70,9 @@ html[data-night="1"] .greet-layer{background:rgba(8,2,2,.74)}
 @media (min-aspect-ratio:13/10){
   .idle-row{flex-direction:row;justify-content:center;align-items:center;gap:3vw}
   .actions{flex:1.25;min-width:0}
-  .calendar{flex:1;min-width:0}
+  .board{flex:1;min-width:0}
 }
-@media (max-aspect-ratio:13/10){.calendar{display:none}}
+@media (max-aspect-ratio:13/10){.board{display:none}}
 .big{width:100%;max-width:1000px}
 .calendar{text-align:left;background:color-mix(in srgb,var(--grey) 70%,transparent);border-radius:2.2vmin;padding:2vmin 2.2vmin;font-size:calc(clamp(14px,1.9vw,26px)*var(--fs,1))}
 .cal-title{display:flex;justify-content:space-between;align-items:baseline;font-weight:700;text-transform:capitalize;color:var(--ink);font-size:1.15em;margin-bottom:.6em}
@@ -276,3 +276,38 @@ html[data-size="pequeno"]{--fs:.88}
 html[data-size="grande"]{--fs:1.2}
 html[data-hide~="weather"] #ui-weather,html[data-hide~="present"] #present,html[data-hide~="vigia"] #vigia,html[data-hide~="battery"] #battery,
 html[data-hide~="date"] #date,html[data-hide~="holidays"] .cal-next{display:none!important}
+
+/* Quadro de quadrinhos: calendário, relógio, frase, foto e remédio, na ordem escolhida no painel. */
+.board{display:grid;gap:2vmin;grid-template-columns:minmax(0,1fr)}
+.board>.calendar{flex:none}
+.board[data-fixed]{align-self:stretch;min-height:62vh;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:minmax(0,1fr)}
+.board[data-count="1"][data-fixed]{grid-template-columns:minmax(0,1fr)}
+.board[data-fixed]>.tile.wide{grid-column:1/-1}
+.tile{border-radius:2.2vmin;background:color-mix(in srgb,var(--grey) 70%,transparent);min-width:0;min-height:0;position:relative}
+.board[data-fixed]>.tile{container-type:size;overflow:hidden}
+.board[data-fixed]>.calendar{padding:1.4vmin 1.6vmin}
+.board[data-fixed]>.calendar>*{font-size:clamp(9px,min(5.2cqh,4.4cqw),24px)}   /* cq só vale nos filhos: o próprio quadrinho é o container */
+.board[data-fixed] .cal-next{display:none}
+.tile-label{position:absolute;top:6cqh;left:6cqw;font-size:clamp(10px,4.4cqmin,20px);color:var(--muted);letter-spacing:.04em;text-transform:uppercase;font-weight:600}
+.clock-tile{display:grid;place-items:center}
+.clock-tile svg{width:min(88cqw,88cqh);height:min(88cqw,88cqh)}
+#aclock .af{fill:none;stroke:var(--muted);stroke-width:1.6}
+#aclock .tk{stroke:var(--ink);stroke-width:1.4;stroke-linecap:round}
+#aclock .tk.big5{stroke-width:2.6}
+#aclock .hh,#aclock .mh{stroke:var(--ink);stroke-linecap:round}
+#aclock .hh{stroke-width:4.4}#aclock .mh{stroke-width:3}
+#aclock .sh{stroke:var(--amber);stroke-width:1.4;stroke-linecap:round}
+#aclock .ac{fill:var(--amber)}
+.quote-tile{display:grid;place-items:center;padding:1.2vh 1.4vw;text-align:center}
+.quote-tile p{margin:9cqh 0 0;width:100%;color:var(--ink);font-weight:600;line-height:1.25;font-size:clamp(14px,min(11cqh,6.4cqw),44px)}
+.photo-tile{padding:0}
+.photo-tile img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit}
+.photo-tile img[hidden]{display:none}
+.photo-tile small{position:absolute;left:5cqw;bottom:4cqh;color:#fff;text-shadow:0 1px 6px #000;font-size:clamp(11px,5cqmin,22px);font-weight:600}
+.tile-empty[hidden]{display:none}
+.tile-empty{margin:0;position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:8cqmin;font-size:clamp(12px,6cqmin,24px);color:var(--muted)}
+.med-tile{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2cqh;text-align:center;padding:1.2vh 1vw}
+.med-tile strong{margin-top:7cqh;max-width:100%}
+.med-tile strong{color:var(--ink);font-size:clamp(16px,min(15cqh,8cqw),52px);line-height:1.1}
+.med-tile span:last-child{color:var(--muted);font-size:clamp(12px,min(8cqh,4.6cqw),30px)}
+.med-tile.soon{outline:.5vmin solid var(--amber)}.med-tile.soon span:last-child{color:var(--amber);font-weight:700}

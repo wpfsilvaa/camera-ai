@@ -57,7 +57,13 @@
           <button id="btn-panic" class="big panic" type="button"><span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em"><circle cx="12" cy="12" r="10.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 6.5v7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><circle cx="12" cy="17.2" r="1.6" fill="currentColor"/></svg></span>Preciso de ajuda</button>
           <p id="note" class="note hidden"></p>
         </div>
-        <aside id="calendar" class="calendar" aria-label="Calendário"></aside>
+        <div id="board" class="board" data-count="1">
+          <aside id="calendar" class="calendar tile" data-w="calendar" aria-label="Calendário"></aside>
+          <section class="tile clock-tile hidden" data-w="clock" aria-label="Relógio"><svg id="aclock" viewBox="0 0 100 100" aria-hidden="true"><circle class="af" cx="50" cy="50" r="47"/><g id="aticks"></g><line id="ah" class="hh" x1="50" y1="50" x2="50" y2="27"/><line id="am" class="mh" x1="50" y1="50" x2="50" y2="14"/><line id="as" class="sh" x1="50" y1="56" x2="50" y2="11"/><circle class="ac" cx="50" cy="50" r="2.6"/></svg></section>
+          <section class="tile quote-tile hidden" data-w="quote" aria-label="Frase do dia"><span class="tile-label">Frase do dia</span><p id="qday"></p></section>
+          <section class="tile photo-tile hidden" data-w="photo" aria-label="Foto da família"><img id="ptile" alt="" hidden><p id="pempty" class="tile-empty">As fotos da família aparecem aqui.</p><small id="pcredit"></small></section>
+          <section class="tile med-tile hidden" data-w="medication" aria-label="Próximo remédio"><span class="tile-label">Próximo remédio</span><strong id="med-name"></strong><span id="med-when"></span></section>
+        </div>
       </div>
     </section>
 

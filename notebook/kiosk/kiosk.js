@@ -186,6 +186,7 @@
     greet(view);
     renderReminder();
     renderCalendar();
+    renderBoard();
     if (last.build) { if (build === null) build = last.build; else if (build !== last.build) location.reload(); }
 
     $('btn-call').classList.toggle('hidden', !enabled.call);
@@ -688,11 +689,80 @@
     return `<div class="mc-grid"><div class="mc-title">${now.toLocaleDateString('pt-BR', {month: 'long'})}<small>${year}</small></div>${cells}</div><ul class="mc-next">${upcoming}</ul>`;
   }
 
+
+  // ---------- Quadro: relógio, frase do dia, foto da família e próximo remédio (o calendário tem o seu renderCalendar) ----------
+  const TILES = ['calendar', 'clock', 'quote', 'photo', 'medication'];
+  const boardOrder = () => { const widgets = cfg().widgets; return widgets && Array.isArray(widgets.order) ? widgets.order : (cfg().calendar ? ['calendar'] : []); };
+  let clockBuilt = false, quoteKey = '', photoKey = '';
+  function drawClock(now) {
+    if (!clockBuilt) {
+      $('aticks').innerHTML = Array.from({length: 60}, (_, i) => { const five = i % 5 === 0, len = five ? 6 : 2.6, a = i * Math.PI / 30; const r1 = 44, r2 = r1 - len;
+        return `<line class="tk${five ? ' big5' : ''}" x1="${50 + r1 * Math.sin(a)}" y1="${50 - r1 * Math.cos(a)}" x2="${50 + r2 * Math.sin(a)}" y2="${50 - r2 * Math.cos(a)}"/>`; }).join('');
+      clockBuilt = true;
+    }
+    const s = now.getSeconds(), m = now.getMinutes() + s / 60, h = (now.getHours() % 12) + m / 60;
+    for (const [id, deg] of [['ah', h * 30], ['am', m * 6], ['as', s * 6]]) $(id).setAttribute('transform', `rotate(${deg} 50 50)`);
+  }
+  function fitTile(element, box) {   // Long text: shrinks until it fits its tile.
+    element.style.fontSize = '';
+    let size = parseFloat(getComputedStyle(element).fontSize);
+    for (let i = 0; i < 16 && element.scrollHeight > box.clientHeight * .74 && size > 11; i++) { size *= .92; element.style.fontSize = `${size}px`; }
+  }
+  const dayNumber = now => Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
+  function renderQuote(now) {
+    const quotes = (cfg().widgets && cfg().widgets.quotes) || [];
+    const text = quotes.length ? quotes[dayNumber(now) % quotes.length] : '';
+    const key = `${text}|${$('qday').parentElement.clientHeight}`;
+    if (key === quoteKey) return;
+    quoteKey = key; $('qday').textContent = text; fitTile($('qday'), $('qday').parentElement);
+  }
+  function nextMedication(now) {
+    const lines = ((cfg().widgets && cfg().widgets.meds) || []).map(line => { const m = /^\s*(\d{1,2}):(\d{2})\s+(.+)$/.exec(line); return m ? {minutes: +m[1] * 60 + +m[2], name: m[3].trim()} : null; }).filter(Boolean);
+    if (!lines.length) return null;
+    const nowMin = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+    const recent = lines.filter(l => nowMin - l.minutes >= 0 && nowMin - l.minutes <= 30).sort((a, b) => b.minutes - a.minutes)[0];   // Within 30 min after the time: still "now".
+    if (recent) return {...recent, when: 'agora', soon: true};
+    const upcoming = lines.filter(l => l.minutes > nowMin).sort((a, b) => a.minutes - b.minutes)[0];
+    const pick = upcoming || [...lines].sort((a, b) => a.minutes - b.minutes)[0];
+    const total = Math.max(1, Math.round(pick.minutes - nowMin + (upcoming ? 0 : 1440))), wait = total, hours = Math.floor(total / 60), mins = total % 60;   // Rounded first: never "9 h 60 min".
+    const hh = String(Math.floor(pick.minutes / 60)).padStart(2, '0'), mm = String(pick.minutes % 60).padStart(2, '0');
+    return {...pick, when: `${upcoming ? '' : 'amanhã, '}às ${hh}:${mm} · em ${[hours ? `${hours} h` : '', mins ? `${mins} min` : ''].filter(Boolean).join(' ')}`, soon: upcoming && wait <= 30};
+  }
+  function renderMedication(now) {
+    const tile = document.querySelector('.med-tile'), next = nextMedication(now);
+    tile.classList.toggle('soon', Boolean(next && next.soon));
+    $('med-name').textContent = next ? next.name : 'Nenhum remédio cadastrado';
+    $('med-when').textContent = next ? next.when : '';
+    fitTile($('med-name'), tile.querySelector('strong').parentElement);
+  }
+  function renderPhoto(now) {
+    const photos = last.photos || [], img = $('ptile');
+    $('pempty').hidden = photos.length > 0; img.hidden = !photos.length;
+    if (!photos.length) { $('pcredit').textContent = ''; photoKey = ''; return; }
+    const slide = Math.max(5, cfg().slide || 15) * 4 * 1000, photo = photos[Math.floor(now.getTime() / slide) % photos.length], key = photo.id;
+    if (key === photoKey) return;
+    photoKey = key; img.src = `/photo/${photo.id}.jpg`; $('pcredit').textContent = photo.a ? `Foto de ${photo.a}` : '';
+  }
+  function renderBoard() {
+    const order = boardOrder(), board = $('board'), now = new Date();
+    for (const id of TILES) {
+      const tile = board.querySelector(`[data-w="${id}"]`), index = order.indexOf(id);
+      tile.classList.toggle('hidden', index < 0); tile.style.order = String(index < 0 ? 99 : index);
+    }
+    const count = order.length, fixed = !(count === 1 && order[0] === 'calendar');
+    board.dataset.count = String(count); board.toggleAttribute('data-fixed', fixed);
+    board.classList.toggle('hidden', count === 0);
+    board.querySelectorAll('.tile').forEach(tile => tile.classList.remove('wide'));
+    if (fixed && count > 1 && count % 2 === 1) board.querySelector(`[data-w="${order[count - 1]}"]`).classList.add('wide');   // An odd tile out takes the whole last row.
+    if (order.includes('clock')) drawClock(now);
+    if (order.includes('quote')) renderQuote(now);
+    if (order.includes('medication')) renderMedication(now);
+    if (order.includes('photo')) renderPhoto(now);
+  }
   let calendarKey = '';
   function renderCalendar() {
     const box = $('calendar'), now = new Date(), bdays = last.bdays || [];
-    box.classList.toggle('hidden', !cfg().calendar);
-    const key = `${now.toDateString()}|${JSON.stringify(bdays)}|${cfg().calendar}`;
+    const key = `${now.toDateString()}|${JSON.stringify(bdays)}`;
     if (key === calendarKey) return;
     calendarKey = key;
     const html = monthHTML(now, bdays);

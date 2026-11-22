@@ -293,6 +293,9 @@ class Settings(CameraSettings):
     kiosk_voice: str = Field(default='faber', pattern='^(faber|cadu|jeff|edresson)$')   # Local voice (Piper) that reads messages aloud.
     kiosk_read_messages: bool = True   # The kitchen screen reads a message aloud when the person it is for is recognised (and the daily briefing).
     kiosk_daily_briefing: bool = True   # First greeting of the day also gives the date, the weather and a few suggestions.
+    kiosk_widgets: str = 'calendar,-clock,-quote,-photo,-medication'   # Tiles of the board, in order; "-" = off (app/kiosk_widgets.py).
+    kiosk_quotes: list[str] = Field(default_factory=list, max_length=40)       # Phrases of the day; empty = the standard ones.
+    kiosk_medications: list[str] = Field(default_factory=list, max_length=20)  # "08:00 Name of the medicine", one per line.
     kiosk_palette: str = Field(default='padrao', pattern='^(padrao|verde|ambar|claro|contraste|personalizada)$')   # Look of the kitchen screen (app/kiosk_theme.py).
     kiosk_color_bg: str = Field(default='#0d1519', pattern='^#[0-9a-fA-F]{6}$')
     kiosk_color_ink: str = Field(default='#f0f6f8', pattern='^#[0-9a-fA-F]{6}$')
@@ -368,6 +371,19 @@ class Settings(CameraSettings):
         if value and not value.startswith('/'):
             raise ValueError('Informe o caminho completo da pasta de backup, começando com /.')
         return value
+
+    @field_validator('kiosk_widgets')
+    @classmethod
+    def _widgets(cls, value):
+        from .kiosk_widgets import normalize
+        return normalize(value)
+
+    @field_validator('kiosk_quotes', 'kiosk_medications')
+    @classmethod
+    def _tile_lines(cls, value, info):
+        from .kiosk_widgets import MAX_MEDS, MAX_QUOTES, MED_LENGTH, QUOTE_LENGTH, clean_lines
+        quotes = info.field_name == 'kiosk_quotes'
+        return clean_lines(value, MAX_QUOTES if quotes else MAX_MEDS, QUOTE_LENGTH if quotes else MED_LENGTH)
 
     @field_validator('recipient')
     @classmethod
