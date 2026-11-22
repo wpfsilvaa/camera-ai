@@ -23,7 +23,7 @@ TEXTS = (
     ('daily_rain', 'Resumo do dia (primeira saudação do dia)', 'Chuva',
      'Hoje é {data}. [Agora faz {temperatura} e {clima}.] [Tem {chuva} de chance de chuva.] [{sugestoes}]'),
     ('daily_storm', 'Resumo do dia (primeira saudação do dia)', 'Tempestade',
-     'Atenção, {nome}: há risco de tempestade hoje. [Agora faz {temperatura}.] É melhor ficar em casa e longe das janelas.'),
+     'Atenção: há risco de tempestade hoje. [Agora faz {temperatura}.] É melhor ficar em casa e longe das janelas.'),
     ('tip_rain', 'Sugestões (frases completas)', 'Chuva', 'Se for sair, leve o guarda-chuva.'),
     ('tip_hot', 'Sugestões (frases completas)', 'Calor (máxima de 30° ou mais)', 'Beba bastante água e evite o sol do meio-dia.'),
     ('tip_cold', 'Sugestões (frases completas)', 'Frio (mínima de 15° ou menos)', 'Vista um agasalho, está fresquinho.'),

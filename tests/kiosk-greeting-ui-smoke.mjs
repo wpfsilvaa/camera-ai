@@ -57,5 +57,21 @@ try {
   assert.equal(g1.length,1,'o mesmo id deveria dar sempre a mesma variação');
   assert.ok(byId.every(([,t])=>/^(Alfa|Beta|Gama) Flavio$/.test(t)));
   assert.ok(new Set(byId.map(([,t])=>t)).size>1,'as variações deveriam variar entre saudações');
+  // 5) recado: o nome só aparece uma vez na fala; recado do próprio destinatário vira "você"
+  for(const [author,spoken,by] of [['Waldemar','Você deixou um recado: Tome o remédio','você'],['Ana','Ana deixou um recado: Tome o remédio','Ana']]){
+    const page=await browser.newPage({viewport:{width:1366,height:768}});
+    await page.clock.install({time:NOON});
+    const said=[];
+    await page.route('**/tts',r=>{said.push(JSON.parse(r.request().postData()).text);r.fulfill({status:500,body:''});});
+    await page.route('**/state**',r=>r.fulfill({contentType:'application/json',body:JSON.stringify(state({present:['Waldemar'],greet:{id:'g9',name:'Waldemar',daily:false,quiet:false,msgs:[{i:'m1',t:'Tome o remédio',a:author,s:0}]},cfg:{speak:true,sound:true}}))}));
+    await page.goto(base+'/index.html');await page.waitForSelector('#quote:not(.hidden)');await page.waitForTimeout(500);
+    assert.equal(await page.locator('#quote-by').textContent(),by);
+    assert.equal(said.length,1,'a fala deveria sair uma vez');
+    assert.match(said[0],/^(Boa tarde, Waldemar!|Oi, Waldemar! Boa tarde!|Boa tarde, Waldemar, como vai\?) /);
+    assert.ok(said[0].endsWith(spoken),said[0]);
+    assert.ok(!said[0].includes('!.'),said[0]);
+    if(author==='Waldemar') assert.equal(said[0].split('Waldemar').length-1,1,'o nome deveria aparecer só uma vez: '+said[0]);
+    await page.close();
+  }
   console.log('PASS: saudação por cima com blur, sem mexer nos botões; textos personalizados, chuva, sem sugestões e sem previsão.');
 } finally { await browser?.close(); server.kill(); }

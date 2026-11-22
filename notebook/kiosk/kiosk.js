@@ -205,6 +205,7 @@
   // Each message stays 20 s (or until the person taps "Li", which tells the family it was read).
   let quoteQueue = [], quoteTimer = null, quoteId = '', chimeTimer = null;
   // Reads text aloud: first with the notebook's local neural voice (Piper, via the monitor), then with the browser's own voice.
+  const sentence = text => /[.!?…]$|[.!?]\S{0,3}$/u.test(text) ? text : `${text}.`;   // The voice needs a pause, not "!.".
   let talking = null, speechToken = 0;
   async function speak(text, test = null) {
     if (!text || (!test && (!cfg().speak || !cfg().sound))) return;
@@ -242,7 +243,9 @@
     const item = quoteQueue.shift();
     if (!item) { quoteId = ''; $('quote').classList.add('hidden'); syncSpeaking(); return; }
     quoteId = item.i || '';
-    $('quote-text').textContent = item.t; $('quote-by').textContent = item.a || '';
+    // A note the person left for themselves does not repeat their own name (the greeting already said it).
+    const own = Boolean(item.a && quoteHead.name && item.a.trim().toLowerCase() === quoteHead.name.trim().toLowerCase());
+    $('quote-text').textContent = item.t; $('quote-by').textContent = own ? 'você' : (item.a || '');
     const single = Boolean(item.s);
     $('quote-ok').classList.toggle('hidden', !quoteId || single);
     $('quote-timer').classList.toggle('hidden', !single);
@@ -251,7 +254,7 @@
     if (single && quoteId) fetch('/ack', {method: 'POST', headers: {'X-Kiosk': '1', 'Content-Type': 'application/json'}, body: JSON.stringify({id: quoteId})}).catch(() => {});
     const head = $('quote-head');
     head.textContent = quoteHead.text; head.classList.toggle('hidden', !quoteHead.text); head.classList.toggle('birthday', quoteHead.birthday);
-    if (!item.sound) speak(`${quoteHead.fresh && quoteHead.text ? quoteHead.text + '. ' : ''}${item.a ? item.a + ' deixou um recado: ' : 'Recado: '}${item.t}`);
+    if (!item.sound) speak(`${quoteHead.fresh && quoteHead.text ? sentence(quoteHead.text) + ' ' : ''}${own ? 'Você deixou um recado: ' : item.a ? item.a + ' deixou um recado: ' : 'Recado: '}${item.t}`);
     head.classList.remove('rise'); if (quoteHead.fresh) { void head.offsetWidth; head.classList.add('rise'); quoteHead.fresh = false; }   // Moves up once.
     $('quote').classList.remove('hidden'); $('quote').style.animation = 'none'; void $('quote').offsetWidth; $('quote').style.animation = '';
     fitQuote();
@@ -265,7 +268,7 @@
     const current = quoteId;
     chimeTimer = setTimeout(() => { if (current && !item.vol && !single && quoteId === current) { try { sounds.message(); } catch { /* ignore */ } } }, 9000);   // Still unread: once more.
   }
-  let quoteHead = {text: '', birthday: false, fresh: false};
+  let quoteHead = {text: '', birthday: false, fresh: false, name: ''};
   // Size the text by its length, then shrink it until the whole card fits above the button.
   function fitQuote() {
     const figure = $('quote').querySelector('figure'), text = $('quote-text'), length = text.textContent.length;
@@ -274,7 +277,7 @@
     for (let i = 0; i < 16 && figure.scrollHeight > figure.clientHeight + 1; i++) text.style.fontSize = `${parseFloat(getComputedStyle(text).fontSize) * 0.9}px`;
   }
   function showQuotes(items, delay, headline = '', birthday = false) {
-    hideQuote(); quoteQueue = [...items]; quoteHead = {text: headline, birthday, fresh: Boolean(headline)};
+    hideQuote(); quoteQueue = [...items]; quoteHead = {text: headline, birthday, fresh: Boolean(headline), name: (last.greet && last.greet.name) || ''};
     quoteTimer = setTimeout(nextQuote, delay);
   }
   $('quote-ok').onclick = async () => {
@@ -285,7 +288,7 @@
   const syncSpeaking = () => $('frame').classList.toggle('speaking', !$('quote').classList.contains('hidden') || !$('frame-greeting').classList.contains('hidden'));
 
   // Greetings, the day's briefing and the suggestions come from texts written in the dashboard ({placeholders}, and [pieces] that vanish when something inside is empty).
-  const STANDARD = {greet_morning: 'Bom dia, {nome}! | Bom dia, {nome}, que bom te ver! | Olá, {nome}! Bom dia!', greet_afternoon: 'Boa tarde, {nome}! | Oi, {nome}! Boa tarde! | Boa tarde, {nome}, como vai?', greet_night: 'Boa noite, {nome}! | Oi, {nome}! Boa noite! | Boa noite, {nome}, que bom te ver!', greet_birthday: 'Parabéns, {nome}! Hoje é o seu dia! 🎂 | Feliz aniversário, {nome}! 🎂', daily_day: 'Hoje é {data}. [Agora faz {temperatura} e {clima}. A máxima de hoje é {max} e a mínima, {min}.] [{sugestoes}]', daily_night: 'Hoje é {data}. [Agora faz {temperatura} e {clima}. A mínima de hoje é {min}.] [{sugestoes}]', daily_rain: 'Hoje é {data}. [Agora faz {temperatura} e {clima}.] [Tem {chuva} de chance de chuva.] [{sugestoes}]', daily_storm: 'Atenção, {nome}: há risco de tempestade hoje. [Agora faz {temperatura}.] É melhor ficar em casa e longe das janelas.', tip_rain: 'Se for sair, leve o guarda-chuva.', tip_hot: 'Beba bastante água e evite o sol do meio-dia.', tip_cold: 'Vista um agasalho, está fresquinho.', tip_mild: 'O dia está bom para uma caminhada leve.', tip_night: 'Tenha uma ótima noite de descanso.', tip_none: 'Lembre-se de beber água ao longo do dia.'};
+  const STANDARD = {greet_morning: 'Bom dia, {nome}! | Bom dia, {nome}, que bom te ver! | Olá, {nome}! Bom dia!', greet_afternoon: 'Boa tarde, {nome}! | Oi, {nome}! Boa tarde! | Boa tarde, {nome}, como vai?', greet_night: 'Boa noite, {nome}! | Oi, {nome}! Boa noite! | Boa noite, {nome}, que bom te ver!', greet_birthday: 'Parabéns, {nome}! Hoje é o seu dia! 🎂 | Feliz aniversário, {nome}! 🎂', daily_day: 'Hoje é {data}. [Agora faz {temperatura} e {clima}. A máxima de hoje é {max} e a mínima, {min}.] [{sugestoes}]', daily_night: 'Hoje é {data}. [Agora faz {temperatura} e {clima}. A mínima de hoje é {min}.] [{sugestoes}]', daily_rain: 'Hoje é {data}. [Agora faz {temperatura} e {clima}.] [Tem {chuva} de chance de chuva.] [{sugestoes}]', daily_storm: 'Atenção: há risco de tempestade hoje. [Agora faz {temperatura}.] É melhor ficar em casa e longe das janelas.', tip_rain: 'Se for sair, leve o guarda-chuva.', tip_hot: 'Beba bastante água e evite o sol do meio-dia.', tip_cold: 'Vista um agasalho, está fresquinho.', tip_mild: 'O dia está bom para uma caminhada leve.', tip_night: 'Tenha uma ótima noite de descanso.', tip_none: 'Lembre-se de beber água ao longo do dia.'};
   // How the weather is said in a sentence ("o céu está limpo", "está chovendo forte"); the raw description stays available as {tempo}.
   const CLIMA = {'céu limpo': 'o céu está limpo', 'predomínio de sol': 'o dia tem bastante sol', 'parcialmente nublado': 'o céu está parcialmente nublado', 'nublado': 'o céu está nublado', 'neblina': 'há neblina',
     'garoa fraca': 'há uma garoa fraca', 'garoa': 'há uma garoa', 'garoa forte': 'há uma garoa forte', 'garoa gelada': 'há uma garoa gelada', 'chuva fraca': 'está chovendo fraco', 'chuva': 'está chovendo',
@@ -343,7 +346,7 @@
             $(sub).textContent = extra; $(sub).classList.toggle('hidden', !birthday && !daily);
           }
           if (birthday) party(); else $('confetti').classList.add('hidden');
-          if (daily) speak(`${headline}. ${extra}`);
+          if (daily) speak(`${sentence(headline)} ${extra}`);
           clearTimeout(greetTimer);
           greetTimer = setTimeout(hide, shownFor);
           syncSpeaking();
