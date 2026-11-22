@@ -24,7 +24,8 @@ class KioskTextsTests(unittest.TestCase):
         settings = Settings(kiosk_text_greet_morning='  Olá {nome}, hoje é {data} e são {hora}  ')
         texts = kiosk_texts.effective(settings)
         self.assertEqual(texts['greet_morning'], 'Olá {nome}, hoje é {data} e são {hora}')
-        self.assertEqual(texts['greet_night'], 'Boa noite, {nome}')
+        self.assertEqual(texts['greet_night'], kiosk_texts.DEFAULTS['greet_night'])
+        self.assertIn('|', kiosk_texts.DEFAULTS['greet_night'])   # Standard greetings come in variations.
         self.assertEqual(set(texts), set(kiosk_texts.KEYS))
         with self.assertRaises(ValueError):
             Settings(kiosk_text_greet_morning='x' * 241)

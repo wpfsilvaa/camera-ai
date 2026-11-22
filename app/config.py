@@ -301,6 +301,7 @@ class Settings(CameraSettings):
     kiosk_text_tip_hot: str = Field(default='', max_length=240)   # Empty: the standard wording (app/kiosk_texts.py).
     kiosk_text_tip_cold: str = Field(default='', max_length=240)   # Empty: the standard wording (app/kiosk_texts.py).
     kiosk_text_tip_mild: str = Field(default='', max_length=240)   # Empty: the standard wording (app/kiosk_texts.py).
+    kiosk_text_tip_night: str = Field(default='', max_length=240)   # Empty: the standard wording (app/kiosk_texts.py).
     kiosk_text_tip_none: str = Field(default='', max_length=240)   # Empty: the standard wording (app/kiosk_texts.py).
     kiosk_nightlight_enabled: bool = False                            # Night: a soft light on the screen while someone walks by.
     kiosk_nightlight_bright: int = Field(default=60, ge=5, le=100)

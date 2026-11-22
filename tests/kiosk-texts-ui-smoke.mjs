@@ -22,7 +22,7 @@ try {
   assert.match(preview,/^Exemplo: Olá Flavio, hoje é .* e são \d{2}:\d{2}!$/,preview);
   await page.locator('#kiosk-texts-panel summary:has-text("Resumo do dia")').click();
   await rain.fill('Chove {chuva}. [Dica: {sugestao}.]');
-  assert.match(await rain.locator('xpath=..').locator('.text-preview').textContent(),/^Exemplo: Chove 70%\. Dica: leve o guarda-chuva/);
+  assert.match(await rain.locator('xpath=..').locator('.text-preview').textContent(),/^Exemplo: Chove 70%\. Dica: Se for sair, leve o guarda-chuva\.$/);
   await page.locator('[name=kiosk_tips_enabled]').click();   // desliga as sugestões
   await page.waitForFunction(()=>/Exemplo: Chove 70%\.$/.test(document.querySelector('[name=kiosk_text_daily_rain]').parentElement.querySelector('.text-preview').textContent));
   await page.locator('#save-settings').click();
