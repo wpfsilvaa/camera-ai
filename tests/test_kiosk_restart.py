@@ -46,6 +46,20 @@ class KioskProcessTests(unittest.TestCase):
                     process.kill()
                     process.wait()
 
+    def test_a_browser_that_rewrote_its_title_is_found_and_a_longer_folder_name_is_not(self):
+        with tempfile.TemporaryDirectory() as folder:
+            mine = Path(folder) / 'casa-kiosk'
+            # One single argument with spaces, as Chrome leaves it after changing its title.
+            titled = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)', f'--app=x --user-data-dir={mine} --no-first-run'])
+            lookalike = self.browser(Path(folder) / 'casa-kiosk-outro')
+            try:
+                time.sleep(.3)
+                self.assertEqual(monitor.kiosk_pids(mine), [titled.pid])
+            finally:
+                for process in (titled, lookalike):
+                    process.kill()
+                    process.wait()
+
     def test_start_uses_the_script_and_the_session_variables(self):
         with tempfile.TemporaryDirectory() as folder:
             marker, script = Path(folder) / 'ran', Path(folder) / 'start.sh'

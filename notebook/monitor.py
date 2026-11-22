@@ -712,14 +712,17 @@ _restart_lock = threading.Lock()
 
 
 def kiosk_pids(profile=None):
-    """Processes of the kitchen browser: the ones started with this screen's own profile folder (never this monitor)."""
-    mark = f'--user-data-dir={profile or KIOSK_PROFILE}'.encode()
+    """Processes of the kitchen browser: the ones started with this screen's own profile folder (never this monitor).
+
+    Chrome rewrites its process title, so the arguments may come as one string separated by spaces: search the text, not the list.
+    """
+    mark = re.compile(re.escape(f'--user-data-dir={profile or KIOSK_PROFILE}').encode() + rb'(?:\s|$)')
     found = []
     for entry in Path('/proc').iterdir():
         if not entry.name.isdigit() or int(entry.name) == os.getpid():
             continue
         try:
-            if mark in (entry / 'cmdline').read_bytes().split(b'\0'):
+            if mark.search((entry / 'cmdline').read_bytes().replace(b'\0', b' ').strip()):
                 found.append(int(entry.name))
         except OSError:
             continue
