@@ -21,6 +21,13 @@ VISITS = f'''SELECT v.id,v.started,v.camera_id,v.area,v.verdict,
         AND v.started BETWEEN e2.started-{SLACK} AND COALESCE(e2.ended,e2.last_seen)+{SLACK} ORDER BY e2.started DESC LIMIT 1)'''
 
 
+PERIODS = (('madrugada', 0, 6), ('manha', 6, 12), ('tarde', 12, 18), ('noite', 18, 24))   # Hours: from (included) to (excluded).
+
+
+def period_of(hour):
+    return next(name for name, start, end in PERIODS if start <= hour < end)
+
+
 class FatherLog:
     def __init__(self, db, photos=None):
         self.db = db
@@ -154,6 +161,33 @@ class FatherLog:
             return None
         samples = self.db.rows("SELECT id FROM person_samples WHERE track_id=? AND model LIKE 'sface-%' ORDER BY quality DESC LIMIT ?", (tracks[0]['id'], limit))
         return tracks[0]['id'], [r['id'] for r in samples]
+
+    def trends(self, days=14, now=None):
+        """Per day for the last `days` (today included): visits to the restricted areas by part of the day, minutes in front of the camera, first and last time.
+
+        `compare` puts the last 7 days against the 7 before (when `days` allows) for the visits, the small-hours visits and the minutes.
+        """
+        now = now or time.time()
+        series = []
+        for back in range(days - 1, -1, -1):
+            first, last = self.midnight(now, back), (self.midnight(now, back - 1) if back else now + 1)
+            periods = {name: 0 for name, _, _ in PERIODS}
+            mine = self.visits(first, last)
+            for visit in mine:
+                periods[period_of(datetime.fromtimestamp(visit['started'], TZ).hour)] += 1
+            records = self.db.rows('''SELECT e.started,COALESCE(e.ended,e.last_seen) AS ended FROM events e
+                WHERE e.started<? AND COALESCE(e.ended,e.last_seen)>=? AND EXISTS (SELECT 1 FROM person_tracks t JOIN people p ON p.id=t.person_id WHERE t.event_id=e.id AND p.is_father=1)
+                ORDER BY e.started''', (last, first))
+            seconds = sum(max(0, min(r['ended'], last) - max(r['started'], first)) for r in records)
+            series.append({'day': datetime.fromtimestamp(first, TZ).strftime('%Y-%m-%d'), 'visits': len(mine), 'periods': periods, 'minutes': round(seconds / 60),
+                           'first': max(records[0]['started'], first) if records else None, 'last': min(max(r['ended'] for r in records), last) if records else None})
+        compare = None
+        if len(series) >= 14:
+            def total(rows, key):
+                return sum(row[key] if key != 'madrugada' else row['periods']['madrugada'] for row in rows)
+            now_week, before = series[-7:], series[-14:-7]
+            compare = {key: {'now': total(now_week, key), 'before': total(before, key)} for key in ('visits', 'madrugada', 'minutes')}
+        return {'days': series, 'compare': compare}
 
     def summary(self, now=None):
         """Today's times plus a count per day for the last week (today included); only visits placed on a monitored person are counted."""

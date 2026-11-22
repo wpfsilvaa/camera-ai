@@ -1,6 +1,6 @@
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from app.db import TZ, Database
@@ -165,4 +165,51 @@ class VisitReviewTeachTests(unittest.TestCase):
         self.assertEqual(self.log.teachable(visit), (track, ['b', 'e', 'c']))
         self.db.execute('INSERT INTO person_tracks(event_id,track_key,started,last_seen) VALUES(?,?,?,?)', (event, 'other', NOON - 5, NOON + 10))
         self.assertIsNone(self.log.teachable(visit))   # Two people at that moment: not guessing.
+
+
+class TrendsTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = Database(Path(self.tmp.name) / 'h.sqlite3')
+        self.log = FatherLog(self.db)
+        self.db.execute("INSERT OR IGNORE INTO people(id,name,created,is_father) VALUES('father','Pai',1,1)")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def day(self, back, hour, minute=0):
+        return (datetime(2026, 10, 11, hour, minute, tzinfo=TZ) - timedelta(days=back)).timestamp()
+
+    def presence(self, start, minutes):
+        event = self.db.start_event(start, 1, camera_id='main', camera_name='Cozinha')
+        self.db.end_event(event, start + minutes * 60, 'absence')
+        self.db.execute("INSERT INTO person_tracks(event_id,track_key,started,last_seen,person_id) VALUES(?,?,?,?,?)", (event, 'k', start, start, 'father'))
+
+    def test_visits_are_split_by_part_of_the_day_and_presence_in_minutes(self):
+        for hour in (2, 3, 9, 14, 19, 23):
+            self.log.record_visit('main', self.day(0, hour), 'Geladeira', None, 'father')
+        self.log.record_visit('main', self.day(0, 15), 'Geladeira', None, 'family')   # Someone else: not counted.
+        self.presence(self.day(0, 8), 30)
+        self.presence(self.day(0, 18), 90)
+        today = self.log.trends(7, now=self.day(0, 23, 30))['days'][-1]
+        self.assertEqual(today['visits'], 6)
+        self.assertEqual(today['periods'], {'madrugada': 2, 'manha': 1, 'tarde': 1, 'noite': 2})
+        self.assertEqual(today['minutes'], 120)
+        self.assertEqual((today['first'], today['last']), (self.day(0, 8), self.day(0, 19, 30)))
+
+    def test_a_record_that_crosses_midnight_is_split_between_the_two_days(self):
+        self.presence(self.day(1, 23, 30), 60)   # 23:30 to 00:30.
+        series = self.log.trends(7, now=self.day(0, 12))['days']
+        self.assertEqual((series[-2]['minutes'], series[-1]['minutes']), (30, 30))
+
+    def test_the_week_is_compared_with_the_one_before_only_when_there_are_14_days(self):
+        for back in range(14):
+            for _ in range(2 if back < 7 else 1):
+                self.log.record_visit('main', self.day(back, 2), 'Geladeira', None, 'father')
+        data = self.log.trends(14, now=self.day(0, 23))
+        self.assertEqual(data['compare']['visits'], {'now': 14, 'before': 7})
+        self.assertEqual(data['compare']['madrugada'], {'now': 14, 'before': 7})
+        self.assertEqual(len(data['days']), 14)
+        self.assertIsNone(self.log.trends(7, now=self.day(0, 23))['compare'])
+        self.assertEqual(len(self.log.trends(30, now=self.day(0, 23))['days']), 30)
 

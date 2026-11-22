@@ -227,7 +227,7 @@ class Recognition:
     def status(self):
         return {'ready': self.encoder is not None and not self.error, 'error': self.error,
                 'kind': 'face+body', 'model': 'YuNet + SFace + YOLO26 ReID',
-                'body_error': self.body_error, 'body_reference_people': len(self.body_memory.references), 'profiles': self.profiles(),
+                'body_error': self.body_error, 'body_reference_people': len(self.body_memory.references), 'body_anchors': self.body_anchor_summary(), 'profiles': self.profiles(),
                 'minimum_examples': 1, 'processing_ms': self.processing_ms, 'last_processed': self.last_processed}
 
     def invalidate(self, connection):
@@ -634,6 +634,16 @@ class Recognition:
         except Exception:
             log.warning('Não foi possível gravar a memória corporal.',exc_info=True)
 
+    def body_anchor_summary(self, now=None):
+        """Who has clothes references right now: how many and how long ago the newest one was made (a face proved it each time)."""
+        now = now or time.time()
+        found = []
+        for person, refs in list(self.body_memory.references.items()):
+            faces = [r for r in refs if r.get('source', 'face') == 'face'] or refs
+            found.append({'person_id': person, 'name': self.names.get(person, person), 'count': len(refs),
+                          'newest_seconds': round(max(0, now - max(r['seen'] for r in faces)))})
+        return found
+
     def person_score(self, feature, person_id):
         """How much a face looks like one registered person (mean of the two best matches), or None without references."""
         vector = normalized(feature)
@@ -672,10 +682,10 @@ class Recognition:
             log.exception('Falha ao registrar a perda do nome')
 
     def observe_faces(self, event_id, boxes, ids, faces, now, settings, bodies=None, diagnostics=None):
+        self.body_lifetime = settings.body_memory_minutes*60   # Before the gallery loads: the first load restores the saved clothes memory with this limit.
         self.load_gallery()
         bodies = bodies or {}
         diagnostics = diagnostics or {}
-        self.body_lifetime = settings.body_memory_minutes*60
         self.body_memory.prune(now, self.body_lifetime)
         if not settings.body_reid_enabled:
             self.body_memory.clear()

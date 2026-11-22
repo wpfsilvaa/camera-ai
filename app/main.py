@@ -494,6 +494,11 @@ def recognition_losses(days: int = Query(3, ge=1, le=14)):
     return recognition.identity_log.summary(days)
 
 
+@app.get('/api/father/trends')
+def father_trends(days: int = Query(14, ge=7, le=60)):
+    return father_log.trends(days)
+
+
 @app.get('/api/father/calibration')
 def father_calibration():
     return father_log.calibration(config.get().restricted_min_seconds)

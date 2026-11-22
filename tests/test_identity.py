@@ -58,6 +58,27 @@ class IdentityTests(unittest.TestCase):
         self.assertNotIn('1', self.recognition.labels([1, 2], crossing, 130, 15, sticky_seconds=180))
         self.assertEqual([r['reason'] for r in self.log()], ['overlap'])
 
+    # Clothes anchors -------------------------------------------------------
+
+    def test_anchor_summary_says_who_has_references_and_how_fresh_they_are(self):
+        self.assertEqual(self.recognition.body_anchor_summary(now=1000), [])
+        self.recognition.body_memory.learn('father', normalized((1, 0, 0)), 900)
+        self.recognition.body_memory.learn('father', normalized((0, 1, 0)), 950)
+        self.assertEqual(self.recognition.body_anchor_summary(now=1000), [{'person_id': 'father', 'name': 'Meu pai', 'count': 2, 'newest_seconds': 50}])
+
+    def test_the_saved_clothes_memory_is_restored_with_the_configured_lifetime_not_the_default(self):
+        import json, time
+        from types import SimpleNamespace
+        from app.config import Settings
+        now = time.time()
+        self.recognition.body_file.write_text(json.dumps({'father': [{'feature': [1.0, 0.0, 0.0], 'seen': now - 5 * 3600, 'collected': now - 5 * 3600, 'source': 'face'}]}))
+        self.recognition.encoder = SimpleNamespace(version='sface-test')
+        fresh = Recognition(self.db, Path(self.temporary.name) / 'people')
+        fresh.encoder = SimpleNamespace(version='sface-test')
+        fresh.names = {'father': 'Meu pai'}
+        fresh.observe_faces(None, [], [], {}, now, Settings(body_memory_minutes=720))
+        self.assertEqual(len(fresh.body_memory.references.get('father', [])), 1, 'uma referência de 5 h deveria valer com prazo de 12 h')
+
     # Giving the name back ---------------------------------------------------------
 
     def test_the_name_goes_to_the_track_that_looks_the_same_even_with_two_candidates(self):

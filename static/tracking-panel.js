@@ -23,7 +23,19 @@
       : `Rastreador comum: ${t.ms} ms por quadro. Ligue a aparência para comparar.`;
     note.style.color = t.error ? 'var(--amber-ink)' : '';
   }
+  async function anchors() {
+    const line = $q('#anchors-line');
+    if (!line) return;
+    try {
+      const list = (await api('/api/people')).body_anchors || [];
+      line.innerHTML = list.length
+        ? `<strong>Âncoras de roupa de hoje:</strong> ${list.map(a => `${escapeHTML(a.name)} (${a.count} referência(s), a mais recente há ${fmt(a.newest_seconds)})`).join('; ')}. Quando o rosto aparece, por exemplo ao olhar para a tela do totem, as referências se renovam e a roupa passa a reconhecer a pessoa mesmo de costas.`
+        : '<strong>Âncoras de roupa de hoje:</strong> nenhuma ainda. Assim que um rosto for reconhecido (por exemplo, quando ele olhar para a tela do totem), a roupa de hoje vira referência para reconhecer de costas.';
+    } catch { line.textContent = ''; }
+  }
   document.addEventListener('click', event => { if (event.target.closest('#losses-refresh')) loadLosses(); });
+  setInterval(() => { if (typeof activePage !== 'undefined' && activePage === 'settings' && !document.hidden) anchors(); }, 10000);
+  setTimeout(anchors, 1500);
   setInterval(() => { if (typeof activePage !== 'undefined' && activePage === 'settings' && !document.hidden) { cost(); } }, 2000);
   setInterval(() => { if (typeof activePage !== 'undefined' && activePage === 'settings' && !document.hidden && $q('#tracking-panel') && !$q('#tracking-panel').classList.contains('hidden')) loadLosses(); }, 30000);
   window.addEventListener('hashchange', () => setTimeout(loadLosses, 300));
