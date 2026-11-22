@@ -2,7 +2,7 @@
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import httpx
 
@@ -35,6 +35,24 @@ def watching(snapshots):
     return any(c['enabled'] and c['analysis_enabled'] and c['state'] == 'online' for c in snapshots)
 
 
+def night_window(local, start, end):
+    """(start, end) of the night window (hours `start` to `end`, possibly past midnight) that contains `local`, or None outside it."""
+    if start == end:
+        return None
+    day = local.replace(hour=0, minute=0, second=0, microsecond=0)
+    if start > end:
+        if local.hour >= start:
+            first = day + timedelta(hours=start)
+        elif local.hour < end:
+            first = day - timedelta(days=1) + timedelta(hours=start)
+        else:
+            return None
+        return first, first + timedelta(hours=24 - start + end)
+    if start <= local.hour < end:
+        return day + timedelta(hours=start), day + timedelta(hours=end)
+    return None
+
+
 def in_quiet_hours(hour, start, end):
     if start == end:
         return False
@@ -65,6 +83,7 @@ class Alerts:
             self.check_routine(settings, now)
             self.check_inactivity(settings, now)
         self.check_summary(settings, now)
+        self.check_fridge(settings, now)
 
     def check_cameras(self, settings, snapshots, now):
         limit = settings.camera_offline_minutes * 60
@@ -124,6 +143,31 @@ class Alerts:
             self.raise_alert(f'inactive-{int(last)}', 'inactivity',
                              f'🔔 Ninguém apareceu nas câmeras desde as {clock(last)} (há {elapsed(now - last)}). '
                              'Vale ligar para confirmar que está tudo bem.', now)
+
+    def fridge_visits(self, start, end):
+        """Times of the visits to a restricted area that were not someone else (the review or the camera said so)."""
+        rows = self.db.rows("SELECT started FROM restricted_visits WHERE started>=? AND started<? AND COALESCE(verdict,'')!='other' AND kind!='family' ORDER BY started", (start, end))
+        return [row['started'] for row in rows]
+
+    def check_fridge(self, settings, now):
+        """Too many fridge visits at night (or in the whole day): one alert per night / per day, when the count is reached."""
+        if not settings.fridge_alerts_enabled:
+            return
+        local = datetime.fromtimestamp(now, TZ)
+        e = terms(settings.elder_relation)
+        window = night_window(local, settings.fridge_night_start_hour, settings.fridge_night_end_hour)
+        if window and settings.fridge_night_visits:
+            times = self.fridge_visits(window[0].timestamp(), window[1].timestamp())
+            if len(times) >= settings.fridge_night_visits:
+                self.raise_alert(f'fridge-night-{window[0].date().isoformat()}', 'fridge',
+                                 f'🌙 {e["Your_rel"]} foi à geladeira {len(times)} vezes esta noite (entre {settings.fridge_night_start_hour}h e {settings.fridge_night_end_hour}h): '
+                                 f'{", ".join(clock(t) for t in times)}. Vale conferir como {e["he"]} está, por exemplo a glicose.', now)
+        if settings.fridge_daily_visits:
+            midnight = local.replace(hour=0, minute=0, second=0, microsecond=0)
+            times = self.fridge_visits(midnight.timestamp(), (midnight + timedelta(days=1)).timestamp())
+            if len(times) >= settings.fridge_daily_visits:
+                self.raise_alert(f'fridge-day-{local.date().isoformat()}', 'fridge',
+                                 f'🍽️ {e["Your_rel"]} foi à geladeira {len(times)} vezes hoje (a última às {clock(times[-1])}). Vale conversar sobre a alimentação e a glicose.', now)
 
     def check_summary(self, settings, now):
         local = datetime.fromtimestamp(now, TZ)

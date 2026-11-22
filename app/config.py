@@ -243,6 +243,11 @@ class Settings(CameraSettings):
     quiet_end_hour: int = Field(default=7, ge=0, le=23)
     camera_offline_minutes: int = Field(default=10, ge=0, le=240)
     daily_summary_hour: int = Field(default=21, ge=-1, le=23)
+    fridge_alerts_enabled: bool = False   # Warn the family when the fridge visits go beyond the usual (at night, or in the whole day).
+    fridge_night_visits: int = Field(default=3, ge=1, le=20)      # Visits in the night window that raise the alert.
+    fridge_night_start_hour: int = Field(default=22, ge=0, le=23)
+    fridge_night_end_hour: int = Field(default=6, ge=0, le=23)
+    fridge_daily_visits: int = Field(default=0, ge=0, le=60)      # Visits in a day that raise the alert; 0 = off.
     # Kitchen notebook: low battery, unplugged for too long, no signal (zero turns a rule off).
     notebook_alerts_enabled: bool = False
     # The big "call the family" button on the notebook screen (and, separately, the help request).

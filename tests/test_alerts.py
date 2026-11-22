@@ -205,3 +205,76 @@ class AlertsTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class FridgePatternTests(unittest.TestCase):
+    NIGHT = datetime(2026, 9, 30, 23, 30, tzinfo=TZ).timestamp()   # 23:30 of the 30th, inside 22h-6h.
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        path = Path(self.tmp.name)
+        self.db = Database(path / 'history.sqlite3')
+        self.config = Config(path / 'settings.json')
+        self.config.save(Settings(alerts_enabled=True, fridge_alerts_enabled=True, fridge_night_visits=3, fridge_daily_visits=0))
+        self.alerts = Alerts(self.db, self.config, FakeCameras())
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def visit(self, when, kind='father', verdict=None):
+        self.db.execute('INSERT INTO restricted_visits(camera_id,started,area,kind,verdict) VALUES(?,?,?,?,?)', ('main', when, 'Geladeira', kind, verdict))
+
+    def fridge_alerts(self):
+        return self.db.rows("SELECT * FROM alerts WHERE kind='fridge'")
+
+    def test_the_night_window_crosses_midnight(self):
+        from app.alerts import night_window
+        late = night_window(datetime(2026, 9, 30, 23, 0, tzinfo=TZ), 22, 6)
+        early = night_window(datetime(2026, 10, 1, 3, 0, tzinfo=TZ), 22, 6)
+        self.assertEqual(late, early)
+        self.assertEqual((late[0].hour, late[1].hour, late[1].day), (22, 6, 1))
+        self.assertIsNone(night_window(datetime(2026, 9, 30, 12, 0, tzinfo=TZ), 22, 6))
+        self.assertIsNone(night_window(datetime(2026, 9, 30, 12, 0, tzinfo=TZ), 6, 6))
+
+    def test_alert_comes_once_when_the_night_limit_is_reached(self):
+        self.visit(self.NIGHT - 3600)
+        self.visit(self.NIGHT - 1800)
+        self.alerts.check(self.NIGHT)
+        self.assertEqual(self.fridge_alerts(), [])   # Two visits: below the limit.
+        self.visit(self.NIGHT - 60)
+        self.alerts.check(self.NIGHT)
+        self.alerts.check(self.NIGHT + 60)
+        found = self.fridge_alerts()
+        self.assertEqual(len(found), 1)
+        self.assertIn('3 vezes esta noite', found[0]['message'])
+        self.assertIn('22:30', found[0]['message'])
+
+    def test_after_midnight_still_counts_the_same_night_and_other_people_do_not_count(self):
+        after = self.NIGHT + 3 * 3600   # 02:30 of the 1st.
+        self.visit(self.NIGHT - 1800)
+        self.visit(after - 3600)
+        self.visit(after - 600, kind='family')                # The camera knew it was family.
+        self.visit(after - 300, kind='unknown', verdict='other')   # The review said someone else.
+        self.alerts.check(after)
+        self.assertEqual(self.fridge_alerts(), [])
+        self.visit(after - 120, kind='unknown')   # Not placed yet: still counts.
+        self.alerts.check(after)
+        self.assertEqual(len(self.fridge_alerts()), 1)
+        self.assertEqual(self.fridge_alerts()[0]['id'], 'fridge-night-2026-09-30')
+
+    def test_daily_limit_off_by_default_and_on_when_set(self):
+        noon = datetime(2026, 9, 30, 12, 0, tzinfo=TZ).timestamp()
+        for i in range(6):
+            self.visit(noon - i * 600)
+        self.alerts.check(noon)
+        self.assertEqual(self.fridge_alerts(), [])
+        self.config.save(Settings(alerts_enabled=True, fridge_alerts_enabled=True, fridge_daily_visits=5))
+        self.alerts.check(noon)
+        self.assertIn('6 vezes hoje', self.fridge_alerts()[0]['message'])
+
+    def test_disabled_by_default(self):
+        self.config.save(Settings(alerts_enabled=True))
+        for i in range(5):
+            self.visit(self.NIGHT - i * 60)
+        self.alerts.check(self.NIGHT)
+        self.assertEqual(self.fridge_alerts(), [])

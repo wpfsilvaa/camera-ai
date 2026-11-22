@@ -90,6 +90,20 @@ class NotebookMonitor:
         if response.status_code != 200:
             raise RuntimeError('A tela do notebook recusou o teste. Atualize o programa do notebook.')
 
+    def restart_screen(self):
+        """Ask the kitchen notebook to close and reopen its screen (the browser)."""
+        url, token = notebook_url(self.config.get().camera_source, self.config.get().notebook_url), self.token()
+        if not (url and token):
+            raise RuntimeError('A tela do notebook não está configurada.')
+        try:
+            response = httpx.post(f'{url}/restart-screen', headers={'Authorization': f'Bearer {token}'}, timeout=5)
+        except httpx.HTTPError:
+            raise RuntimeError('O notebook não respondeu. Confira se ele está ligado.')
+        if response.status_code == 404:
+            raise RuntimeError('O programa do notebook está desatualizado: atualize para poder reiniciar a tela.')
+        if response.status_code != 200:
+            raise RuntimeError(response.json().get('error', 'O notebook recusou o pedido.') if response.headers.get('content-type', '').startswith('application/json') else 'O notebook recusou o pedido.')
+
     # Polling -----------------------------------------------------------------
 
     def poll(self, client, now=None):

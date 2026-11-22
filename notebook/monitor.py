@@ -706,6 +706,79 @@ def camera_validate(controls):
     return clean
 
 
+KIOSK_PROFILE = Path(os.environ.get('KIOSK_PROFILE', Path.home() / '.config/casa-kiosk'))
+KIOSK_SCRIPT = Path(__file__).with_name('start-kiosk.sh')
+_restart_lock = threading.Lock()
+
+
+def kiosk_pids(profile=None):
+    """Processes of the kitchen browser: the ones started with this screen's own profile folder (never this monitor)."""
+    mark = f'--user-data-dir={profile or KIOSK_PROFILE}'.encode()
+    found = []
+    for entry in Path('/proc').iterdir():
+        if not entry.name.isdigit() or int(entry.name) == os.getpid():
+            continue
+        try:
+            if mark in (entry / 'cmdline').read_bytes().split(b'\0'):
+                found.append(int(entry.name))
+        except OSError:
+            continue
+    return found
+
+
+def stop_kiosk(profile=None, wait=6.0):
+    """Ask the kitchen browser to quit, and make it if it does not. Returns how many processes there were."""
+    pids = kiosk_pids(profile)
+    for pid in pids:
+        try:
+            os.kill(pid, 15)
+        except OSError:
+            pass
+    deadline = time.time() + wait
+    while time.time() < deadline and kiosk_pids(profile):
+        time.sleep(.2)
+    for pid in kiosk_pids(profile):
+        try:
+            os.kill(pid, 9)
+        except OSError:
+            pass
+    return len(pids)
+
+
+def start_kiosk(script=None):
+    """Open the screen again. In its own systemd unit when possible, so restarting this monitor does not close it."""
+    script = Path(script or KIOSK_SCRIPT)
+    runtime = os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}'
+    env = {**os.environ, 'XDG_RUNTIME_DIR': runtime}
+    sockets = sorted(p.name for p in Path(runtime).glob('wayland-*') if not p.name.endswith('.lock')) if Path(runtime).is_dir() else []
+    if sockets:
+        env['WAYLAND_DISPLAY'] = sockets[0]
+    else:
+        env.setdefault('DISPLAY', ':0')
+    quiet = {'stdin': subprocess.DEVNULL, 'stdout': subprocess.DEVNULL, 'stderr': subprocess.DEVNULL}
+    if shutil.which('systemd-run'):
+        setenv = [f'--setenv={name}={env[name]}' for name in ('XDG_RUNTIME_DIR', 'WAYLAND_DISPLAY', 'DISPLAY') if name in env]
+        try:
+            subprocess.run(['systemd-run', '--user', '--collect', f'--unit=casa-kiosk-{int(time.time())}', *setenv, 'bash', str(script)], env=env, timeout=10, check=True, **quiet)
+            return
+        except (OSError, subprocess.SubprocessError):
+            pass
+    subprocess.Popen(['bash', str(script)], env=env, start_new_session=True, **quiet)
+
+
+def restart_kiosk():
+    """Close and reopen the kitchen screen (the browser freezes now and then, and only a restart brings it back)."""
+    if not _restart_lock.acquire(blocking=False):
+        return False   # Already restarting.
+    try:
+        stop_kiosk()
+        time.sleep(1.5)
+        start_kiosk()
+    finally:
+        _restart_lock.release()
+    return True
+
+
 def camera_apply(controls):
     device = camera_device()
     if not device or not shutil.which('v4l2-ctl'):
@@ -857,6 +930,13 @@ class Handler(BaseHTTPRequestHandler):
             if not self.zones_frame:
                 return self.send_error(404)
             return self.reply(200, body=self.zones_frame, kind='image/jpeg')
+        if url.path == '/restart-screen' and self.authorized():
+            if not KIOSK_SCRIPT.is_file():
+                return self.reply(409, {'error': 'O script start-kiosk.sh não está ao lado do monitor.'})
+            if _restart_lock.locked():
+                return self.reply(200, {'ok': True, 'already': True})
+            threading.Thread(target=restart_kiosk, name='restart-kiosk', daemon=True).start()   # The answer goes out first: the browser is the one asking.
+            return self.reply(200, {'ok': True})
         if url.path == '/camera/controls' and self.authorized():
             return self.reply(200, {'device': camera_device(), 'values': camera_read(), 'available': bool(camera_device() and shutil.which('v4l2-ctl'))})
         if url.path == '/hello':   # Descoberta: o painel procura totens na rede. Sem dados sensíveis.

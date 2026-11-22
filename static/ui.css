@@ -490,3 +490,9 @@ details.advanced>.detection-advanced{padding:0 0 16px}
 .ph-chips code{background:var(--accent-bg);color:var(--green-ink);padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600}
 #kiosk-texts-panel .kiosk-texts-group>.form-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px 22px;padding-bottom:16px}
 .text-preview{background:var(--accent-bg);color:var(--green-ink);font-style:normal;padding:6px 10px;border-radius:6px;min-height:2em}
+
+.restart-row{display:flex;align-items:center;justify-content:space-between;gap:16px;border-top:1px solid var(--border);padding-top:16px}
+.restart-row small{display:block;margin-top:4px;color:var(--muted);font-weight:400}
+.restart-row .button{flex-shrink:0}
+.restart-row .button.danger{border-color:var(--bad);color:var(--bad)}
+@media(max-width:500px){.restart-row{flex-direction:column;align-items:stretch}}

@@ -25,12 +25,12 @@ CONTACT = os.environ.get('PUSH_CONTACT', 'mailto:casa-presente@example.com')   #
 TITLES = {'intruder': 'Alguém entrou em casa?', 'fall': 'Possível queda', 'routine': 'Fora da rotina', 'inactivity': 'Ninguém apareceu',
           'camera_offline': 'Câmera sem imagem', 'camera_online': 'Câmera voltou', 'summary': 'Resumo do dia',
           'backup': 'Backup falhou', 'test': 'Teste de notificação', 'presence': 'Presença detectada',
-          'restricted': 'Área restrita', 'notebook_battery': 'Bateria do notebook baixa',
+          'restricted': 'Área restrita', 'fridge': 'Muitas idas à geladeira', 'notebook_battery': 'Bateria do notebook baixa',
           'notebook_unplugged': 'Notebook sem energia', 'notebook_power_back': 'Energia do notebook voltou',
           'notebook_offline': 'Notebook sem sinal', 'call': 'Chamada do notebook', 'panic': 'Pedido de ajuda', 'notebook_online': 'Notebook voltou'}
 URGENT = {'fall', 'routine', 'inactivity', 'call', 'panic', 'intruder'}
 # Delivered right away even with the phone asleep (high push priority), without the urgent alert style.
-IMMEDIATE = URGENT | {'presence', 'restricted', 'notebook_battery', 'notebook_unplugged', 'notebook_offline'}
+IMMEDIATE = URGENT | {'presence', 'restricted', 'fridge', 'notebook_battery', 'notebook_unplugged', 'notebook_offline'}
 # A person walking in and out restarts the record; one notification per camera in this window is enough.
 PRESENCE_COOLDOWN = 60
 FATHER_COOLDOWN = 15 * 60   # "Pai apareceu" at most once per camera in this time: he walks through the kitchen all day.
@@ -44,6 +44,7 @@ IDENTIFY_SECONDS = 15
 # What a device can switch off, in the order shown. Each topic covers some alert kinds; the test is always sent.
 TOPICS = {'emergency': ('Quedas, ausência e chamadas do notebook', {'fall', 'routine', 'inactivity', 'call', 'panic', 'intruder'}),
           'restricted': ('Área restrita', {'restricted'}),
+          'fridge': ('Muitas idas à geladeira (noite ou dia)', {'fridge'}),
           'camera': ('Câmera sem imagem ou de volta', {'camera_offline', 'camera_online'}),
           'notebook': ('Notebook da câmera (bateria, energia, sinal)', {'notebook_battery', 'notebook_unplugged', 'notebook_power_back', 'notebook_offline', 'notebook_online'}),
           'summary': ('Resumo do dia', {'summary'}),

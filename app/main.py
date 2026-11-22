@@ -597,6 +597,13 @@ def kiosk_test(body: KioskTest, request: Request):
     return {'ok': True, 'from': first_name(user['name']) if user else ''}
 
 
+@app.post('/api/kiosk/restart')
+def kiosk_restart():
+    """Close and reopen the kitchen screen (the notebook's browser), without touching the notebook itself."""
+    call_service(notebook.restart_screen)
+    return {'ok': True}
+
+
 class TotemPair(BaseModel):
     ip: str = Field(max_length=45)
     code: str = Field(default='', max_length=12)
