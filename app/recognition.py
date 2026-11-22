@@ -1,5 +1,6 @@
 """Confirmed face references and an asynchronous, bounded recognition worker."""
 import json
+import logging
 import threading
 import time
 import uuid
@@ -14,6 +15,7 @@ from .body import BodyEncoder, BodyMemory, BodyAnchors
 from .config import PEOPLE
 from .faces import FaceEncoder, normalized
 
+log = logging.getLogger(__name__)
 
 MERGE_FACE = .65        # Two unconfirmed tracks of one record whose faces are at least this alike (and never on screen together) are the same person.
 HANDOFF_SECONDS = 6      # A new track that appears this soon where a recognised one vanished inherits its identity (until its own face says otherwise).
@@ -91,6 +93,10 @@ class Recognition:
         self.body_error = None
         self.body_memory = BodyMemory()
         self.body_anchors = BodyAnchors()
+        self.body_file = self.directory / 'body-memory.json'
+        self.body_restored = False   # The saved clothes memory is reloaded once, with the first gallery load after a start.
+        self.body_saved = 0
+        self.body_lifetime = 120*60
         self.error = None
         self.gallery = []
         self.names = {}
@@ -594,12 +600,38 @@ class Recognition:
             self.live.clear()
             self.body_memory.clear()
             self.body_anchors.clear()
+            if not self.body_restored:
+                self.body_restored = True
+                self.restore_body_memory()
+
+    def restore_body_memory(self):
+        try:
+            data = json.loads(self.body_file.read_text()) if self.body_file.is_file() else {}
+            kept = self.body_memory.restore({p:r for p,r in data.items() if p in self.names},time.time(),self.body_lifetime)
+            if kept:
+                log.info('Memória corporal restaurada do disco: %d referência(s)',kept)
+        except Exception:
+            log.warning('Não foi possível restaurar a memória corporal; ela será refeita pelos rostos reconhecidos.',exc_info=True)
+
+    def save_body_memory(self, now):
+        """Write the clothes memory to disk (at most every 20 s, and only when it changed)."""
+        if not self.body_memory.dirty or now-self.body_saved < 20:
+            return
+        self.body_saved = now
+        try:
+            temporary = self.body_file.with_suffix('.tmp')
+            temporary.write_text(json.dumps(self.body_memory.dump()))
+            temporary.replace(self.body_file)
+            self.body_memory.dirty = False
+        except Exception:
+            log.warning('Não foi possível gravar a memória corporal.',exc_info=True)
 
     def observe_faces(self, event_id, boxes, ids, faces, now, settings, bodies=None, diagnostics=None):
         self.load_gallery()
         bodies = bodies or {}
         diagnostics = diagnostics or {}
-        self.body_memory.prune(now, settings.body_memory_minutes*60)
+        self.body_lifetime = settings.body_memory_minutes*60
+        self.body_memory.prune(now, self.body_lifetime)
         if not settings.body_reid_enabled:
             self.body_memory.clear()
             self.body_anchors.clear()
@@ -708,6 +740,7 @@ class Recognition:
                     if not (same_body and score is not None and score>=settings.body_threshold-.08):
                         self.live.pop(key,None)
             self.suppress_duplicates(event_id, visible)
+        self.save_body_memory(now)
 
     def save_best_sample(self, track_id, face, now):
         """Keep collecting after the first 12 frames; protect confirmed examples."""

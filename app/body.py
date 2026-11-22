@@ -51,16 +51,47 @@ class BodyEncoder:
         return result
 
 
+SOLO_EXTRA = .05   # Only one person in memory: there is no runner-up to keep a stranger out, so the score must clear the threshold by this much.
+
+
 class BodyMemory:
     def __init__(self):
         self.references = {}
         self.votes = {}
         self.features = {}
+        self.dirty = False   # References changed since they were last written to disk.
 
     def clear(self):
         self.references.clear()
         self.votes.clear()
         self.features.clear()
+        self.dirty = True
+
+    def dump(self):
+        """References as plain JSON data, so they survive a restart of the service."""
+        return {person:[{'feature':r['feature'].tolist(),'seen':r['seen'],'collected':r.get('collected',r['seen']),'source':r.get('source','face')}
+                        for r in refs] for person,refs in self.references.items() if refs}
+
+    def restore(self, data, now, lifetime):
+        """Reload what `dump` wrote, ignoring expired or malformed entries. Returns how many references were kept."""
+        kept = 0
+        self.references.clear()
+        for person,refs in (data or {}).items():
+            good = []
+            for r in refs if isinstance(refs,list) else []:
+                try:
+                    seen = float(r['seen'])
+                    if not 0 <= now-seen <= lifetime:
+                        continue
+                    good.append({'feature':normalized(np.asarray(r['feature'],dtype=np.float32)),'seen':seen,
+                                 'collected':float(r.get('collected',seen)),'source':r.get('source','face')})
+                except (KeyError,TypeError,ValueError):
+                    continue
+            if good:
+                self.references[person] = good[-24:]
+                kept += len(self.references[person])
+        self.dirty = False
+        return kept
 
     def prune(self, now, lifetime):
         for person in list(self.references):
@@ -93,8 +124,10 @@ class BodyMemory:
         similar = next((r for r in group if float(vector@r['feature']) > .995), None)
         if similar is not None:
             similar.update(feature=vector, seen=anchor, collected=now)
+            self.dirty = True
             return
         refs.append({'feature':vector, 'seen':anchor, 'collected':now, 'source':source})
+        self.dirty = True
         if len(group) >= 12:
             oldest = min(group, key=lambda r:r.get('collected', r['seen']))
             refs[:] = [r for r in refs if r is not oldest]
@@ -105,14 +138,14 @@ class BodyMemory:
                          for person,refs in self.references.items()),reverse=True)
         person = None
         score = scores[0][0] if scores else None
-        if scores and score >= threshold and (len(scores)==1 or score-scores[1][0]>=margin):
+        if scores and (score >= threshold+SOLO_EXTRA if len(scores)==1 else score >= threshold and score-scores[1][0]>=margin):
             person = scores[0][1]
         previous,count,last = self.votes.get(key,(None,0,0))
         count = count+1 if person and person==previous and 0<=now-last<=1.5 else int(person is not None)
         self.votes[key]=(person,count,now)
         if diagnostic is not None:
             diagnostic.update(reason='matched' if person and count>=3 else 'waiting_agreement' if person else
-                'no_references' if not scores else 'below_threshold' if score<threshold else 'ambiguous_match',
+                'no_references' if not scores else 'below_threshold' if score<threshold+(SOLO_EXTRA if len(scores)==1 else 0) else 'ambiguous_match',
                 score=score, threshold=threshold, margin=margin, candidate=scores[0][1] if scores else None,
                 gap=score-scores[1][0] if len(scores)>1 else None,
                 agreement=min(count,3), required=3,

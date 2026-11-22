@@ -39,3 +39,40 @@ class BodyMemoryTests(unittest.TestCase):
         for t in range(101,111):
             self.assertEqual(anchors.observe([1],boxes,{}, {},t)['1'],('a',100))
         self.assertEqual(anchors.observe([1],boxes,{}, {},111),{})
+
+
+class BodyMemoryPersistenceTests(unittest.TestCase):
+    def test_dump_and_restore_keep_fresh_references_and_drop_expired_or_broken_ones(self):
+        import json
+        memory=BodyMemory()
+        memory.learn('a',np.eye(4,dtype=np.float32)[0],100)
+        memory.learn('a',np.eye(4,dtype=np.float32)[1],100.5,anchored_at=90)
+        memory.learn('old',np.eye(4,dtype=np.float32)[2],1)
+        data=json.loads(json.dumps(memory.dump()))
+        data['bad']=[{'feature':'x'}]
+        restored=BodyMemory()
+        self.assertEqual(restored.restore(data,200,300),3)
+        self.assertEqual(restored.restore(data,200,150),2)   # 'old' (seen at 1) is past the lifetime.
+        self.assertNotIn('bad',restored.references)
+        self.assertFalse(restored.dirty)
+        score=float(restored.references['a'][0]['feature']@normalized(np.eye(4,dtype=np.float32)[0]))
+        self.assertAlmostEqual(score,1,places=5)
+
+
+class BodySoloGuardTests(unittest.TestCase):
+    def test_a_lone_reference_needs_a_higher_score_than_a_pair(self):
+        def vec(angle):   # unit vector at a given angle from the reference.
+            return np.array([np.cos(angle),np.sin(angle),0,0],dtype=np.float32)
+        near=vec(np.arccos(.72))   # score .72: above .70, below .70+.05
+        alone=BodyMemory();alone.learn('pai',vec(0),0)
+        for i in range(3):
+            result=alone.match('k',near,i*.3,.70,.08)
+        self.assertEqual(result,(None,result[1]))
+        pair=BodyMemory();pair.learn('pai',vec(0),0);pair.learn('outra',np.array([0,0,1,0],dtype=np.float32),0)
+        for i in range(3):
+            result=pair.match('k',near,i*.3,.70,.08)
+        self.assertEqual(result[0],'pai')
+        strong=vec(np.arccos(.9))
+        for i in range(3):
+            result=alone.match('s',strong,i*.3,.70,.08)
+        self.assertEqual(result[0],'pai')
