@@ -1,7 +1,7 @@
 """ByteTrack with separate admission/recovery thresholds and expiry in seconds; optionally BoT-SORT with appearance (clothes) to keep numbers apart.
 
 The appearance is cheap on purpose: a person already followed reuses the vector the track holds; the neural network runs only for a new, confident
-detection (somebody appearing, or coming back after a jump), at most `MAX_ENCODES` per frame, and never for the low-confidence second pass.
+detection (somebody appearing, or coming back after a jump), at most `MAX_ENCODES` (one) per frame, and never for the low-confidence second pass.
 """
 import logging
 import time
@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import numpy as np
 
 log = logging.getLogger(__name__)
-MAX_ENCODES = 2     # Neural-network runs per frame, at most.
+MAX_ENCODES = 1     # Neural-network runs per frame, at most (about 100 ms each on the kitchen notebook): new people are encoded one frame after the other.
 REUSE_IOU = .6      # A detection this much on top of a followed track is that track: its vector is reused, nothing is computed.
 
 

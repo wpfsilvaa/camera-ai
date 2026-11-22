@@ -88,11 +88,14 @@ class AppearanceTrackerTests(unittest.TestCase):
             self.update(tracker, n / 5, scores=[.2])
         self.assertEqual(encoder.calls, [])
 
-    def test_at_most_two_new_people_are_encoded_per_frame(self):
+    def test_at_most_one_new_person_is_encoded_per_frame_and_the_next_frames_catch_up(self):
         encoder = self.FakeEncoder()
         tracker = self.tracker(encoder)
         self.update(tracker, 0, people=4)
-        self.assertEqual(len(encoder.calls), 2)
+        self.assertEqual(len(encoder.calls), 1)
+        for n in range(1, 8):
+            self.update(tracker, n / 5, people=4)
+        self.assertEqual(len(encoder.calls), 4, 'as outras pessoas deveriam ser codificadas nos quadros seguintes, uma por vez')
 
     def test_a_missing_model_falls_back_to_the_plain_tracker(self):
         from unittest.mock import patch
