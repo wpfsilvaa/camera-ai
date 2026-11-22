@@ -930,13 +930,6 @@ class Handler(BaseHTTPRequestHandler):
             if not self.zones_frame:
                 return self.send_error(404)
             return self.reply(200, body=self.zones_frame, kind='image/jpeg')
-        if url.path == '/restart-screen' and self.authorized():
-            if not KIOSK_SCRIPT.is_file():
-                return self.reply(409, {'error': 'O script start-kiosk.sh não está ao lado do monitor.'})
-            if _restart_lock.locked():
-                return self.reply(200, {'ok': True, 'already': True})
-            threading.Thread(target=restart_kiosk, name='restart-kiosk', daemon=True).start()   # The answer goes out first: the browser is the one asking.
-            return self.reply(200, {'ok': True})
         if url.path == '/camera/controls' and self.authorized():
             return self.reply(200, {'device': camera_device(), 'values': camera_read(), 'available': bool(camera_device() and shutil.which('v4l2-ctl'))})
         if url.path == '/hello':   # Descoberta: o painel procura totens na rede. Sem dados sensíveis.
@@ -1054,6 +1047,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, {'id': self.desk.queue_test(spec)})
             except ValueError as error:
                 return self.reply(422, {'error': str(error)})
+        if url.path == '/restart-screen' and self.authorized():
+            if not KIOSK_SCRIPT.is_file():
+                return self.reply(409, {'error': 'O script start-kiosk.sh não está ao lado do monitor.'})
+            if _restart_lock.locked():
+                return self.reply(200, {'ok': True, 'already': True})
+            threading.Thread(target=restart_kiosk, name='restart-kiosk', daemon=True).start()   # The answer goes out first: the browser is the one asking.
+            return self.reply(200, {'ok': True})
         if url.path == '/camera/controls' and self.authorized():
             try:
                 return self.reply(200, {'applied': camera_apply(camera_validate(self.body().get('controls')))})

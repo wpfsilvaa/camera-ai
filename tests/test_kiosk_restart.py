@@ -1,9 +1,12 @@
+import http.client
 import os
 import subprocess
 import sys
 import tempfile
 import time
+import threading
 import unittest
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
@@ -58,6 +61,42 @@ class KioskProcessTests(unittest.TestCase):
                     break
                 time.sleep(.1)
             self.assertEqual(marker.read_text().strip(), f'wayland-7|{runtime}')
+
+
+class RestartRouteTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        monitor.Handler.token = 't' * 40
+        monitor.Handler.desk = monitor.Desk()
+        cls.server = ThreadingHTTPServer(('127.0.0.1', 0), monitor.Handler)
+        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+
+    def post(self, token=None):
+        connection = http.client.HTTPConnection('127.0.0.1', self.server.server_address[1], timeout=5)
+        connection.request('POST', '/restart-screen', headers={'Authorization': f'Bearer {token}'} if token else {})
+        response = connection.getresponse()
+        response.read()
+        connection.close()
+        return response.status
+
+    def test_post_restarts_the_screen_only_with_the_token(self):
+        done = threading.Event()
+        with tempfile.TemporaryDirectory() as folder:
+            script = Path(folder) / 'start-kiosk.sh'
+            script.touch()
+            with patch.object(monitor, 'KIOSK_SCRIPT', script), patch.object(monitor, 'restart_kiosk', lambda: done.set()):
+                self.assertNotEqual(self.post(), 200)
+                self.assertNotEqual(self.post('x' * 40), 200)
+                self.assertFalse(done.wait(.3), 'reiniciou sem autorização')
+                self.assertEqual(self.post('t' * 40), 200)
+                self.assertTrue(done.wait(2), 'o pedido autorizado não reiniciou a tela')
+            with patch.object(monitor, 'KIOSK_SCRIPT', Path(folder) / 'ausente.sh'):
+                self.assertEqual(self.post('t' * 40), 409)
 
 
 class DashboardAskTests(unittest.TestCase):
