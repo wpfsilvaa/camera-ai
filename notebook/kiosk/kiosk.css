@@ -9,8 +9,11 @@ body{background:var(--bg);color:var(--ink);font-family:Inter,"Segoe UI",Arial,sa
 .hidden{display:none!important}
 #screen{height:100%;display:flex;flex-direction:column;padding:2.5vh 3vw}
 header{display:flex;justify-content:space-between;align-items:flex-start;gap:1vw 2vw;flex-wrap:wrap;color:var(--muted);font-size:clamp(16px,2.2vw,30px)}
-header>div:first-child{display:flex;align-items:baseline;gap:.2em .6em;flex-wrap:wrap;min-width:0}
-#date{white-space:nowrap}
+header{align-items:center}
+header>div:first-child{display:flex;flex-direction:column;align-items:flex-start;min-width:0}   /* Relógio e, embaixo, a data: o topo não muda de altura quando aparecem os selos. */
+header time{margin-right:0;line-height:1}
+#date{white-space:nowrap;font-size:clamp(16px,2.2vw,30px);margin-top:.15em;display:block}
+#date::first-letter{text-transform:uppercase}
 time{font-size:clamp(40px,min(7vw,11vh),96px);font-weight:700;color:var(--ink);margin-right:.4em;font-variant-numeric:tabular-nums}
 .view{display:none;flex:1;min-height:0;flex-direction:column;align-items:center;justify-content:center;gap:3vh;text-align:center}
 #screen[data-view=idle] #view-idle,#screen[data-view=confirm] #view-confirm,#screen[data-view=ringing] #view-ringing,
