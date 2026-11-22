@@ -51,6 +51,7 @@
   }
 
   function paint() {
+    $('#image-panel')?.toggleAttribute('data-unsupported', !state.supported);   // Câmera de rede comum: o painel inteiro some em vez de mostrar opções inúteis.
     $('#image-unsupported').classList.toggle('hidden', state.supported);
     $('#image-box').classList.toggle('hidden', !state.supported);
     if (!state.supported) return;

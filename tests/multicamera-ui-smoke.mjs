@@ -27,6 +27,7 @@ try {
   await page.waitForURL('**/#settings');
   await page.waitForFunction(()=>document.querySelector('#settings-form [name=camera_name]').value==='Sala');
   const second=await page.locator('#camera-select').inputValue();assert.notEqual(second,'main');
+  await page.locator('#settings-form summary:has-text("Ajustes de detecção")').click();
   await page.locator('#settings-form [name=device]').selectOption('cpu');
   await page.locator('#settings-form [name=detection_fps]').fill('5');
   await page.locator('#save-settings').click();

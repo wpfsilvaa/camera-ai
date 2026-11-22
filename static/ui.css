@@ -473,3 +473,9 @@ body.readonly .profile-actions,body.readonly .label-actions,body.readonly .manua
 .totem-row small{display:block;color:var(--muted)}
 .totem-pair{display:flex;gap:8px;align-items:center}.totem-pair input{width:110px;text-align:center;letter-spacing:.1em}
 @media(max-width:500px){.totem-row{flex-direction:column;align-items:stretch}}
+
+/* Fonte da câmera: etiqueta do tipo e o que só vale para USB. */
+#image-panel[data-unsupported]{display:none!important}
+.source-kind-line{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#settings-form[data-source="rtsp"] .usb-only,#settings-form[data-source="file"] .usb-only{display:none}
+details.advanced>.detection-advanced{padding:0 0 16px}
