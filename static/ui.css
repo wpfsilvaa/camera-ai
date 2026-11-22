@@ -364,7 +364,10 @@ details.advanced>.form-fields{padding-bottom:14px}
 .settings-tabs.searching .settings-tab[aria-selected=true]{background:none;box-shadow:none;color:var(--muted)}
 
 /* A short panel next to a tall one keeps its own height instead of stretching into an empty card. */
-.settings-grid{align-items:start}
+.settings-grid{display:block;column-count:2;column-gap:22px}
+.settings-grid>.panel{break-inside:avoid;margin:0 0 22px}
+.settings-grid>#kiosk-texts-panel{column-span:all}
+@media(max-width:1000px){.settings-grid{column-count:1}}
 
 /* Phones, Visão geral: what the family looks at first (is it fine? the camera, how the day went), then the numbers and history. */
 @media(max-width:500px){
@@ -481,3 +484,9 @@ body.readonly .profile-actions,body.readonly .label-actions,body.readonly .manua
 details.advanced>.detection-advanced{padding:0 0 16px}
 .text-preview{color:var(--green-ink);font-style:italic}
 #kiosk-texts-panel code{background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:11px}
+
+/* Textos da tela: marcadores em etiquetas, campos em duas colunas, exemplo em destaque. */
+.ph-chips{display:flex;flex-wrap:wrap;gap:6px}
+.ph-chips code{background:var(--accent-bg);color:var(--green-ink);padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600}
+#kiosk-texts-panel .kiosk-texts-group>.form-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px 22px;padding-bottom:16px}
+.text-preview{background:var(--accent-bg);color:var(--green-ink);font-style:normal;padding:6px 10px;border-radius:6px;min-height:2em}

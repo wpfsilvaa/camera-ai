@@ -8,14 +8,16 @@ html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--ink);font-family:Inter,"Segoe UI",Arial,sans-serif;cursor:default;user-select:none;overflow:hidden}
 .hidden{display:none!important}
 #screen{height:100%;display:flex;flex-direction:column;padding:2.5vh 3vw}
-header{display:flex;justify-content:space-between;align-items:baseline;color:var(--muted);font-size:clamp(18px,2.6vw,32px)}
-time{font-size:clamp(40px,7vw,96px);font-weight:700;color:var(--ink);margin-right:.4em;font-variant-numeric:tabular-nums}
-.view{display:none;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:3vh;text-align:center}
+header{display:flex;justify-content:space-between;align-items:flex-start;gap:1vw 2vw;flex-wrap:wrap;color:var(--muted);font-size:clamp(16px,2.2vw,30px)}
+header>div:first-child{display:flex;align-items:baseline;gap:.2em .6em;flex-wrap:wrap;min-width:0}
+#date{white-space:nowrap}
+time{font-size:clamp(40px,min(7vw,11vh),96px);font-weight:700;color:var(--ink);margin-right:.4em;font-variant-numeric:tabular-nums}
+.view{display:none;flex:1;min-height:0;flex-direction:column;align-items:center;justify-content:center;gap:3vh;text-align:center}
 #screen[data-view=idle] #view-idle,#screen[data-view=confirm] #view-confirm,#screen[data-view=ringing] #view-ringing,
 #screen[data-view=answered] #view-answered,#screen[data-view=over] #view-over{display:flex}
 h1{font-size:clamp(34px,6vw,84px);margin:0;line-height:1.1}
 p{font-size:clamp(22px,3.4vw,46px);margin:0;color:var(--muted)}
-.big{width:min(90%,1000px);border:0;border-radius:28px;color:#fff;font:inherit;font-weight:700;font-size:clamp(34px,5.5vw,76px);padding:3.2vh 2vw;display:flex;gap:.5em;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation}
+.big{width:min(90%,1000px);border:0;border-radius:28px;color:#fff;font:inherit;font-weight:700;font-size:clamp(28px,min(5.5vw,7.5vh),76px);padding:2.4vh 2vw;display:flex;gap:.5em;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation}
 .big:active{transform:scale(.98)}
 .big .icon{font-size:1.2em}
 .call{background:var(--green)}
@@ -30,15 +32,15 @@ button:disabled{opacity:.35;cursor:not-allowed}
 .avatar{font-size:clamp(100px,22vw,320px);font-weight:700;color:#fff}
 #screen[data-view=answered] header{display:none}
 
-.status{display:flex;align-items:center;gap:1.2vw}
+.status{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:.6vh 1.2vw;min-width:0;flex:1 1 auto}
 /* Watch mode: red = off, pulsing green = armed and resting, pulsing amber = analysing, still green = waiting for its hours */
 #screen[data-vigia=off]{--vstate:var(--red)}
 #screen[data-vigia=resting],#screen[data-vigia=scheduled]{--vstate:var(--green)}
 #screen[data-vigia=analysing]{--vstate:var(--amber)}
 html[data-night="1"] #screen[data-vigia=resting],html[data-night="1"] #screen[data-vigia=scheduled]{--vstate:#8a2218}
-.present-chip{display:inline-flex;align-items:center;gap:.4em;border:2px solid var(--green);color:var(--green);border-radius:999px;padding:.15em .7em;font-size:clamp(18px,2.4vw,30px);font-weight:700;white-space:nowrap}
+.present-chip{display:inline-flex;align-items:center;gap:.4em;border:2px solid var(--green);color:var(--green);border-radius:999px;padding:.15em .7em;font-size:clamp(15px,1.9vw,28px);font-weight:700;white-space:nowrap}
 html[data-night="1"] .present-chip{border-color:#8a2218;color:#8a2218}
-.vigia{display:inline-flex;align-items:center;gap:.4em;border:2px solid var(--vstate);color:var(--vstate);border-radius:999px;padding:.15em .7em;font-size:clamp(18px,2.4vw,30px);font-weight:700;white-space:nowrap}
+.vigia{display:inline-flex;align-items:center;gap:.4em;border:2px solid var(--vstate);color:var(--vstate);border-radius:999px;padding:.15em .7em;font-size:clamp(15px,1.9vw,28px);font-weight:700;white-space:nowrap}
 .vi{width:1.2em;height:1.2em;flex-shrink:0}
 #screen[data-vigia=resting] .vigia{animation:vpulse 3.2s steps(8) infinite}
 #screen[data-vigia=analysing] .vigia{animation:vpulse 1s steps(5) infinite}
@@ -213,7 +215,7 @@ html[data-night="1"] .quote-head{color:#c8493c}
 .fr-weather .w-days{display:flex;gap:1.6vw;justify-content:flex-end;margin-top:1.4vh;font-size:clamp(13px,1.5vw,22px);opacity:.9}
 .fr-weather .w-days span{display:flex;flex-direction:column;align-items:center;gap:.1em}
 .fr-weather .w-days b{font-weight:600}
-.weather-chip{display:inline-flex;align-items:center;gap:.35em;font-size:clamp(18px,2.4vw,30px);font-weight:700;color:var(--ink);white-space:nowrap}
+.weather-chip{display:inline-flex;align-items:center;gap:.35em;font-size:clamp(15px,1.9vw,28px);font-weight:700;color:var(--ink);white-space:nowrap}
 .weather-chip small{font-weight:500;font-size:.72em;color:var(--muted)}
 
 /* Rain: drops falling over the screen while the forecast says it is raining */

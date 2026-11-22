@@ -18,7 +18,7 @@ try {
   assert.ok(made.id,JSON.stringify(made));
   await page.goto(`${base}/#settings`);await page.waitForTimeout(1500);
   const root=page.locator('.zone-editor[data-zones="restricted_zones"]'),canvas=root.locator('canvas');
-  await root.scrollIntoViewIfNeeded();await page.waitForTimeout(600);
+  await root.evaluate(el=>el.scrollIntoView({block:'center'}));await page.waitForTimeout(900);
   const box=await canvas.boundingBox();
   const at=(fx,fy)=>[box.x+box.width*fx,box.y+box.height*fy];
   const zones=()=>page.evaluate(()=>window.zoneDrafts().restricted_zones);
