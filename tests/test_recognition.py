@@ -209,6 +209,42 @@ class RecognitionTests(unittest.TestCase):
         self.assertIn('1',labels,'um rosto fraco, mas parecido, não pode apagar o nome')
         self.assertAlmostEqual(self.recognition.live['1']['seen'],202.8)
 
+    def observe_with_body(self, boxes, vector, times):
+        for now in times:
+            self.recognition.observe_faces(None,boxes,[1],{'1':self.face()},now,Settings(),{'1':normalized(vector)})
+
+    def test_new_clothes_seen_with_a_confirmed_face_replace_the_old_references_and_are_logged(self):
+        boxes=self.father_named()
+        for i,now in enumerate((202,204,206,208,210)):   # Old clothes: a few different views (spaced: close ones are smoothed into one).
+            self.observe_with_body(boxes,(1,.15*i,0,0),[now])
+        old_refs=self.recognition.body_memory.references['father']
+        self.assertGreaterEqual(len(old_refs),3)
+        self.observe_with_body(boxes,(0,0,1,0),(212,213.8))   # Two passes with other clothes: not yet (could be a bad frame).
+        self.assertGreater(len(self.recognition.body_memory.references['father']),3,'duas passagens não bastam')
+        self.assertEqual(self.db.rows("SELECT reason FROM identity_log WHERE reason='clothes_changed'"),[])
+        self.observe_with_body(boxes,(0,0,1,0),(215.6,))
+        refs=self.recognition.body_memory.references['father']
+        self.assertTrue(all(float(r['feature']@normalized((0,0,1,0)))>.99 for r in refs),'só a roupa nova deveria sobrar')
+        self.assertEqual(len(self.db.rows("SELECT reason FROM identity_log WHERE reason='clothes_changed'")),1)
+        # The summary keeps it apart from the losses.
+        summary=self.recognition.identity_log.summary(1,now=300)
+        self.assertEqual((summary['total'],len(summary['clothes_changes'])),(0,1))
+        # And now the new clothes recognise him without the face.
+        self.recognition.live.clear()
+        found=self.recognition.body_memory.match('7',normalized((0,0,1,.02)),204,.65,.08)
+        self.assertEqual(found[0],None)   # Needs 3 agreeing passes...
+        self.recognition.body_memory.match('7',normalized((0,0,1,.02)),204.3,.65,.08)
+        self.assertEqual(self.recognition.body_memory.match('7',normalized((0,0,1,.02)),204.6,.65,.08)[0],'father')
+
+    def test_the_same_clothes_from_another_angle_are_not_taken_for_a_change(self):
+        boxes=self.father_named()
+        for i,now in enumerate((202,204,206,208,210)):
+            self.observe_with_body(boxes,(1,.15*i,0,0),[now])
+        before=len(self.recognition.body_memory.references['father'])
+        self.observe_with_body(boxes,(1,.6,.2,0),(212,213.8,215.6,217.4))   # About .85 alike: still the same shirt.
+        self.assertGreaterEqual(len(self.recognition.body_memory.references['father']),before)
+        self.assertEqual(self.db.rows("SELECT reason FROM identity_log WHERE reason='clothes_changed'"),[])
+
     def test_with_sticky_off_a_single_conflicting_face_still_clears_it(self):
         boxes=self.father_named()
         self.recognition.observe_faces(None,boxes,[1],{'1':self.face((0,1,0))},201.2,Settings(identity_sticky_enabled=False))

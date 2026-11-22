@@ -7,10 +7,12 @@
     if (!box) return;
     try {
       const data = await api('/api/recognition/losses?days=3');
-      if (!data.total) { box.innerHTML = 'Nenhuma perda de nome registrada nos últimos 3 dias. Quando acontecer, ela aparece aqui com o motivo.'; return; }
+      const changes = (data.clothes_changes || []).length
+        ? `<p class="muted">Trocas de roupa percebidas (a roupa nova foi aprendida na hora): ${data.clothes_changes.map(c => `${escapeHTML(c.name)} às ${new Date(c.at * 1000).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}`).join(', ')}.</p>` : '';
+      if (!data.total) { box.innerHTML = 'Nenhuma perda de nome registrada nos últimos 3 dias. Quando acontecer, ela aparece aqui com o motivo.' + changes; return; }
       box.innerHTML = `<p><strong>${data.total}</strong> vez(es) um nome se perdeu; em <strong>${data.recovered}</strong> ele voltou (mediana ${fmt(data.median_gap)}).</p>`
         + `<ul class="loss-list">${data.by_reason.map(r => `<li><b>${r.count}×</b> ${escapeHTML(r.label)} <span class="muted">(voltou em ${r.recovered})</span></li>`).join('')}</ul>`
-        + (data.by_person.length ? `<p class="muted">Por pessoa: ${data.by_person.map(p => `${escapeHTML(p.name)} (${p.count})`).join(', ')}.</p>` : '');
+        + (data.by_person.length ? `<p class="muted">Por pessoa: ${data.by_person.map(p => `${escapeHTML(p.name)} (${p.count})`).join(', ')}.</p>` : '') + changes;
     } catch { box.textContent = 'Não foi possível carregar agora.'; }
   }
   function cost() {

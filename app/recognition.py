@@ -22,6 +22,9 @@ MERGE_FACE = .65        # Two unconfirmed tracks of one record whose faces are a
 HANDOFF_SECONDS = 6      # A new track that appears this soon where a recognised one vanished inherits its identity (until its own face says otherwise).
 KEEP_MARGIN = .08       # A face that does not reach the threshold, but is within this of it for the person already named, still counts as them.
 CONTRADICT_FACES = 3    # Faces in a row that do not look like the named person before the name is taken away.
+CLOTHES_DIFFERENT = .45  # A face-confirmed person whose clothes match none of their references better than this has changed clothes.
+CLOTHES_VOTES = 3        # Passes in a row that say so before the old references are replaced.
+CLOTHES_MIN_REFS = 3     # Needs this many references to say something is different.
 REATTACH_LOOKS = .15    # A new track whose clothes are this far below the body threshold (or less) can still be the person who vanished.
 BODY_HOLD = 10          # Seconds an identity from the body/clothes survives a failed comparison.
 SETTLED_INTERVAL = 1.0   # Seconds between recognitions while everyone in view already carries a face identity (a new or unknown person brings back the fast pace).
@@ -92,6 +95,7 @@ class Recognition:
         self.contra = {}          # track -> (faces in a row that did not look like the named person, when)
         self.shown_people = set() # People named on screen at the last pass, to notice when a name comes back.
         self.dropped = set()      # Tracks whose lost name was already logged.
+        self.clothes_votes = {}   # person -> (passes in a row where the clothes looked new, when)
         self.recent_lost, self.last_boxes = [], {}   # Identities of tracks that just vanished, and the last box of every visible track.
         self.monitored = {'father'}
         self.encoder_lock = threading.Lock()
@@ -644,6 +648,31 @@ class Recognition:
                           'newest_seconds': round(max(0, now - max(r['seen'] for r in faces)))})
         return found
 
+    def check_clothes_change(self, person, feature, now, camera_id=''):
+        """The face says who it is, but the clothes match none of what was kept for them: they changed. Out with the old references (the new ones are learned next).
+
+        While a change is being confirmed the view is compared only with the references made before the first doubt, not with the new ones learned meanwhile.
+        """
+        count, last, first = self.clothes_votes.get(person, (0, 0, now))
+        pending = count > 0 and now - last <= 2
+        refs = [r for r in self.body_memory.references.get(person, []) if not pending or r.get('collected', r['seen']) < first]
+        if len(refs) < CLOTHES_MIN_REFS:
+            self.clothes_votes.pop(person, None)
+            return
+        if max(float(normalized(feature) @ r['feature']) for r in refs) >= CLOTHES_DIFFERENT:
+            self.clothes_votes.pop(person, None)
+            return
+        count, first = (count + 1, first) if pending else (1, now)
+        self.clothes_votes[person] = (count, now, first)
+        if count >= CLOTHES_VOTES:
+            self.body_memory.references[person] = []
+            self.body_memory.dirty = True
+            self.clothes_votes.pop(person, None)
+            try:
+                self.identity_log.note(now, camera_id, person, 'clothes_changed', 'roupa nova aprendida')
+            except Exception:
+                log.exception('Falha ao registrar a troca de roupa')
+
     def person_score(self, feature, person_id):
         """How much a face looks like one registered person (mean of the two best matches), or None without references."""
         vector = normalized(feature)
@@ -750,6 +779,7 @@ class Recognition:
             for key,feature in bodies.items():
                 item = self.live.get(key)
                 if key in faces and item and item.get('source')=='face' and item['seen']==now:
+                    self.check_clothes_change(item['person_id'],feature,now)
                     self.body_memory.learn(item['person_id'],feature,now)
             for key in visible:
                 if key in faces:
