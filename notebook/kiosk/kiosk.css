@@ -1,4 +1,4 @@
-:root{--bg:#0d1519;--ink:#f0f6f8;--muted:#a9bfc7;--green:#0f6b82;--red:#d6453a;--grey:#2b3b44;--amber:#e6b45e;--vstate:transparent}
+:root{--fs:1;--bg:#0d1519;--ink:#f0f6f8;--muted:#a9bfc7;--green:#0f6b82;--red:#d6453a;--grey:#2b3b44;--amber:#e6b45e;--vstate:transparent}
 /* Night: dark red tones only, so the screen does not ruin night vision. */
 html[data-night="1"]{--bg:#080202;--ink:#c8493c;--muted:#b8443a;--green:#5e1710;--red:#7d1a12;--grey:#240b08;--amber:#c2410c}
 html[data-night="1"] .big{color:#f0948a}
@@ -8,19 +8,19 @@ html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--ink);font-family:Inter,"Segoe UI",Arial,sans-serif;cursor:default;user-select:none;overflow:hidden}
 .hidden{display:none!important}
 #screen{height:100%;display:flex;flex-direction:column;padding:2.5vh 3vw}
-header{display:flex;justify-content:space-between;align-items:flex-start;gap:1vw 2vw;flex-wrap:wrap;color:var(--muted);font-size:clamp(16px,2.2vw,30px)}
+header{display:flex;justify-content:space-between;align-items:flex-start;gap:1vw 2vw;flex-wrap:wrap;color:var(--muted);font-size:calc(clamp(16px,2.2vw,30px)*var(--fs,1))}
 header{align-items:center}
 header>div:first-child{display:flex;flex-direction:column;align-items:flex-start;min-width:0}   /* Relógio e, embaixo, a data: o topo não muda de altura quando aparecem os selos. */
 header time{margin-right:0;line-height:1}
-#date{white-space:nowrap;font-size:clamp(16px,2.2vw,30px);margin-top:.15em;display:block}
+#date{white-space:nowrap;font-size:calc(clamp(16px,2.2vw,30px)*var(--fs,1));margin-top:.15em;display:block}
 #date::first-letter{text-transform:uppercase}
-time{font-size:clamp(40px,min(7vw,11vh),96px);font-weight:700;color:var(--ink);margin-right:.4em;font-variant-numeric:tabular-nums}
+time{font-size:calc(clamp(40px,min(7vw,11vh),96px)*var(--fs,1));font-weight:700;color:var(--ink);margin-right:.4em;font-variant-numeric:tabular-nums}
 .view{display:none;flex:1;min-height:0;flex-direction:column;align-items:center;justify-content:center;gap:3vh;text-align:center}
 #screen[data-view=idle] #view-idle,#screen[data-view=confirm] #view-confirm,#screen[data-view=ringing] #view-ringing,
 #screen[data-view=answered] #view-answered,#screen[data-view=over] #view-over{display:flex}
 h1{font-size:clamp(34px,6vw,84px);margin:0;line-height:1.1}
 p{font-size:clamp(22px,3.4vw,46px);margin:0;color:var(--muted)}
-.big{width:min(90%,1000px);border:0;border-radius:28px;color:#fff;font:inherit;font-weight:700;font-size:clamp(28px,min(5.5vw,7.5vh),76px);padding:2.4vh 2vw;display:flex;gap:.5em;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation}
+.big{width:min(90%,1000px);border:0;border-radius:28px;color:#fff;font:inherit;font-weight:700;font-size:calc(clamp(28px,min(5.5vw,7.5vh),76px)*var(--fs,1));padding:2.4vh 2vw;display:flex;gap:.5em;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation}
 .big:active{transform:scale(.98)}
 .big .icon{font-size:1.2em}
 .call{background:var(--green)}
@@ -41,9 +41,9 @@ button:disabled{opacity:.35;cursor:not-allowed}
 #screen[data-vigia=resting],#screen[data-vigia=scheduled]{--vstate:var(--green)}
 #screen[data-vigia=analysing]{--vstate:var(--amber)}
 html[data-night="1"] #screen[data-vigia=resting],html[data-night="1"] #screen[data-vigia=scheduled]{--vstate:#8a2218}
-.present-chip{display:inline-flex;align-items:center;gap:.4em;border:2px solid var(--green);color:var(--green);border-radius:999px;padding:.15em .7em;font-size:clamp(15px,1.9vw,28px);font-weight:700;white-space:nowrap}
+.present-chip{display:inline-flex;align-items:center;gap:.4em;border:2px solid var(--green);color:var(--green);border-radius:999px;padding:.15em .7em;font-size:calc(clamp(15px,1.9vw,28px)*var(--fs,1));font-weight:700;white-space:nowrap}
 html[data-night="1"] .present-chip{border-color:#8a2218;color:#8a2218}
-.vigia{display:inline-flex;align-items:center;gap:.4em;border:2px solid var(--vstate);color:var(--vstate);border-radius:999px;padding:.15em .7em;font-size:clamp(15px,1.9vw,28px);font-weight:700;white-space:nowrap}
+.vigia{display:inline-flex;align-items:center;gap:.4em;border:2px solid var(--vstate);color:var(--vstate);border-radius:999px;padding:.15em .7em;font-size:calc(clamp(15px,1.9vw,28px)*var(--fs,1));font-weight:700;white-space:nowrap}
 .vi{width:1.2em;height:1.2em;flex-shrink:0}
 #screen[data-vigia=resting] .vigia{animation:vpulse 3.2s steps(8) infinite}
 #screen[data-vigia=analysing] .vigia{animation:vpulse 1s steps(5) infinite}
@@ -74,7 +74,7 @@ html[data-night="1"] .greet-layer{background:rgba(8,2,2,.74)}
 }
 @media (max-aspect-ratio:13/10){.calendar{display:none}}
 .big{width:100%;max-width:1000px}
-.calendar{text-align:left;background:color-mix(in srgb,var(--grey) 70%,transparent);border-radius:2.2vmin;padding:2vmin 2.2vmin;font-size:clamp(14px,1.9vw,26px)}
+.calendar{text-align:left;background:color-mix(in srgb,var(--grey) 70%,transparent);border-radius:2.2vmin;padding:2vmin 2.2vmin;font-size:calc(clamp(14px,1.9vw,26px)*var(--fs,1))}
 .cal-title{display:flex;justify-content:space-between;align-items:baseline;font-weight:700;text-transform:capitalize;color:var(--ink);font-size:1.15em;margin-bottom:.6em}
 .cal-title small{color:var(--muted);font-weight:500;font-size:.7em}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:.25em;text-align:center}
@@ -218,7 +218,7 @@ html[data-night="1"] .quote-head{color:#c8493c}
 .fr-weather .w-days{display:flex;gap:1.6vw;justify-content:flex-end;margin-top:1.4vh;font-size:clamp(13px,1.5vw,22px);opacity:.9}
 .fr-weather .w-days span{display:flex;flex-direction:column;align-items:center;gap:.1em}
 .fr-weather .w-days b{font-weight:600}
-.weather-chip{display:inline-flex;align-items:center;gap:.35em;font-size:clamp(15px,1.9vw,28px);font-weight:700;color:var(--ink);white-space:nowrap}
+.weather-chip{display:inline-flex;align-items:center;gap:.35em;font-size:calc(clamp(15px,1.9vw,28px)*var(--fs,1));font-weight:700;color:var(--ink);white-space:nowrap}
 .weather-chip small{font-weight:500;font-size:.72em;color:var(--muted)}
 
 /* Rain: drops falling over the screen while the forecast says it is raining */
@@ -270,3 +270,9 @@ html.progress-on .fr-progress{display:block}
 .zones-stage img{max-width:100%;max-height:100%;object-fit:contain}
 .zones-stage img:not([src]){display:none}
 .zones-stage p{position:absolute;margin:0;font-size:3vmin;opacity:.8}
+
+/* Aparência escolhida no painel (cores: ver <style id="theme-style">; à noite valem só os tons vermelhos). */
+html[data-size="pequeno"]{--fs:.88}
+html[data-size="grande"]{--fs:1.2}
+html[data-hide~="weather"] #ui-weather,html[data-hide~="present"] #present,html[data-hide~="vigia"] #vigia,html[data-hide~="battery"] #battery,
+html[data-hide~="date"] #date,html[data-hide~="holidays"] .cal-next{display:none!important}

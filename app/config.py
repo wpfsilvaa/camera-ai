@@ -293,6 +293,19 @@ class Settings(CameraSettings):
     kiosk_voice: str = Field(default='faber', pattern='^(faber|cadu|jeff|edresson)$')   # Local voice (Piper) that reads messages aloud.
     kiosk_read_messages: bool = True   # The kitchen screen reads a message aloud when the person it is for is recognised (and the daily briefing).
     kiosk_daily_briefing: bool = True   # First greeting of the day also gives the date, the weather and a few suggestions.
+    kiosk_palette: str = Field(default='padrao', pattern='^(padrao|verde|ambar|claro|contraste|personalizada)$')   # Look of the kitchen screen (app/kiosk_theme.py).
+    kiosk_color_bg: str = Field(default='#0d1519', pattern='^#[0-9a-fA-F]{6}$')
+    kiosk_color_ink: str = Field(default='#f0f6f8', pattern='^#[0-9a-fA-F]{6}$')
+    kiosk_color_call: str = Field(default='#0f6b82', pattern='^#[0-9a-fA-F]{6}$')
+    kiosk_color_panic: str = Field(default='#d6453a', pattern='^#[0-9a-fA-F]{6}$')
+    kiosk_color_accent: str = Field(default='#e6b45e', pattern='^#[0-9a-fA-F]{6}$')
+    kiosk_text_size: str = Field(default='normal', pattern='^(pequeno|normal|grande)$')
+    kiosk_show_weather: bool = True
+    kiosk_show_present: bool = True
+    kiosk_show_vigia: bool = True
+    kiosk_show_battery: bool = True
+    kiosk_show_date: bool = True
+    kiosk_show_holidays: bool = True   # The list of the next dates under the calendar.
     kiosk_tips_enabled: bool = True   # Suggestions (umbrella, water, coat…) in the daily briefing; off keeps it short.
     kiosk_text_greet_morning: str = Field(default='', max_length=240)   # Empty: the standard wording (app/kiosk_texts.py).
     kiosk_text_greet_afternoon: str = Field(default='', max_length=240)   # Empty: the standard wording (app/kiosk_texts.py).

@@ -169,6 +169,17 @@ def parse_cfg(text):
     if isinstance(data.get('texts'), dict):   # Editable greetings/briefing: short printable strings under known-looking names.
         cfg['texts'] = {k: ''.join(ch for ch in v if ch.isprintable())[:240].strip() for k, v in list(data['texts'].items())[:24]
                         if isinstance(k, str) and re.fullmatch(r'[a-z_]{1,24}', k) and isinstance(v, str) and v.strip()}
+    theme = data.get('theme')
+    if isinstance(theme, dict):   # Colours must be #rrggbb (they go into a style sheet), everything else is a choice from a short list.
+        clean = {}
+        colors = theme.get('colors')
+        if isinstance(colors, dict) and all(isinstance(colors.get(n), str) and re.fullmatch(r'#[0-9a-fA-F]{6}', colors[n]) for n in ('bg', 'ink', 'call', 'panic', 'accent')):
+            clean['colors'] = {n: colors[n] for n in ('bg', 'ink', 'call', 'panic', 'accent')}
+        if theme.get('size') in ('pequeno', 'normal', 'grande'):
+            clean['size'] = theme['size']
+        if isinstance(theme.get('show'), dict):
+            clean['show'] = {n: theme['show'][n] for n in ('weather', 'present', 'vigia', 'battery', 'date', 'holidays') if isinstance(theme['show'].get(n), bool)}
+        cfg['theme'] = clean
     if isinstance(data.get('tips'), bool):
         cfg['tips'] = data['tips']
     if isinstance(data.get('hints'), list):

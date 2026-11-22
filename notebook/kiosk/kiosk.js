@@ -141,7 +141,20 @@
   $('zones-open').addEventListener('click', () => { $('zones-wait').classList.remove('hidden'); post('/zones/show').then(() => poll(true)); });
   $('zones-close').addEventListener('click', () => post('/zones/hide').then(() => poll(true)));
 
+  // Look chosen in the dashboard: colours (day only: at night the red tones stay), text size and what is shown.
+  let themeKey = '';
+  function applyTheme() {
+    const theme = cfg().theme || {}, key = JSON.stringify(theme);
+    if (key === themeKey) return;
+    themeKey = key;
+    const c = theme.colors;
+    $('theme-style').textContent = c ? `html:not([data-night="1"]){--bg:${c.bg};--ink:${c.ink};--green:${c.call};--red:${c.panic};--amber:${c.accent};--muted:color-mix(in srgb,${c.ink} 68%,${c.bg});--grey:color-mix(in srgb,${c.ink} 13%,${c.bg})}` : '';
+    document.documentElement.dataset.size = theme.size || 'normal';
+    document.documentElement.dataset.hide = Object.entries(theme.show || {}).filter(([, shown]) => shown === false).map(([name]) => name).join(' ');
+  }
+
   function render() {
+    applyTheme();
     if (renderPairing()) return;   // Totem novo: só o código de pareamento até o painel conectar.
     document.documentElement.classList.toggle('progress-on', Boolean(cfg().progress));   // Barra de tempo da foto: opcional.
     const {call, linked, enabled, battery, plugged} = last;
