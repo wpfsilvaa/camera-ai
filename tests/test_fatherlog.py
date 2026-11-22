@@ -121,3 +121,48 @@ class FatherLogTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class VisitReviewTeachTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = Database(Path(self.tmp.name) / 'h.sqlite3')
+        self.log = FatherLog(self.db)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def people(self):
+        self.db.execute("INSERT INTO people(id,name,created,is_father) VALUES('pai','Pai',1,1)")
+        self.db.execute("INSERT INTO people(id,name,created,is_father) VALUES('lorena','Lorena',2,0)")
+
+    def event_with_track(self, when, keys=1):
+        event = self.db.start_event(when - 5, 1, camera_id='main', camera_name='Cozinha')
+        self.db.end_event(event, when + 30, 'absence')
+        for i in range(keys):
+            self.db.execute('INSERT INTO person_tracks(event_id,track_key,started,last_seen) VALUES(?,?,?,?)', (event, f'k{i}', when - 5, when + 10))
+        return event
+
+    def test_review_with_a_person_sets_the_verdict_from_that_person(self):
+        self.people()
+        father_visit = self.log.record_visit('main', NOON, 'Geladeira', None, 'unknown')
+        other_visit = self.log.record_visit('main', NOON + 600, 'Geladeira', None, 'unknown')
+        self.log.decide(father_visit, False, 'pai')
+        self.log.decide(other_visit, True, 'lorena')   # The person decides, not the flag.
+        rows = {r['id']: r for r in self.db.rows('SELECT id,verdict,person_id FROM restricted_visits')}
+        self.assertEqual((rows[father_visit]['verdict'], rows[father_visit]['person_id']), ('father', 'pai'))
+        self.assertEqual((rows[other_visit]['verdict'], rows[other_visit]['person_id']), ('other', 'lorena'))
+        with self.assertRaises(KeyError):
+            self.log.decide(father_visit, False, 'ninguem')
+
+    def test_teachable_needs_exactly_one_unconfirmed_person_and_picks_the_sharpest_faces(self):
+        self.people()
+        visit = self.log.record_visit('main', NOON, 'Geladeira', None, 'unknown')
+        event = self.event_with_track(NOON)
+        track = self.db.rows('SELECT id FROM person_tracks WHERE event_id=?', (event,))[0]['id']
+        for sample, quality, model in (('a', .2, 'sface-v1'), ('b', .9, 'sface-v1'), ('c', .5, 'sface-v1'), ('d', .99, 'body-v1'), ('e', .7, 'sface-v1')):
+            self.db.execute('INSERT INTO person_samples(id,track_id,created,feature,model,quality) VALUES(?,?,?,?,?,?)', (sample, track, NOON, b'x', model, quality))
+        self.assertEqual(self.log.teachable(visit), (track, ['b', 'e', 'c']))
+        self.db.execute('INSERT INTO person_tracks(event_id,track_key,started,last_seen) VALUES(?,?,?,?)', (event, 'other', NOON - 5, NOON + 10))
+        self.assertIsNone(self.log.teachable(visit))   # Two people at that moment: not guessing.
+

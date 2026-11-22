@@ -171,6 +171,8 @@ class Database:
                 db.execute('ALTER TABLE restricted_visits ADD COLUMN seconds REAL')   # How long the visit lasted.
             if 'verdict' not in visit_columns:
                 db.execute('ALTER TABLE restricted_visits ADD COLUMN verdict TEXT')   # What a person said afterwards: father / other.
+            if 'person_id' not in visit_columns:
+                db.execute('ALTER TABLE restricted_visits ADD COLUMN person_id TEXT')   # Who the review said it was (a registered person), when it said.
             if 'area' not in {r['name'] for r in db.execute('PRAGMA table_info(restricted_visits)')}:
                 db.execute("ALTER TABLE restricted_visits ADD COLUMN area TEXT NOT NULL DEFAULT ''")
             if db.execute('PRAGMA user_version').fetchone()[0] < 1:

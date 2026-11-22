@@ -131,10 +131,29 @@ class FatherLog:
         clip = self.db.rows("SELECT id FROM clips WHERE event_id=? AND state NOT IN ('expired','failed') ORDER BY started LIMIT 1", (visit['event_id'],))
         return clip[0]['id'] if clip else None
 
-    def decide(self, visit_id, father):
+    def decide(self, visit_id, father, person_id=None):
+        """Record who a visit was. With `person_id` (a registered person) the verdict follows whether that person is monitored."""
+        if person_id:
+            person = self.db.rows('SELECT id,is_father FROM people WHERE id=?', (person_id,))
+            if not person:
+                raise KeyError('Pessoa não encontrada.')
+            father = bool(person[0]['is_father'])
         with self.db.connect() as db:
-            if not db.execute('UPDATE restricted_visits SET verdict=? WHERE id=?', ('father' if father else 'other', visit_id)).rowcount:
+            if not db.execute('UPDATE restricted_visits SET verdict=?,person_id=? WHERE id=?', ('father' if father else 'other', person_id or None, visit_id)).rowcount:
                 raise KeyError('Ida não encontrada.')
+
+    def teachable(self, visit_id, limit=3):
+        """(track id, best face sample ids) of the one unconfirmed person in the visit's record at that moment, or None when it cannot be told."""
+        rows = self.db.rows(VISITS + ' WHERE v.id=?', (visit_id,))
+        if not rows or rows[0]['event_id'] is None:
+            return None
+        visit = rows[0]
+        tracks = [t for t in self.db.rows('SELECT id,reviewed FROM person_tracks WHERE event_id=? AND started<=? AND last_seen>=?',
+                                           (visit['event_id'], visit['started'] + SLACK, visit['started'] - SLACK)) if not t['reviewed']]
+        if len(tracks) != 1:
+            return None
+        samples = self.db.rows("SELECT id FROM person_samples WHERE track_id=? AND model LIKE 'sface-%' ORDER BY quality DESC LIMIT ?", (tracks[0]['id'], limit))
+        return tracks[0]['id'], [r['id'] for r in samples]
 
     def summary(self, now=None):
         """Today's times plus a count per day for the last week (today included); only visits placed on a monitored person are counted."""

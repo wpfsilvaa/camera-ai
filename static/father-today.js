@@ -37,13 +37,15 @@ setInterval(() => { if (activePage === 'overview' && !document.hidden) loadFathe
 
 // Triage of the visits nobody could place: one tap says whether it was the father.
 async function loadVisitReview() {
-  const [items, calibration] = await Promise.all([api('/api/father/visits'), api('/api/father/calibration')]);
+  const [items, calibration, people] = await Promise.all([api('/api/father/visits'), api('/api/father/calibration'), api('/api/people')]);
+  const profiles = people.profiles || [], monitored = profiles.find(p => p.is_father), others = profiles.filter(p => !p.is_father);
+  const whoOptions = `<option value="">Foi outra pessoa…</option>${others.map(p => `<option value="${escapeHTML(p.id)}">${escapeHTML(p.name)}</option>`).join('')}`;
   const hint = calibration.suggested
     ? `Com ${calibration.father + calibration.other} respostas suas, o tempo mínimo que melhor separa é ${String(calibration.suggested.seconds).replace('.', ',')} s (hoje: ${String(calibration.current).replace('.', ',')} s): tira ${Math.round(calibration.suggested.others_removed * 100)}% das idas “Não foi” e mantém ${Math.round(calibration.suggested.father_kept * 100)}% das dele. <button type="button" class="text-button" data-apply-min="${calibration.suggested.seconds}">Aplicar</button>`
     : `Responda pelo menos 5 “Foi ele” e 5 “Não foi” para o sistema sugerir o tempo mínimo ideal (agora: ${calibration.father} e ${calibration.other}).`;
   $('#visits-calibration').innerHTML = hint;
   $('#visits-empty').classList.toggle('hidden', items.length > 0);
-  $('#visits-list').innerHTML = items.map(item => `<article class="example-card" data-visit="${item.id}">${item.photo ? `<img class="example-photo" style="height:150px" src="${item.photo.startsWith('visit-') ? '/visit-media/' : '/media/'}${item.photo}.jpg" alt="Momento da ida" loading="lazy">` : '<div class="muted small">Sem foto deste momento.</div>'}<strong>${escapeHTML(item.area)}</strong><small>${day(item.started)} às ${time(item.started)}</small><div class="label-buttons"><button class="button primary compact" data-verdict="father">Foi ele</button><button class="button secondary compact" data-verdict="other">Não foi</button></div></article>`).join('');
+  $('#visits-list').innerHTML = items.map(item => `<article class="example-card" data-visit="${item.id}">${item.photo ? `<img class="example-photo" style="height:150px" src="${item.photo.startsWith('visit-') ? '/visit-media/' : '/media/'}${item.photo}.jpg" alt="Momento da ida" loading="lazy">` : '<div class="muted small">Sem foto deste momento.</div>'}<strong>${escapeHTML(item.area)}</strong><small>${day(item.started)} às ${time(item.started)}</small><div class="label-buttons">${monitored ? `<button class="button primary compact" data-verdict="father" data-person="${escapeHTML(monitored.id)}">Foi ${escapeHTML(monitored.name.split(' ')[0])}</button>` : '<button class="button primary compact" data-verdict="father">Foi ele</button>'}<select class="compact" data-who aria-label="Quem foi, se não foi ele">${whoOptions}</select><button class="button secondary compact" data-verdict="other">Não foi</button></div></article>`).join('');
 }
 document.addEventListener('click', event => {
   if (event.target.closest('#review-visits')) { $('#visits-dialog').showModal(); loadVisitReview().catch(error => toast(error.message, true)); return; }
@@ -59,11 +61,19 @@ document.addEventListener('click', event => {
   }
   const button = event.target.closest('#visits-list [data-verdict]');
   if (!button) return;
-  const card = button.closest('[data-visit]');
-  action(button, async () => {
-    await api(`/api/father/visits/${card.dataset.visit}`, {method: 'POST', body: JSON.stringify({father: button.dataset.verdict === 'father'})});
+  send(button, button.closest('[data-visit]'), button.dataset.person || null, button.dataset.verdict === 'father');
+});
+document.addEventListener('change', event => {
+  const select = event.target.closest('#visits-list [data-who]');
+  if (!select || !select.value) return;
+  send(select, select.closest('[data-visit]'), select.value, false);
+});
+function send(control, card, personId, father) {
+  action(control, async () => {
+    const result = await api(`/api/father/visits/${card.dataset.visit}`, {method: 'POST', body: JSON.stringify({father, person_id: personId})});
     card.remove();
     $('#visits-empty').classList.toggle('hidden', Boolean($('#visits-list').children.length));
+    if (personId) toast(result.taught ? `Salvo. ${result.taught.faces} imagem(ns) do rosto ensinada(s).` : 'Salvo. Não achei um rosto claro neste momento para ensinar.');
     loadFatherToday();
   });
-});
+}

@@ -455,7 +455,8 @@ def street_switch(body: StreetSwitch):
 
 
 class VisitVerdict(BaseModel):
-    father: bool
+    father: bool = False
+    person_id: str | None = None
 
 
 @app.get('/api/father/visits')
@@ -465,8 +466,18 @@ def father_visits():
 
 @app.post('/api/father/visits/{visit_id}')
 def father_visit_verdict(visit_id: int, body: VisitVerdict):
-    call_service(father_log.decide, visit_id, body.father)
-    return {'ok': True}
+    call_service(father_log.decide, visit_id, body.father, body.person_id)
+    taught = None
+    if body.person_id:
+        # Learn from the best picture of that moment, so the next visit is easier to recognise.
+        found = father_log.teachable(visit_id)
+        if found:
+            try:
+                call_service(recognition.confirm, found[0], body.person_id, None, found[1])
+                taught = {'faces': len(found[1])}
+            except (HTTPException, ValueError, KeyError):
+                taught = None
+    return {'ok': True, 'taught': taught}
 
 
 @app.get('/api/father/calibration')
