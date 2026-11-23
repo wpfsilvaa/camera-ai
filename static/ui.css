@@ -376,6 +376,7 @@ details.advanced>.form-fields{padding-bottom:14px}
   #page-overview>.attention,#page-overview>.health-chip{order:1}
   #page-overview>.camera-grid{order:2}
   #page-overview>.monitor-grid{order:3}
+  #page-overview>.trends-panel{order:3;margin-top:0}
   #page-overview>.father-today{order:4}
   #page-overview>.stats-grid{order:5}
   #page-overview>#video-details{order:6}
