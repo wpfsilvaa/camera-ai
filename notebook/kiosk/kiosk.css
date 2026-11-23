@@ -128,7 +128,7 @@ body:has(#screen[data-mode=black]){background:#000}
 .fr-pill{display:inline-flex;align-items:center;gap:.4em;padding:.15em .7em;border-radius:999px;border:.18vmin solid currentColor;background:#0005}
 .fr-pill .vi{width:1.1em;height:1.1em}
 .fr-pill.resting{color:#47b98a;animation:vpulse 3.2s ease-in-out infinite}.fr-pill.analysing{color:#e9b64a;animation:vpulse 1s ease-in-out infinite}.fr-pill.off{color:#e86a5c}
-.fr-pill.low{color:#ffb86b}
+.fr-pill.low{color:#ffb86b}.fr-pill.present{color:inherit}
 .fr-foot{position:absolute;left:3vw;right:3vw;bottom:3vh;color:var(--fg-bot);text-shadow:var(--sh-bot);transition:color .9s;display:flex;flex-direction:column;gap:2vh}
 .frame-hint{margin:0;color:inherit;font-size:clamp(22px,3.2vw,48px);font-weight:500;text-shadow:inherit;transition:opacity .6s}
 .fr-credit{position:absolute;right:3vw;bottom:12vh;margin:0;font-size:clamp(12px,1.4vw,20px);color:var(--fg-bot);text-shadow:var(--sh-bot);opacity:0;transition:opacity .8s}
@@ -275,6 +275,7 @@ html.progress-on .fr-progress{display:block}
 html[data-size="pequeno"]{--fs:.88}
 html[data-size="grande"]{--fs:1.2}
 html[data-hide~="weather"] #ui-weather,html[data-hide~="present"] #present,html[data-hide~="vigia"] #vigia,html[data-hide~="battery"] #battery,
+html[data-hide~="present"] .fr-pill.present,html[data-hide~="vigia"] .fr-pill.resting,html[data-hide~="vigia"] .fr-pill.analysing,html[data-hide~="vigia"] .fr-pill.off,html[data-hide~="vigia"] .fr-pill.scheduled,html[data-hide~="battery"] .fr-pill.low,
 html[data-hide~="date"] #date,html[data-hide~="holidays"] .cal-next{display:none!important}
 
 /* Quadro de quadrinhos: calendário, relógio, frase, foto e remédio, na ordem escolhida no painel. */

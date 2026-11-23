@@ -469,6 +469,7 @@
   // Photo frame information: date, "today" line, week strip and the small status pills.
   const ICON_SHIELD = '<svg class="vi" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 4.5 5.5v6c0 4.6 3.1 8.4 7.5 10 4.4-1.6 7.5-5.4 7.5-10v-6L12 2.5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m8.7 12.2 2.4 2.4 4.3-4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const ICON_EYE = '<svg class="vi" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>';
+  const ICON_PERSON = '<svg class="vi" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4.8 20c.6-4 3.4-6.2 7.2-6.2s6.6 2.2 7.2 6.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
   let infoKey = '';
   function renderFrameInfo() {
     const now = new Date(), bdays = last.bdays || [], events = allEvents(bdays);
@@ -478,13 +479,16 @@
     const todayLine = names(today).length ? `Hoje: ${names(today).join(' · ')}` : names(tomorrow).length ? `Amanhã: ${names(tomorrow).join(' · ')}` : period;
     const battery = last.battery != null && (last.plugged === false || last.battery < 20) ? `<span class="fr-pill low"><svg class="ic" aria-hidden="true"><use href="#ic-battery"/></svg> ${last.battery}%${last.plugged === false ? ' sem carregador' : ''}</span>` : '';
     const vigia = VIGIA[last.vigia] ? `<span class="fr-pill ${last.vigia}">${last.vigia === 'analysing' ? ICON_EYE : ICON_SHIELD}${VIGIA[last.vigia]}</span>` : '';
-    const key = `${now.toDateString()}|${now.getHours()}|${todayLine}|${last.vigia}|${battery}|${JSON.stringify(bdays)}`;
+    const here = Array.isArray(last.present) ? last.present.slice(0, 4).map(n => String(n).replace(/</g, '&lt;')) : [];
+    const presentText = here.length > 2 ? `${here.slice(0, 2).join(', ')} e +${here.length - 2}` : here.join(' e ');
+    const present = here.length ? `<span class="fr-pill present">${ICON_PERSON}${presentText}</span>` : '';
+    const key = `${now.toDateString()}|${now.getHours()}|${todayLine}|${last.vigia}|${battery}|${presentText}|${JSON.stringify(bdays)}`;
     if (key === infoKey) return;
     infoKey = key;
     const dateText = now.toLocaleDateString('pt-BR', {weekday: 'long', day: 'numeric', month: 'long'});
     $('frame-date').textContent = dateText.charAt(0).toUpperCase() + dateText.slice(1);
     $('frame-today').textContent = todayLine.replace(/&lt;/g, '<');
-    $('frame-status').innerHTML = vigia + battery;
+    $('frame-status').innerHTML = present + vigia + battery;
   }
 
   // Photo frame --------------------------------------------------------------
